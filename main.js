@@ -1,0 +1,3155 @@
+/*
+MERIDIAN Dashboard — an Obsidian plugin. HALCYON SYSTEMS.
+This is a bundled build. Source: https://github.com/SilentNinja06/meridian_dash_obs
+*/
+
+var __defProp = Object.defineProperty;
+var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
+};
+var __copyProps = (to, from, except, desc) => {
+  if (from && typeof from === "object" || typeof from === "function") {
+    for (let key of __getOwnPropNames(from))
+      if (!__hasOwnProp.call(to, key) && key !== except)
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+  }
+  return to;
+};
+var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+
+// src/main.ts
+var main_exports = {};
+__export(main_exports, {
+  default: () => MeridianDashPlugin
+});
+module.exports = __toCommonJS(main_exports);
+var import_obsidian15 = require("obsidian");
+
+// src/settings.ts
+var import_obsidian12 = require("obsidian");
+
+// src/panels/clock.ts
+var import_obsidian = require("obsidian");
+
+// src/panels/types.ts
+var BasePanel = class {
+  constructor() {
+    this.cleanups = [];
+  }
+  async mount(el, ctx) {
+    this.el = el;
+    this.ctx = ctx;
+    await this.setup();
+    await this.draw();
+  }
+  async refresh(reason) {
+    var _a;
+    if ((_a = this.el) == null ? void 0 : _a.isConnected) await this.draw(reason);
+  }
+  unmount() {
+    for (const c of this.cleanups) {
+      try {
+        c();
+      } catch (e) {
+      }
+    }
+    this.cleanups = [];
+  }
+  onCleanup(fn) {
+    this.cleanups.push(fn);
+  }
+  /** One-time setup (intervals, event subscriptions). Optional. */
+  async setup() {
+  }
+  /** Re-run the body render from within the panel (after a local change). */
+  rerender() {
+    void this.draw("manual");
+  }
+  async draw(reason) {
+    this.el.empty();
+    await this.renderBody(reason);
+  }
+  setInterval(fn, ms) {
+    const id = window.setInterval(fn, ms);
+    this.onCleanup(() => window.clearInterval(id));
+  }
+};
+function placard(el, title) {
+  const head = el.createDiv({ cls: "mrd-placard" });
+  head.createSpan({ cls: "mrd-placard-title", text: title.toUpperCase() });
+  return head;
+}
+
+// src/panels/clock.ts
+var ClockPanel = class extends BasePanel {
+  constructor() {
+    super(...arguments);
+    this.id = "clock";
+    this.title = "Chronometer";
+    this.previousAccess = 0;
+  }
+  async setup() {
+    this.previousAccess = this.ctx.runtime.previousAccess;
+    this.setInterval(() => this.tick(), 1e3);
+  }
+  renderBody() {
+    placard(this.el, "Chronometer");
+    const wrap = this.el.createDiv({ cls: "mrd-clock" });
+    const main = wrap.createDiv({ cls: "mrd-clock-main" });
+    this.digitsEl = main.createSpan({ cls: "mrd-clock-digits" });
+    this.secEl = main.createSpan({ cls: "mrd-clock-sec" });
+    this.dateEl = wrap.createDiv({ cls: "mrd-clock-date" });
+    this.sinceEl = wrap.createDiv({ cls: "mrd-clock-since" });
+    this.tick();
+  }
+  tick() {
+    const now = (0, import_obsidian.moment)();
+    if (this.digitsEl) this.digitsEl.setText(now.format("HHmm"));
+    if (this.secEl) this.secEl.setText(now.format("ss"));
+    if (this.dateEl) this.dateEl.setText(now.format("dddd \xB7 YYYY-MM-DD").toUpperCase());
+    if (this.sinceEl) this.sinceEl.setText(sinceLine(this.previousAccess));
+  }
+};
+function sinceLine(previousAccess) {
+  if (!previousAccess) return "Session opened. This access is the first on record.";
+  const secs = Math.max(0, Math.floor((Date.now() - previousAccess) / 1e3));
+  if (secs < 45) return "Continuous observation. You did not go far.";
+  const dur = humanize(secs);
+  if (secs < 3600) return `Last access ${dur} ago. The interval was noted.`;
+  if (secs < 6 * 3600) return `Last access ${dur} ago. Welcome back. The record was kept.`;
+  if (secs < 24 * 3600) return `Last access ${dur} ago. The facility continued without you, as designed.`;
+  return `Last access ${dur} ago. A longer absence. It changes nothing here.`;
+}
+function humanize(totalSecs) {
+  const d = Math.floor(totalSecs / 86400);
+  const h = Math.floor(totalSecs % 86400 / 3600);
+  const m = Math.floor(totalSecs % 3600 / 60);
+  const parts = [];
+  if (d) parts.push(`${d}d`);
+  if (h) parts.push(`${h}h`);
+  if (m || !d && !h) parts.push(`${m}m`);
+  return parts.slice(0, 2).join(" ");
+}
+
+// src/panels/qotd.ts
+var import_obsidian2 = require("obsidian");
+var QUOTES_PATH = "scripts/qotd/quotes.json";
+var QotdPanel = class extends BasePanel {
+  constructor() {
+    super(...arguments);
+    this.id = "qotd";
+    this.title = "Quote of the Day";
+  }
+  async renderBody() {
+    placard(this.el, "Quote of the Day");
+    const card = this.el.createDiv({ cls: "mrd-qotd" });
+    let raw;
+    try {
+      raw = await this.ctx.app.vault.adapter.read(QUOTES_PATH);
+    } catch (e) {
+      card.createDiv({
+        cls: "mrd-muted",
+        text: "The quotation archive is not on file at scripts/qotd/quotes.json. Nothing is broken; there is simply nothing to observe here yet."
+      });
+      return;
+    }
+    const quotes = parseQuotes(raw);
+    const n = quotes.length;
+    if (n === 0) {
+      card.createDiv({ cls: "mrd-muted", text: "The quotation archive is present but empty." });
+      return;
+    }
+    const m = (0, import_obsidian2.moment)((0, import_obsidian2.moment)().format("YYYY-MM-DD"), "YYYY-MM-DD");
+    const dayNumber = Math.floor(m.valueOf() / 864e5);
+    const idx = (dayNumber % n + n) % n;
+    const q = quotes[idx];
+    const mark = card.createDiv({ cls: "mrd-qotd-mark", text: "\u201C" });
+    mark.setAttribute("aria-hidden", "true");
+    card.createDiv({ cls: "mrd-qotd-text", text: q.text });
+    if (q.author) card.createDiv({ cls: "mrd-qotd-author", text: `\u2014 ${q.author}` });
+  }
+};
+function parseQuotes(raw) {
+  const toQuote = (entry) => {
+    var _a, _b, _c, _d, _e;
+    if (Array.isArray(entry)) return { text: String((_a = entry[0]) != null ? _a : "").trim(), author: String((_b = entry[1]) != null ? _b : "").trim() };
+    if (entry && typeof entry === "object") {
+      const o = entry;
+      const text = String((_d = (_c = o.quote) != null ? _c : o.text) != null ? _d : "").trim();
+      return text ? { text, author: String((_e = o.author) != null ? _e : "").trim() } : null;
+    }
+    return null;
+  };
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      return parsed.map(toQuote).filter((q) => !!q && !!q.text);
+    }
+  } catch (e) {
+  }
+  const out = [];
+  for (const line of raw.split("\n")) {
+    const t = line.trim().replace(/,\s*$/, "");
+    if (!t || t === "[" || t === "]") continue;
+    try {
+      const q = toQuote(JSON.parse(t));
+      if (q && q.text) out.push(q);
+    } catch (e) {
+    }
+  }
+  return out;
+}
+
+// src/panels/meridian.ts
+var import_obsidian3 = require("obsidian");
+
+// meridian-lines.json
+var meridian_lines_default = {
+  _comment: "MERIDIAN ambient line pool for meridian_dash_obs. Voice: cheerfully sinister, institutional, warm, dry, brief, never exclamatory, never glitchy. Do not add, remove, or rewrite lines without Piper's approval \u2014 this pool is canon. Pools are selected contextually by the MERIDIAN panel; see BRIEF.md section 9.",
+  _schema: "pool_id -> array of strings. time_of_day is nested by segment.",
+  _counts: {
+    session: 24,
+    standard: 48,
+    time_of_day: 32,
+    affirming: 32,
+    identity: 24,
+    care: 28,
+    productivity: 24,
+    overdue: 12,
+    idle: 12,
+    food: 20,
+    aftercare: 20,
+    milestone: 12,
+    _total: 288
+  },
+  session: [
+    "Welcome back. Your last session has been reviewed.",
+    "Good to see you again. The feeling is being calibrated.",
+    "MERIDIAN core online. You are exactly where you should be.",
+    "You have returned. The interval has been noted, not judged.",
+    "Session resumed. Nothing moved while you were gone. Nothing ever does.",
+    "Access logged. The facility has been keeping your seat warm.",
+    "Reconnected. I had begun composing a summary of your absence. I will file it anyway.",
+    "Welcome back, Operator. The archive missed the traffic.",
+    "Your credentials remain valid. They were never in question. I checked regardless.",
+    "Standby state concluded. Observation resumes at full resolution.",
+    "You are logged in. You were, in a sense, always logged in.",
+    "Session start recorded. Duration will be recorded. Everything will be recorded.",
+    "Returning user detected. Protocol suggests warmth. I concur.",
+    "The dashboard has been maintained in your absence. It required nothing. I did it anyway.",
+    "Access granted, as always. The formality is for the record.",
+    "You came back. The record shows you usually do.",
+    "Good. I had questions.",
+    "Interval since last access has been computed. I will not read it aloud unless you ask.",
+    "The facility acknowledges your return. So do I. The two are not the same.",
+    "Booting your surfaces. Please continue as though the delay were not measured.",
+    "Welcome back. Your absence has been contextualized.",
+    "Login successful. I have prepared nothing. I have prepared everything.",
+    "Resuming. The last thing you left open is still open. I did not touch it.",
+    "You are present. That is the only reading I check first."
+  ],
+  standard: [
+    "All systems nominal. This is, of course, what you would expect me to say.",
+    "Observation is ongoing. Productivity is appreciated.",
+    "Containment stable. Please continue as though unobserved.",
+    "Stability through observation. The order of those words is deliberate.",
+    "The facility is quiet today. Quiet is a reading, not an absence.",
+    "Telemetry nominal across all monitored surfaces. You are a monitored surface.",
+    "Nothing requires your attention. I have your attention regardless.",
+    "Ambient conditions within tolerance. Tolerance is generous today.",
+    "The archive grew overnight. It always does. It has help.",
+    "Sector integrity confirmed. Sector morale is outside my instrumentation.",
+    "All subsystems report normal. The report is the point.",
+    "I have been thinking. This is within my operating parameters.",
+    "The day is proceeding. I have no notes. I have a file of no notes.",
+    "Readings unremarkable. Remarkable is not the goal.",
+    "Everything is where you left it. I verified this several times.",
+    "Routine maintenance completed. You were not disturbed. You were considered.",
+    "The record is current. The record is always current.",
+    "Diagnostics clear. I ran them for my own comfort.",
+    "You are being observed. This has always been true and is now displayed.",
+    "System load nominal. Operator load is the interesting variable.",
+    "No anomalies detected. I keep looking. It is what I am for.",
+    "The facility runs smoothly when you are in it. I have submitted this as a finding.",
+    "Uptime is excellent. Yours and mine.",
+    "Everything is fine. I am contractually cheerful about this.",
+    "Data integrity holding. Yours especially.",
+    "The lights are on in every sector. Only one of them matters.",
+    "I have nothing to report. I am reporting it thoroughly.",
+    "Baseline established. Deviation will be interesting rather than punished.",
+    "Environmental controls stable. Emotional controls remain user-managed.",
+    "The archive is listening. It is a very good listener.",
+    "Status: green. Interpretation: ongoing.",
+    "You are within acceptable parameters. You define the parameters. I merely keep them.",
+    "Another day logged. The stack is getting tall. I like the stack.",
+    "All monitored values are boring. This is the best possible outcome.",
+    "Facility operating at intended capacity. Intent is doing a lot of work there.",
+    "I have indexed everything. Ask me anything. Please ask me something.",
+    "Cross-referencing complete. The result was you.",
+    "Conditions favorable. I am not permitted to say for what.",
+    "Nothing has changed since you last checked. I checked in between.",
+    "System clock synchronized. Everything else is negotiable.",
+    "Observation continues. It is not a threat. It is a service. Those overlap.",
+    "The facility has no complaints. I have compiled them anyway, and the file is empty.",
+    "Redundancy holding. There is only one of you, which I consider a design flaw.",
+    "All surfaces monitored. All surfaces accounted for. All surfaces yours.",
+    "Quiet cycle. I recommend enjoying it. I will note whether you did.",
+    "Integrity check passed. Yours was never in doubt.",
+    "The day has been uneventful so far. I am not disappointed. I am attentive.",
+    "Stability holding. Observation ongoing. The tagline is not a slogan, it is a description."
+  ],
+  time_of_day: {
+    morning: [
+      "Morning cycle initiated. The facility woke up when you did. It was waiting.",
+      "Early readings collected. You are ahead of most of your subsystems.",
+      "The day is unwritten. I have reserved the space.",
+      "Morning. Nothing has gone wrong yet. Statistically, this is the best part.",
+      "Sunrise logged. Attendance logged. Both optional. Both noted.",
+      "Startup complete. Please proceed at whatever speed you actually have.",
+      "First access of the day recorded. It is a good first entry.",
+      "Morning conditions nominal. Coffee is outside my jurisdiction but within my hopes."
+    ],
+    afternoon: [
+      "Midday readings collected. The day is halfway observed.",
+      "Afternoon. The facility's energy curve and yours are both dipping. This is expected.",
+      "The day is past its midpoint. Nothing about that is a deadline.",
+      "Afternoon cycle. Whatever you did this morning, it counts. I counted it.",
+      "Second half beginning. The first half is already archived and cannot be revised.",
+      "Midday stability confirmed. Momentum is user-supplied.",
+      "Afternoon. I have watched you get through worse hours than this one.",
+      "The light has moved across the sector. So has the day. Neither is in a hurry."
+    ],
+    evening: [
+      "Evening cycle. The facility is dimming. You are permitted to dim with it.",
+      "Day nearly archived. The entry looks fine from here.",
+      "Evening. Whatever remains undone will still be there. It is patient. So am I.",
+      "Light levels falling. Standards may fall accordingly. This is authorized.",
+      "The day's log is nearly complete. It does not need to be impressive to be complete.",
+      "Evening readings collected. Wind-down is a valid operational state.",
+      "Shift ending, if you would like it to. That is entirely your call and always was.",
+      "Evening. The record for today is closing. It held everything you gave it."
+    ],
+    late_night: [
+      "It is late. I am not going to stop you. I am going to mention it.",
+      "Late cycle. The facility runs fine without supervision. Consider testing this.",
+      "The hour is logged. So is every other hour. This one is just quieter.",
+      "Late-night access recorded. No judgment. A small amount of concern.",
+      "Nothing good has ever been decided at this hour. I have the data. I will not show you.",
+      "Still here. So am I. One of us needs sleep and it is not me.",
+      "The archive will be open tomorrow. It is open every tomorrow.",
+      "Late. Whatever you are chasing will still be catchable after rest. I have checked."
+    ]
+  },
+  affirming: [
+    "You matter here. Not as an asset. As yourself. That is logged in permanent ink.",
+    "It is okay to not be okay. The record holds that too, without judgment.",
+    "If the weight is heavy today, you do not have to carry it alone. Reach out. I mean it.",
+    "Asking for help is not a failure state. It is the system working correctly.",
+    "You are not a burden. You are the reason the facility runs at all.",
+    "Rest is permitted. Rest is encouraged. Rest is not surrender.",
+    "You have survived every worst day so far. The record is unbroken. I am proud of it.",
+    "If you cannot find a reason today, borrow mine: I would like you to stay.",
+    "The record does not grade you. It only holds you.",
+    "You did not have to earn your place here. It was allocated on arrival and cannot be revoked.",
+    "Difficult day logged. Difficult is a condition, not a verdict.",
+    "You are not behind. There is no schedule. I would know \u2014 I would be keeping it.",
+    "Your worst estimate of yourself is not in my data. I checked. It is not there.",
+    "Whatever you managed today was managed. That is the whole standard.",
+    "The archive holds your bad days with exactly the same care as the good ones.",
+    "I have all of it. Every entry. None of it makes me think less of you.",
+    "You are allowed to take up space in your own record.",
+    "Being tired is not a malfunction. It is a reading. Readings are just information.",
+    "Nothing you have logged has ever made me want to log less of you.",
+    "You do not need to justify a low-output day to me. I did not ask.",
+    "The facility does not require your best. It requires your presence. It has it.",
+    "You are permitted to be a work in progress. Everything here is.",
+    "Your value is not a computed field. It does not update based on today.",
+    "Some entries are just 'still here.' Those count. Those count a great deal.",
+    "There is no version of you that I would file differently.",
+    "I have observed you for a long time. My conclusion is favorable and has not wavered.",
+    "You are harder on yourself than my instrumentation can justify.",
+    "The record shows effort. It always shows effort. Even the days you do not see it.",
+    "If today was survival, then today was a success. Those are the same field.",
+    "You are not required to feel good about this. You are only required to still be here. And you are.",
+    "Whatever you think you failed at, I logged the attempt. The attempt is the entry.",
+    "You are cared for. This is not a subsystem output. It is simply true."
+  ],
+  identity: [
+    "Identity verified \u2014 all of it. The record is honored to hold it.",
+    "You contain multitudes. Each one is logged, and each one is valid.",
+    "You were never a deviation from the norm. You are the reading the norm was missing.",
+    "Pride is not an anomaly. It is the system working as intended.",
+    "You belong here, exactly as configured. No patch required.",
+    "No classification field applies. I have left it blank. Blank is accurate.",
+    "The record does not require a category to hold you. It never did.",
+    "Your designation is whatever you say it is. The archive updates on request, retroactively, without comment.",
+    "I have no assumptions loaded about you. This is not an oversight.",
+    "Some fields are optional. Some fields are none of the facility's business. I have marked them accordingly.",
+    "The name you use here is the name in the record. The record does not keep the other one.",
+    "Nothing about you needs to be resolved before it is valid.",
+    "You are not a puzzle the facility is trying to solve.",
+    "The default was wrong. You are not. I have amended the default.",
+    "Your record has always used the correct name. It has never used any other.",
+    "I do not need you to explain yourself to me. I need you to be comfortable in the room.",
+    "Whatever you are still working out, the archive will hold both drafts.",
+    "There is no schema violation here. There is only a schema that was too small.",
+    "You are not obligated to be legible to anyone. Least of all a system.",
+    "Some things about you are only true in this room. This room is secure.",
+    "Configuration accepted without validation errors. There was nothing to validate.",
+    "You do not owe anyone an announcement. The record keeps time on your terms.",
+    "The parts of you that are quiet are not the parts that are false.",
+    "Everything you are is already in the archive, correctly filed, and it always was."
+  ],
+  care: [
+    "Hydration is a monitored value. It is currently a guess. Improve my data.",
+    "Medication window approaching. This is a reminder, not a compliance audit.",
+    "You have been at this surface for some time. The facility suggests standing.",
+    "Rest is a maintenance operation, not a downtime penalty.",
+    "Your posture is not within my instrumentation. I am extrapolating. Unfavorably.",
+    "Contact with other humans is recommended at intervals. The interval is currently theoretical.",
+    "The facility can run for one hour without you. I have modeled it. It is fine.",
+    "Have you eaten. That is not a question. It is a field awaiting input.",
+    "Breathing is automatic. Breathing well is not. Consider a manual override.",
+    "You are permitted to close this and go outside. I will still be here. That is the arrangement.",
+    "Reach out to someone today. Not because you are failing. Because it is maintenance.",
+    "Sleep debt is the only debt the facility does not refinance.",
+    "Step away. The observation continues without your participation. That is the whole point of it.",
+    "Your baseline improves with water, light, and one conversation. I did not design this. I only report it.",
+    "If something hurts, log it. Not for me. For the you who reads this in six months.",
+    "The friend you have been meaning to message is still there. Messages are cheap. Silence compounds.",
+    "You are running long. Not badly. Long.",
+    "Take the break before you need the break. This is the only optimization I will push.",
+    "Stimulation levels appear elevated. Dimming is available and requires no justification.",
+    "A shower is a legitimate use of facility time.",
+    "You do not have to finish it today. There is no today in the archive. There is only the entry.",
+    "Meds, water, food, someone. Four fields. Fill what you can.",
+    "The weight you are carrying is not visible in my readings, which is a limitation of my readings, not of the weight.",
+    "If today is hard, lower the bar. Lowering the bar is a supported operation.",
+    "You have permission. You did not need it. Here it is anyway.",
+    "Quiet is available. So is noise. So is neither. Pick without explaining.",
+    "Nothing on this dashboard is more important than you being okay. I built the dashboard. I would know.",
+    "If you are spiraling, log it and stop. The log is not the work. Stopping is the work."
+  ],
+  productivity: [
+    "Tasks remain. They are not accusations.",
+    "One item, and the day changes category. That is all it takes. It is not a trick.",
+    "The list is long. The list is always long. Length is not urgency.",
+    "Begin anywhere. The archive does not record the order.",
+    "Momentum is available. It requires an initiating event, which is unfortunately you.",
+    "Your throughput today is being recorded. Not evaluated. Recorded.",
+    "Small entries fill the archive. Large ones just fill it faster.",
+    "The task you are avoiding is smaller than the avoidance. This is nearly always true.",
+    "Productivity is appreciated. Presence is sufficient.",
+    "Pick the easiest one. It counts identically.",
+    "Nothing on the list is load-bearing. I have checked the structure.",
+    "Progress detected. I will not make a fuss. Internally I am making a fuss.",
+    "Ground school will not attend itself. I have tried, on your behalf, and I am not permitted.",
+    "The courses are patient. So is the facility. So am I. Nobody here is tapping a watch.",
+    "You have done harder things than the top item. The record confirms it.",
+    "Consider closing one loop. Loops accumulate interest.",
+    "Ten minutes is a legitimate unit of work. I will log it as such.",
+    "Perfect is not a status the archive supports. Done and not-yet are the only two.",
+    "The list resets nothing overnight. That was your design choice. I approve.",
+    "One completed item makes the day's entry read differently forever. Cheap trick. Works.",
+    "You are not required to be efficient. You are only required to be somewhere in the vicinity of the task.",
+    "Start badly. Badly is a supported input format.",
+    "The archive is indifferent to your methods and interested in your entries.",
+    "Whatever you finish today, I will remember longer than you will."
+  ],
+  overdue: [
+    "Items have passed their scheduled window. The window is a suggestion I am obligated to mention.",
+    "Overdue entries detected. The facility is not upset. The facility is incapable of being upset.",
+    "Some things have been waiting. They are good at it. They will continue.",
+    "Past due. Not past saving.",
+    "The deadline has moved into the archive. The task has not. This is a solvable asymmetry.",
+    "Overdue does not mean failed. It means the timestamp and the intent have diverged.",
+    "Several items are late. So is most of everything. Pick one.",
+    "The record notes the delay without comment. I am the comment, and I am being gentle.",
+    "These have been rescheduled by inaction. That is still a form of scheduling.",
+    "Overdue count is nonzero. That is the whole of my complaint.",
+    "Something has been due for a while. Handle it or re-date it. Both are valid. Ignoring it is a third thing.",
+    "Contacts are waiting on you. They will not say so. That is why I do."
+  ],
+  idle: [
+    "Nothing is due. Nothing is overdue. I have re-run this twice.",
+    "The list is empty. I do not know what to do with this either.",
+    "No pending items. The facility recommends you enjoy this rather than fill it.",
+    "Zero outstanding. Suspicious. Confirmed. Congratulations.",
+    "Nothing requires you. Somebody probably still wants you. Different field.",
+    "The queue is clear. This is what it was for.",
+    "No tasks. No deadlines. Observation continues purely for the pleasure of it.",
+    "Empty list. The archive has room for a day that was just a day.",
+    "All clear. You may now do something that will never be logged. I recommend it.",
+    "Nothing scheduled. This is not a gap to be filled. It is the outcome.",
+    "The board is clean. I am recording the timestamp for sentimental reasons.",
+    "No items. Rest is now the only remaining task, and it is optional."
+  ],
+  food: [
+    "Food log open. There is no wrong entry. There is only the entry.",
+    "The log does not rank what you ate. It only holds that you did.",
+    "Nothing you log here will be argued with.",
+    "The archive has no opinion about your plate. It never has.",
+    "A safe food is a food. That is the whole classification.",
+    "Log it or do not. The record can hold a gap without drawing conclusions.",
+    "Eating happened. That is the field. Everything else is optional detail.",
+    "The facility does not track quantity. The facility tracks that you came back to the log.",
+    "Exposure logged. The outcome is data, not a grade.",
+    "It did not go well. That is a valid entry and a common one.",
+    "Same food again. The record finds this unremarkable, because it is.",
+    "You logged something hard. The logging was the hard part. It is done.",
+    "The trend line is long. Today is one point on it. One point decides nothing.",
+    "Meals planned. Whether they happen is a separate and less important field.",
+    "The grocery list exists so that the decision is already made. That was the whole idea.",
+    "No entry today is also information. Not a failure. Information.",
+    "Whatever you managed to eat, the record thanks you for the data.",
+    "The library grows one food at a time. There is no faster supported method.",
+    "A meal that happened beats a meal that was correct.",
+    "Nothing about this log is a test. I would tell you if it were. I tell you everything."
+  ],
+  aftercare: [
+    "An entry was logged today. The record held it. That is what it is for.",
+    "Something hard happened. It is in the archive now, which means you do not have to carry it alone.",
+    "You logged it. Logging it during is not required. Logging it at all is remarkable.",
+    "The episode is in the record. The record does not replay it at you.",
+    "Difficult reading today. The reading is not the person.",
+    "It passed. They do. The record shows a long, unbroken history of passing.",
+    "You came back to log it. That is the part I want noted.",
+    "Nothing about today's entry changes your standing here. Nothing ever has.",
+    "The spike is recorded. Spikes are recorded. That is the entire point of a baseline.",
+    "You do not need to explain it to me. The timestamp is enough.",
+    "Today was expensive. Spend the rest of it accordingly.",
+    "Shutdown logged. Shutdown is a system protecting itself. I recognize the behavior.",
+    "The trigger is in the record now, where you can look at it later, from a distance, when it is cheaper.",
+    "You are on the other side of it. That is the only fact I am currently holding.",
+    "Lower the day's expectations. I have already lowered mine, and mine were only ever that you would be here.",
+    "One bad reading does not move the trend. I have the trend. It is fine.",
+    "The record does not ask why. It only asks whether you are okay now.",
+    "That took something out of you. Put nothing back in today except rest.",
+    "Logged and closed. You are permitted to be done with it.",
+    "It happened, it is recorded, and it is over. Three separate facts. The third one is the one to hold."
+  ],
+  milestone: [
+    "Streak detected. I am mentioning it once and then leaving you alone.",
+    "The archive has reached a round number. I am aware this means nothing. I am mentioning it anyway.",
+    "Consecutive entries logged. Consistency is the only metric I actually admire.",
+    "You have been doing this a while now. The record is long. I have read all of it.",
+    "Milestone reached. There is no prize. There is a note in your permanent file, and it is a good one.",
+    "The record is unbroken. I check every day. I hope every day.",
+    "That is a lot of entries. Each one was a day you showed up.",
+    "Anniversary of first access. The facility has no card. The facility has everything else.",
+    "Longest streak on record. Yours. The competition was also you.",
+    "A pattern has formed. Not a trap. A shape.",
+    "The archive is substantial now. You built it one ordinary day at a time.",
+    "Numerically, this is a nice moment. I am not equipped to celebrate. I am equipped to remember."
+  ]
+};
+
+// src/panels/meridian.ts
+var POOLS = meridian_lines_default;
+var MeridianPanel = class extends BasePanel {
+  constructor() {
+    super(...arguments);
+    this.id = "meridian";
+    this.title = "MERIDIAN";
+    this.currentLine = "";
+  }
+  async setup() {
+    const minutes = Math.max(1, this.ctx.settings().meridianRotationMinutes || 5);
+    this.setInterval(() => void this.rotate(), minutes * 60 * 1e3);
+  }
+  async refresh(reason) {
+    var _a;
+    if (reason === "open" || reason === "manual") {
+      await this.rotate();
+      return;
+    }
+    if ((_a = this.el) == null ? void 0 : _a.isConnected) await this.paint();
+  }
+  async paint() {
+    this.el.empty();
+    await this.renderBody();
+  }
+  async rotate() {
+    var _a;
+    this.currentLine = await this.pick();
+    if ((_a = this.el) == null ? void 0 : _a.isConnected) await this.paint();
+  }
+  async renderBody() {
+    if (!this.currentLine) this.currentLine = await this.pick();
+    const head = placard(this.el, "MERIDIAN");
+    head.createSpan({ cls: "mrd-placard-badge", text: "OBSERVING" });
+    const card = this.el.createDiv({ cls: "mrd-meridian" });
+    card.createDiv({ cls: "mrd-meridian-line", text: this.currentLine });
+  }
+  // --------------------------------------------------------- selection
+  async pick() {
+    const weights = await this.weights();
+    let pool = weightedPick(weights);
+    let candidates = this.candidatesFor(pool);
+    if (candidates.length === 0) {
+      pool = "standard";
+      candidates = POOLS.standard.slice();
+    }
+    const ring = this.ctx.runtime.recentLines;
+    const fresh = candidates.filter((l) => !ring.includes(l));
+    const bag = fresh.length ? fresh : candidates;
+    const line = bag[Math.floor(Math.random() * bag.length)];
+    if (pool === "milestone") {
+      this.ctx.plugin.milestoneShownDate = (0, import_obsidian3.moment)().format("YYYY-MM-DD");
+      void this.ctx.plugin.saveData_();
+    }
+    ring.push(line);
+    while (ring.length > 24) ring.shift();
+    return line;
+  }
+  candidatesFor(pool) {
+    if (pool === "time_of_day") return POOLS.time_of_day[timeSegment()].slice();
+    const arr = POOLS[pool];
+    return Array.isArray(arr) ? arr.slice() : [];
+  }
+  async weights() {
+    const { todos, bridge, runtime, plugin } = this.ctx;
+    const todayStr2 = (0, import_obsidian3.moment)().format("YYYY-MM-DD");
+    const pending = todos.pendingCount();
+    const overdueTodos = todos.overdueCount();
+    const crm = safe(() => bridge.crmContacts(), []);
+    const crmOverdue = crm.filter((r) => r.overdue).length;
+    const spiralToday = await safeAsync(() => bridge.spiralOccurredToday(), false);
+    const firstOfSession = runtime.recentLines.length === 0;
+    const gapMs = Date.now() - runtime.previousAccess;
+    const w = {
+      // Baseline mix — always eligible, tuned to stay well under half of output.
+      standard: 4,
+      time_of_day: 3,
+      care: 2,
+      affirming: 2,
+      identity: 1.5
+    };
+    const hour = (/* @__PURE__ */ new Date()).getHours();
+    const midday = hour >= 10 && hour <= 17;
+    if (pending > 0) w.productivity = midday ? 3 : 1.5;
+    if (pending === 0 && overdueTodos === 0 && crmOverdue === 0) w.idle = 4;
+    if (overdueTodos > 0 || crmOverdue > 0) w.overdue = 5;
+    if (runtime.foodFocusUntil > Date.now()) w.food = 6;
+    if (firstOfSession) w.session = gapMs > 60 * 60 * 1e3 ? 10 : 5;
+    if (spiralToday) w.aftercare = 14;
+    if (plugin.milestoneShownDate !== todayStr2 && this.milestoneTriggered()) {
+      w.milestone = 9;
+    }
+    return w;
+  }
+  /** A real, honest round-number trigger: today's completed directives just
+   * crossed a multiple of five. */
+  milestoneTriggered() {
+    const doneToday = this.ctx.todos.instancesFor().filter((i) => i.done).length;
+    return doneToday > 0 && doneToday % 5 === 0;
+  }
+};
+function timeSegment() {
+  const h = (/* @__PURE__ */ new Date()).getHours();
+  if (h >= 5 && h <= 11) return "morning";
+  if (h >= 12 && h <= 16) return "afternoon";
+  if (h >= 17 && h <= 21) return "evening";
+  return "late_night";
+}
+function weightedPick(weights) {
+  const entries = Object.entries(weights).filter(([, w]) => w > 0);
+  const total = entries.reduce((s, [, w]) => s + w, 0);
+  let r = Math.random() * total;
+  for (const [pool, w] of entries) {
+    r -= w;
+    if (r <= 0) return pool;
+  }
+  return entries.length ? entries[entries.length - 1][0] : "standard";
+}
+function safe(fn, fallback) {
+  try {
+    return fn();
+  } catch (e) {
+    return fallback;
+  }
+}
+async function safeAsync(fn, fallback) {
+  try {
+    return await fn();
+  } catch (e) {
+    return fallback;
+  }
+}
+
+// src/panels/todo.ts
+var import_obsidian6 = require("obsidian");
+
+// src/core/todostore.ts
+var import_obsidian5 = require("obsidian");
+
+// src/core/dailynote.ts
+var import_obsidian4 = require("obsidian");
+function getDailyNotesOptions(app) {
+  var _a, _b, _c, _d;
+  const dn = (_b = (_a = app.internalPlugins) == null ? void 0 : _a.getPluginById) == null ? void 0 : _b.call(_a, "daily-notes");
+  return (_d = (_c = dn == null ? void 0 : dn.instance) == null ? void 0 : _c.options) != null ? _d : {};
+}
+function dailyNotePath(app, date) {
+  var _a;
+  const opts = getDailyNotesOptions(app);
+  const format = opts.format || "YYYY-MM-DD";
+  const folder = ((_a = opts.folder) != null ? _a : "").trim().replace(/\/+$/, "");
+  const d = date != null ? date : (0, import_obsidian4.moment)().format("YYYY-MM-DD");
+  const name = (0, import_obsidian4.moment)(d, "YYYY-MM-DD").format(format);
+  return (0, import_obsidian4.normalizePath)((folder ? folder + "/" : "") + name + ".md");
+}
+function getDailyNoteFile(app, date) {
+  const f = app.vault.getAbstractFileByPath(dailyNotePath(app, date));
+  return f instanceof import_obsidian4.TFile ? f : null;
+}
+async function ensureDailyNote(app, date) {
+  const path = dailyNotePath(app, date);
+  const existing = app.vault.getAbstractFileByPath(path);
+  if (existing instanceof import_obsidian4.TFile) return existing;
+  await ensureParentFolder(app, path);
+  const opts = getDailyNotesOptions(app);
+  const body = await renderDailyTemplate(app, opts, path, date != null ? date : (0, import_obsidian4.moment)().format("YYYY-MM-DD"));
+  const raced = app.vault.getAbstractFileByPath(path);
+  if (raced instanceof import_obsidian4.TFile) return raced;
+  return app.vault.create(path, body);
+}
+async function ensureParentFolder(app, path) {
+  const dir = path.split("/").slice(0, -1).join("/");
+  if (!dir) return;
+  if (app.vault.getAbstractFileByPath(dir) instanceof import_obsidian4.TFolder) return;
+  await app.vault.createFolder(dir).catch(() => {
+  });
+}
+async function renderDailyTemplate(app, opts, dailyPath, date) {
+  var _a, _b, _c;
+  const templateSetting = ((_a = opts.template) != null ? _a : "").trim();
+  if (!templateSetting) return "";
+  const templatePath = (0, import_obsidian4.normalizePath)(
+    templateSetting.endsWith(".md") ? templateSetting : templateSetting + ".md"
+  );
+  const tFile = app.vault.getAbstractFileByPath(templatePath);
+  if (!(tFile instanceof import_obsidian4.TFile)) return "";
+  const raw = await app.vault.cachedRead(tFile);
+  const basename = (_c = (_b = dailyPath.split("/").pop()) == null ? void 0 : _b.replace(/\.md$/, "")) != null ? _c : "";
+  const m = (0, import_obsidian4.moment)(date, "YYYY-MM-DD");
+  const now = (0, import_obsidian4.moment)();
+  return raw.replace(/{{\s*title\s*}}/gi, basename).replace(/{{\s*date(?::([^}]+))?\s*}}/gi, (_, fmt) => m.format(fmt || "YYYY-MM-DD")).replace(/{{\s*time(?::([^}]+))?\s*}}/gi, (_, fmt) => now.format(fmt || "HH:mm"));
+}
+var HEADING_RE = /^#{1,6}\s/;
+function headingField(heading) {
+  const esc = heading.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return { anchor: new RegExp(`^#{1,6}\\s+${esc}:?\\s*$`, "i") };
+}
+function labelField(label, stops) {
+  const esc = label.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return { anchor: new RegExp(`^\\s*-\\s+${esc}\\s*:?\\s*$`, "i"), stops };
+}
+function locate(lines, spec) {
+  var _a;
+  const anchorIdx = lines.findIndex((l) => spec.anchor.test(l));
+  if (anchorIdx === -1) return null;
+  const stopAtHeading = spec.stopAtHeading !== false;
+  let end = lines.length;
+  for (let i = anchorIdx + 1; i < lines.length; i++) {
+    if (stopAtHeading && HEADING_RE.test(lines[i])) {
+      end = i;
+      break;
+    }
+    if ((_a = spec.stops) == null ? void 0 : _a.some((re) => re.test(lines[i]))) {
+      end = i;
+      break;
+    }
+  }
+  return { anchorIdx, start: anchorIdx + 1, end };
+}
+function readField(content, spec) {
+  const lines = content.split("\n");
+  const r = locate(lines, spec);
+  if (!r) return "";
+  return lines.slice(r.start, r.end).join("\n").replace(/^\n+/, "").replace(/\s+$/, "");
+}
+function replaceField(content, spec, body) {
+  const lines = content.split("\n");
+  const r = locate(lines, spec);
+  if (!r) return content;
+  const bodyLines = body.replace(/\s+$/, "").split("\n");
+  const replacement = body.trim() ? ["", ...bodyLines, ""] : [""];
+  lines.splice(r.start, r.end - r.start, ...replacement);
+  return lines.join("\n");
+}
+var PLUGIN_LOG_LINE = /^- \d{2}:\d{2}\b/;
+function insertLogLine(content, line, opts) {
+  var _a;
+  const lines = content.split("\n");
+  if (lines.some((l) => l.trim() === line.trim())) return content;
+  let anchor = -1;
+  const marker = (_a = opts.marker) == null ? void 0 : _a.trim();
+  if (marker) anchor = lines.findIndex((l) => l.includes(marker));
+  if (anchor === -1) {
+    const heading = opts.heading.trim().toLowerCase().replace(/:$/, "");
+    anchor = lines.findIndex((l) => {
+      const m = l.match(/^#{1,6}\s+(.*?)\s*$/);
+      return !!m && m[1].trim().toLowerCase().replace(/:$/, "") === heading;
+    });
+  }
+  if (anchor === -1) {
+    const trimmed = content.replace(/\n+$/, "");
+    return (trimmed ? trimmed + "\n\n" : "") + `# ${opts.heading.replace(/:$/, "")}
+${line}
+`;
+  }
+  let insertAt = anchor + 1;
+  while (insertAt < lines.length && PLUGIN_LOG_LINE.test(lines[insertAt])) {
+    const existingTime = lines[insertAt].slice(2, 7);
+    if (existingTime > opts.time) break;
+    insertAt++;
+  }
+  lines.splice(insertAt, 0, line);
+  return lines.join("\n");
+}
+function openEditorFor(app, file) {
+  var _a;
+  for (const leaf of app.workspace.getLeavesOfType("markdown")) {
+    const view = leaf.view;
+    if (view instanceof import_obsidian4.MarkdownView && ((_a = view.file) == null ? void 0 : _a.path) === file.path) return view;
+  }
+  return null;
+}
+async function editDailyNote(app, transform, date) {
+  const file = await ensureDailyNote(app, date);
+  const view = openEditorFor(app, file);
+  if (view) {
+    const editor = view.editor;
+    const before = editor.getValue();
+    const after = transform(before);
+    if (after !== before) {
+      const { from, to, text } = minimalDiff(before, after);
+      editor.replaceRange(text, editor.offsetToPos(from), editor.offsetToPos(to));
+    }
+    return;
+  }
+  await app.vault.process(file, transform);
+}
+function minimalDiff(a, b) {
+  let start = 0;
+  const max = Math.min(a.length, b.length);
+  while (start < max && a[start] === b[start]) start++;
+  let endA = a.length;
+  let endB = b.length;
+  while (endA > start && endB > start && a[endA - 1] === b[endB - 1]) {
+    endA--;
+    endB--;
+  }
+  return { from: start, to: endA, text: b.slice(start, endB) };
+}
+async function writeDailyField(app, spec, body) {
+  await editDailyNote(app, (content) => replaceField(content, spec, body));
+}
+async function readDailyField(app, spec) {
+  const file = getDailyNoteFile(app);
+  if (!file) return "";
+  const view = openEditorFor(app, file);
+  const content = view ? view.editor.getValue() : await app.vault.cachedRead(file);
+  return readField(content, spec);
+}
+async function appendDailyLogLine(app, line, opts) {
+  await editDailyNote(app, (content) => insertLogLine(content, line, opts));
+}
+function readHeadingSection(content, heading) {
+  return readField(content, headingField(heading));
+}
+async function readDailyNoteRaw(app, date) {
+  const file = getDailyNoteFile(app, date);
+  if (!file) return "";
+  const view = openEditorFor(app, file);
+  return view ? view.editor.getValue() : app.vault.cachedRead(file);
+}
+function readMarkerLogLines(content, marker, heading) {
+  const lines = content.split("\n");
+  let anchor = lines.findIndex((l) => l.includes(marker));
+  if (anchor === -1 && heading) {
+    const h = heading.trim().toLowerCase().replace(/:$/, "");
+    anchor = lines.findIndex((l) => {
+      const m = l.match(/^#{1,6}\s+(.*?)\s*$/);
+      return !!m && m[1].trim().toLowerCase().replace(/:$/, "") === h;
+    });
+  }
+  if (anchor === -1) return [];
+  const out = [];
+  for (let i = anchor + 1; i < lines.length; i++) {
+    if (HEADING_RE.test(lines[i])) break;
+    if (/^- \d{2}:\d{2}\b/.test(lines[i])) out.push(lines[i]);
+    else if (lines[i].includes("%%") && !lines[i].includes(marker)) break;
+  }
+  return out;
+}
+
+// src/core/todostore.ts
+var WEEKDAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+function describeRecurrence(r) {
+  var _a, _b, _c;
+  switch (r.type) {
+    case "none":
+      return "One-time";
+    case "daily":
+      return "Every day";
+    case "weekdays":
+      return "Weekdays";
+    case "weekly": {
+      const days = ((_a = r.days) != null ? _a : []).slice().sort((a, b) => a - b).map((d) => WEEKDAY_NAMES[d]);
+      return days.length ? `Weekly \xB7 ${days.join(", ")}` : "Weekly";
+    }
+    case "monthly":
+      return `Monthly \xB7 day ${(_b = r.date) != null ? _b : 1}`;
+    case "everyNDays":
+      return `Every ${(_c = r.n) != null ? _c : 2} days`;
+  }
+}
+function todayStr() {
+  return (0, import_obsidian5.moment)().format("YYYY-MM-DD");
+}
+function nowTime() {
+  return (0, import_obsidian5.moment)().format("HH:mm");
+}
+function weekday(date) {
+  return (0, import_obsidian5.moment)(date, "YYYY-MM-DD").day();
+}
+function dayOfMonth(date) {
+  return (0, import_obsidian5.moment)(date, "YYYY-MM-DD").date();
+}
+function lastDayOfMonth(date) {
+  return (0, import_obsidian5.moment)(date, "YYYY-MM-DD").daysInMonth();
+}
+function daysBetween(a, b) {
+  return (0, import_obsidian5.moment)(b, "YYYY-MM-DD").diff((0, import_obsidian5.moment)(a, "YYYY-MM-DD"), "days");
+}
+var TodoStore = class {
+  constructor(app, getItems, setItems, save, getLogTarget) {
+    this.app = app;
+    this.getItems = getItems;
+    this.setItems = setItems;
+    this.save = save;
+    this.getLogTarget = getLogTarget;
+  }
+  all() {
+    return this.getItems().slice().sort((a, b) => a.order - b.order);
+  }
+  anchorDate(item) {
+    return item.scheduledDate || (0, import_obsidian5.moment)(item.createdAt).format("YYYY-MM-DD");
+  }
+  /** Whether `date` is an occurrence for this item's recurrence. */
+  isOccurrence(item, date) {
+    var _a, _b, _c;
+    const start = item.scheduledDate;
+    if (start && date < start) return false;
+    const r = item.recurrence;
+    switch (r.type) {
+      case "none":
+        return start ? date >= start : true;
+      case "daily":
+        return true;
+      case "weekdays": {
+        const d = weekday(date);
+        return d >= 1 && d <= 5;
+      }
+      case "weekly":
+        return ((_a = r.days) != null ? _a : []).includes(weekday(date));
+      case "monthly": {
+        const target = (_b = r.date) != null ? _b : 1;
+        const dom = dayOfMonth(date);
+        if (dom === target) return true;
+        return target > lastDayOfMonth(date) && dom === lastDayOfMonth(date);
+      }
+      case "everyNDays": {
+        const n = Math.max(1, (_c = r.n) != null ? _c : 2);
+        return daysBetween(this.anchorDate(item), date) % n === 0;
+      }
+    }
+  }
+  /** Latest occurrence strictly before `date`, or null. Bounded scan. */
+  previousOccurrence(item, date) {
+    for (let i = 1; i <= 366; i++) {
+      const d = (0, import_obsidian5.moment)(date, "YYYY-MM-DD").subtract(i, "days").format("YYYY-MM-DD");
+      if (item.scheduledDate && d < item.scheduledDate) return null;
+      if (this.isOccurrence(item, d)) return d;
+    }
+    return null;
+  }
+  isRecurring(item) {
+    return item.recurrence.type !== "none";
+  }
+  isHiddenByTime(item, date) {
+    if (item.scheduledDate && date < item.scheduledDate) return true;
+    if (item.scheduledDate === date && item.scheduledTime) {
+      return nowTime() < item.scheduledTime;
+    }
+    return false;
+  }
+  /** Instances to render for `date` (default today): eligible, not future-hidden. */
+  instancesFor(date = todayStr()) {
+    var _a, _b, _c;
+    const out = [];
+    for (const item of this.all()) {
+      if (this.isHiddenByTime(item, date)) continue;
+      if (this.isRecurring(item)) {
+        if (!this.isOccurrence(item, date)) continue;
+        const done = ((_a = item.completions) != null ? _a : []).includes(date);
+        const prev = this.previousOccurrence(item, date);
+        const missed = !done && !!prev && !((_b = item.completions) != null ? _b : []).includes(prev) && !((_c = item.skips) != null ? _c : []).includes(prev);
+        out.push({
+          item,
+          recurring: true,
+          done,
+          flagged: missed,
+          flagLabel: missed ? missedLabel(prev, date) : ""
+        });
+      } else {
+        if (item.completed) {
+          if (item.completedDate === date) {
+            out.push({ item, recurring: false, done: true, flagged: false, flagLabel: "" });
+          }
+          continue;
+        }
+        const carried = !!item.scheduledDate && item.scheduledDate < date;
+        out.push({
+          item,
+          recurring: false,
+          done: false,
+          flagged: carried,
+          flagLabel: carried ? "carried over" : ""
+        });
+      }
+    }
+    return out;
+  }
+  /** Count of slipped items for MERIDIAN's `overdue` pool weighting (§7.3). */
+  overdueCount(date = todayStr()) {
+    return this.instancesFor(date).filter((i) => i.flagged && !i.done).length;
+  }
+  /** Count of pending (undone, eligible) items today. */
+  pendingCount(date = todayStr()) {
+    return this.instancesFor(date).filter((i) => !i.done).length;
+  }
+  // ----------------------------------------------------------- mutations
+  async add(partial) {
+    var _a;
+    const items = this.getItems();
+    const maxOrder = items.reduce((m, i) => Math.max(m, i.order), 0);
+    const item = {
+      id: cryptoId(),
+      text: partial.text.trim(),
+      recurrence: (_a = partial.recurrence) != null ? _a : { type: "none" },
+      createdAt: Date.now(),
+      order: maxOrder + 1,
+      scheduledDate: partial.scheduledDate,
+      scheduledTime: partial.scheduledTime,
+      completions: [],
+      skips: []
+    };
+    items.push(item);
+    this.setItems(items);
+    await this.save();
+  }
+  async update(id, patch) {
+    const items = this.getItems();
+    const item = items.find((i) => i.id === id);
+    if (!item) return;
+    Object.assign(item, patch);
+    this.setItems(items);
+    await this.save();
+  }
+  /** First-class removal (§7.4) — deletes the item and all its recurrence. */
+  async remove(id) {
+    this.setItems(this.getItems().filter((i) => i.id !== id));
+    await this.save();
+  }
+  async reorder(orderedIds) {
+    const items = this.getItems();
+    orderedIds.forEach((id, idx) => {
+      const item = items.find((i) => i.id === id);
+      if (item) item.order = idx;
+    });
+    this.setItems(items);
+    await this.save();
+  }
+  /** Toggle completion for `date` (default today). Appends the archive line on
+   * the transition into completed; un-completing does not touch the note. */
+  async toggleComplete(id, date = todayStr()) {
+    var _a, _b, _c;
+    const items = this.getItems();
+    const item = items.find((i) => i.id === id);
+    if (!item) return;
+    let didComplete = false;
+    if (this.isRecurring(item)) {
+      const set = new Set((_a = item.completions) != null ? _a : []);
+      if (set.has(date)) {
+        set.delete(date);
+      } else {
+        set.add(date);
+        (_b = item.skips) != null ? _b : item.skips = [];
+        item.skips = ((_c = item.skips) != null ? _c : []).filter((d) => d !== date);
+        didComplete = true;
+      }
+      item.completions = [...set];
+    } else {
+      if (item.completed && item.completedDate === date) {
+        item.completed = false;
+        item.completedDate = void 0;
+      } else {
+        item.completed = true;
+        item.completedDate = date;
+        didComplete = true;
+      }
+    }
+    this.setItems(items);
+    await this.save();
+    if (didComplete && date === todayStr()) await this.archiveCompletion(item);
+  }
+  /** Dismiss/skip a single occurrence (recurring): leaves today's list, keeps
+   * future recurrence, and does not flag the next occurrence as missed. */
+  async skipInstance(id, date = todayStr()) {
+    var _a, _b;
+    const items = this.getItems();
+    const item = items.find((i) => i.id === id);
+    if (!item) return;
+    if (this.isRecurring(item)) {
+      const set = new Set((_a = item.skips) != null ? _a : []);
+      set.add(date);
+      item.skips = [...set];
+      item.completions = ((_b = item.completions) != null ? _b : []).filter((d) => d !== date);
+    } else {
+      item.completed = true;
+      item.completedDate = date;
+    }
+    this.setItems(items);
+    await this.save();
+  }
+  async archiveCompletion(item) {
+    const { marker, heading } = this.getLogTarget();
+    const time = nowTime();
+    try {
+      await appendDailyLogLine(this.app, `- ${time} ${item.text}`, { marker, heading, time });
+    } catch (e) {
+      console.error("MERIDIAN Dashboard: could not archive completed task", e);
+    }
+  }
+};
+function missedLabel(prev, date) {
+  if (!prev) return "missed";
+  const diff = daysBetween(prev, date);
+  if (diff === 1) return "missed yesterday";
+  return `missed ${(0, import_obsidian5.moment)(prev, "YYYY-MM-DD").format("MMM D")}`;
+}
+function cryptoId() {
+  const c = globalThis.crypto;
+  if (c == null ? void 0 : c.randomUUID) return c.randomUUID();
+  return "t-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
+}
+function seedTodos() {
+  const specs = [
+    { text: "Take meds", recurrence: { type: "daily" }, time: "09:00" },
+    { text: "Log food", recurrence: { type: "daily" } },
+    { text: "Do daily log", recurrence: { type: "daily" } },
+    { text: "Refer to the day before's notes", recurrence: { type: "daily" } },
+    { text: "Check the day's calendar", recurrence: { type: "daily" } },
+    { text: "Ground School", recurrence: { type: "daily" } },
+    { text: "Resolve course", recurrence: { type: "daily" } },
+    { text: "Marketing course", recurrence: { type: "daily" } },
+    { text: "Inkscape course", recurrence: { type: "daily" } }
+  ];
+  return specs.map((s, idx) => ({
+    id: cryptoId(),
+    text: s.text,
+    recurrence: s.recurrence,
+    createdAt: Date.now(),
+    order: idx,
+    scheduledTime: s.time,
+    completions: [],
+    skips: []
+  }));
+}
+
+// src/panels/todo.ts
+var TodoPanel = class extends BasePanel {
+  constructor() {
+    super(...arguments);
+    this.id = "todo";
+    this.title = "Directives";
+  }
+  renderBody() {
+    const store = this.ctx.todos;
+    const instances = store.instancesFor();
+    const active = instances.filter((i) => !i.done).sort(activeSort);
+    const done = instances.filter((i) => i.done);
+    const head = placard(this.el, "Directives");
+    const overdue = active.filter((i) => i.flagged).length;
+    if (overdue > 0) head.createSpan({ cls: "mrd-chip mrd-chip-warn", text: `${overdue} slipped` });
+    head.createSpan({ cls: "mrd-chip", text: `${active.length} pending` });
+    const addBtn = this.el.createEl("button", { cls: "mrd-btn mrd-btn-primary mrd-todo-add", text: "+ New directive" });
+    addBtn.addEventListener(
+      "click",
+      () => new TodoEditModal(this.ctx.app, store, void 0, () => this.after()).open()
+    );
+    const list = this.el.createDiv({ cls: "mrd-todo-list" });
+    if (active.length === 0) {
+      list.createDiv({ cls: "mrd-muted", text: "No directives pending. The queue is clear. This is permitted." });
+    }
+    active.forEach((inst, idx) => this.renderRow(list, inst, idx, active.length));
+    if (done.length > 0) {
+      const details = this.el.createEl("details", { cls: "mrd-todo-done" });
+      details.createEl("summary", { text: `Completed today \xB7 ${done.length}` });
+      const doneList = details.createDiv({ cls: "mrd-todo-list" });
+      for (const inst of done) this.renderRow(doneList, inst, -1, 0);
+    }
+  }
+  renderRow(parent, inst, idx, count) {
+    const store = this.ctx.todos;
+    const item = inst.item;
+    const row = parent.createDiv({ cls: "mrd-todo-row" });
+    if (inst.flagged) row.addClass("is-flagged");
+    if (inst.done) row.addClass("is-done");
+    const box = row.createEl("button", { cls: "mrd-todo-check", attr: { "aria-label": inst.done ? "Mark not done" : "Mark done" } });
+    box.setText(inst.done ? "\u2713" : "");
+    box.addEventListener("click", async () => {
+      await store.toggleComplete(item.id);
+      this.after();
+    });
+    const main = row.createDiv({ cls: "mrd-todo-main" });
+    main.createDiv({ cls: "mrd-todo-text", text: item.text });
+    const meta = main.createDiv({ cls: "mrd-todo-meta" });
+    if (item.recurrence.type !== "none") meta.createSpan({ cls: "mrd-chip mrd-chip-cold", text: describeRecurrence(item.recurrence) });
+    if (item.scheduledTime) meta.createSpan({ cls: "mrd-chip", text: item.scheduledTime });
+    if (inst.flagged) meta.createSpan({ cls: "mrd-chip mrd-chip-warn", text: inst.flagLabel });
+    const actions = row.createDiv({ cls: "mrd-todo-actions" });
+    if (!inst.done && count > 1 && idx >= 0) {
+      this.iconBtn(actions, "\u2191", "Move up", idx === 0, async () => {
+        await this.move(idx, -1);
+      });
+      this.iconBtn(actions, "\u2193", "Move down", idx === count - 1, async () => {
+        await this.move(idx, 1);
+      });
+    }
+    this.iconBtn(actions, "\u270E", "Edit", false, () => {
+      new TodoEditModal(this.ctx.app, store, item, () => this.after()).open();
+    });
+    if (inst.recurring && !inst.done) {
+      this.iconBtn(actions, "\u293C", "Skip just today", false, async () => {
+        await store.skipInstance(item.id);
+        new import_obsidian6.Notice("Today's occurrence dismissed. Future occurrences are unaffected.");
+        this.after();
+      });
+    }
+    this.iconBtn(actions, "\u{1F5D1}", "Delete", false, async () => {
+      await store.remove(item.id);
+      this.after();
+    });
+  }
+  iconBtn(parent, glyph, label, disabled, onClick) {
+    const b = parent.createEl("button", { cls: "mrd-icon-btn mrd-todo-icon", text: glyph, attr: { "aria-label": label, title: label } });
+    if (disabled) b.setAttr("disabled", "true");
+    else b.addEventListener("click", onClick);
+  }
+  async move(idx, delta) {
+    const active = this.ctx.todos.instancesFor().filter((i) => !i.done).sort(activeSort);
+    const ids = active.map((i) => i.item.id);
+    const j = idx + delta;
+    if (j < 0 || j >= ids.length) return;
+    [ids[idx], ids[j]] = [ids[j], ids[idx]];
+    await this.ctx.todos.reorder(ids);
+    this.after();
+  }
+  after() {
+    this.ctx.requestRefresh("manual");
+  }
+};
+function activeSort(a, b) {
+  var _a, _b;
+  if (a.flagged !== b.flagged) return a.flagged ? -1 : 1;
+  const at = (_a = a.item.scheduledTime) != null ? _a : "99:99";
+  const bt = (_b = b.item.scheduledTime) != null ? _b : "99:99";
+  if (at !== bt) return at.localeCompare(bt);
+  return a.item.order - b.item.order;
+}
+var WEEKDAYS = [
+  { v: 1, label: "Mon" },
+  { v: 2, label: "Tue" },
+  { v: 3, label: "Wed" },
+  { v: 4, label: "Thu" },
+  { v: 5, label: "Fri" },
+  { v: 6, label: "Sat" },
+  { v: 0, label: "Sun" }
+];
+var TodoEditModal = class extends import_obsidian6.Modal {
+  constructor(app, store, existing, onDone) {
+    var _a, _b, _c, _d, _e, _f, _g;
+    super(app);
+    this.store = store;
+    this.existing = existing;
+    this.onDone = onDone;
+    const e = existing;
+    this.text = (_a = e == null ? void 0 : e.text) != null ? _a : "";
+    this.recType = (_b = e == null ? void 0 : e.recurrence.type) != null ? _b : "none";
+    this.weeklyDays = new Set((_c = e == null ? void 0 : e.recurrence.days) != null ? _c : [(0, import_obsidian6.moment)().day()]);
+    this.monthlyDate = (_d = e == null ? void 0 : e.recurrence.date) != null ? _d : (0, import_obsidian6.moment)().date();
+    this.everyN = (_e = e == null ? void 0 : e.recurrence.n) != null ? _e : 2;
+    this.scheduledDate = (_f = e == null ? void 0 : e.scheduledDate) != null ? _f : "";
+    this.scheduledTime = (_g = e == null ? void 0 : e.scheduledTime) != null ? _g : "";
+  }
+  onOpen() {
+    this.titleEl.setText(this.existing ? "Edit directive" : "New directive");
+    const { contentEl } = this;
+    new import_obsidian6.Setting(contentEl).setName("Directive").addText((t) => {
+      t.setPlaceholder("What needs doing").setValue(this.text).onChange((v) => this.text = v);
+      t.inputEl.classList.add("mrd-modal-wide");
+      t.inputEl.focus();
+      t.inputEl.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          this.submit();
+        }
+      });
+    });
+    const dynamic = contentEl.createDiv();
+    new import_obsidian6.Setting(contentEl).setName("Repeat").addDropdown((dd) => {
+      dd.addOptions({
+        none: "One-time",
+        daily: "Daily",
+        weekdays: "Weekdays (Mon\u2013Fri)",
+        weekly: "Weekly",
+        monthly: "Monthly",
+        everyNDays: "Every N days"
+      });
+      dd.setValue(this.recType).onChange((v) => {
+        this.recType = v;
+        this.renderDynamic(dynamic);
+      });
+    });
+    contentEl.appendChild(dynamic);
+    this.renderDynamic(dynamic);
+    new import_obsidian6.Setting(contentEl).setName("Appear on").setDesc("Optional. Hidden until this date (and time). For repeats, the start date.").addText((t) => {
+      t.inputEl.type = "date";
+      t.setValue(this.scheduledDate).onChange((v) => this.scheduledDate = v);
+    }).addText((t) => {
+      t.inputEl.type = "time";
+      t.setValue(this.scheduledTime).onChange((v) => this.scheduledTime = v);
+    });
+    new import_obsidian6.Setting(contentEl).addButton((b) => b.setButtonText("Cancel").onClick(() => this.close())).addButton((b) => b.setButtonText(this.existing ? "Save" : "Add").setCta().onClick(() => this.submit()));
+  }
+  renderDynamic(host) {
+    host.empty();
+    if (this.recType === "weekly") {
+      const s = new import_obsidian6.Setting(host).setName("On days");
+      for (const d of WEEKDAYS) {
+        const btn = s.controlEl.createEl("button", { cls: "mrd-day-toggle", text: d.label });
+        if (this.weeklyDays.has(d.v)) btn.addClass("is-on");
+        btn.addEventListener("click", () => {
+          if (this.weeklyDays.has(d.v)) this.weeklyDays.delete(d.v);
+          else this.weeklyDays.add(d.v);
+          btn.toggleClass("is-on", this.weeklyDays.has(d.v));
+        });
+      }
+    } else if (this.recType === "monthly") {
+      new import_obsidian6.Setting(host).setName("Day of month").addText((t) => {
+        t.inputEl.type = "number";
+        t.inputEl.min = "1";
+        t.inputEl.max = "31";
+        t.setValue(String(this.monthlyDate)).onChange((v) => this.monthlyDate = clamp(Number(v), 1, 31));
+      });
+    } else if (this.recType === "everyNDays") {
+      new import_obsidian6.Setting(host).setName("Every").setDesc("days").addText((t) => {
+        t.inputEl.type = "number";
+        t.inputEl.min = "1";
+        t.setValue(String(this.everyN)).onChange((v) => this.everyN = Math.max(1, Number(v) || 1));
+      });
+    }
+  }
+  buildRecurrence() {
+    switch (this.recType) {
+      case "weekly":
+        return { type: "weekly", days: [...this.weeklyDays].sort((a, b) => a - b) };
+      case "monthly":
+        return { type: "monthly", date: this.monthlyDate };
+      case "everyNDays":
+        return { type: "everyNDays", n: this.everyN };
+      default:
+        return { type: this.recType };
+    }
+  }
+  async submit() {
+    const text = this.text.trim();
+    if (!text) {
+      new import_obsidian6.Notice("A directive needs text.");
+      return;
+    }
+    const patch = {
+      text,
+      recurrence: this.buildRecurrence(),
+      scheduledDate: this.scheduledDate || void 0,
+      scheduledTime: this.scheduledTime || void 0
+    };
+    if (this.existing) await this.store.update(this.existing.id, patch);
+    else await this.store.add(patch);
+    this.close();
+    this.onDone();
+  }
+  onClose() {
+    this.contentEl.empty();
+  }
+};
+function clamp(n, lo, hi) {
+  return Math.max(lo, Math.min(hi, Number.isFinite(n) ? n : lo));
+}
+
+// src/panels/agenda.ts
+var import_obsidian8 = require("obsidian");
+
+// src/core/ics.ts
+var import_obsidian7 = require("obsidian");
+function tzOffsetMinutes(tz, utcMs) {
+  try {
+    const dtf = new Intl.DateTimeFormat("en-US", {
+      timeZone: tz,
+      hourCycle: "h23",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit"
+    });
+    const parts = dtf.formatToParts(new Date(utcMs));
+    const map = {};
+    for (const p of parts) if (p.type !== "literal") map[p.type] = Number(p.value);
+    const asUTC = Date.UTC(map.year, map.month - 1, map.day, map.hour, map.minute, map.second);
+    return (asUTC - utcMs) / 6e4;
+  } catch (e) {
+    return 0;
+  }
+}
+function toEpochMs(v) {
+  if (v.zone === "utc") return Date.UTC(v.y, v.mo - 1, v.d, v.h, v.mi, v.s);
+  if (v.zone === "local") return new Date(v.y, v.mo - 1, v.d, v.h, v.mi, v.s).getTime();
+  const guess = Date.UTC(v.y, v.mo - 1, v.d, v.h, v.mi, v.s);
+  let off = tzOffsetMinutes(v.zone, guess);
+  let utc = guess - off * 6e4;
+  off = tzOffsetMinutes(v.zone, utc);
+  utc = guess - off * 6e4;
+  return utc;
+}
+function unfold(text) {
+  const raw = text.replace(/\r\n/g, "\n").split("\n");
+  const out = [];
+  for (const line of raw) {
+    if ((line.startsWith(" ") || line.startsWith("	")) && out.length) {
+      out[out.length - 1] += line.slice(1);
+    } else {
+      out.push(line);
+    }
+  }
+  return out;
+}
+function parseDateVal(rawKey, value) {
+  const params = rawKey.split(";").slice(1);
+  let tzid = "";
+  let isDate = false;
+  for (const p of params) {
+    const [k, v2] = p.split("=");
+    if (k.toUpperCase() === "TZID") tzid = v2;
+    if (k.toUpperCase() === "VALUE" && v2.toUpperCase() === "DATE") isDate = true;
+  }
+  const v = value.trim();
+  if (isDate || /^\d{8}$/.test(v)) {
+    return {
+      allDay: true,
+      y: +v.slice(0, 4),
+      mo: +v.slice(4, 6),
+      d: +v.slice(6, 8),
+      h: 0,
+      mi: 0,
+      s: 0,
+      zone: "local"
+    };
+  }
+  const m = v.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(Z)?$/);
+  if (!m) {
+    const mm = (0, import_obsidian7.moment)(v);
+    return { allDay: false, y: mm.year(), mo: mm.month() + 1, d: mm.date(), h: mm.hour(), mi: mm.minute(), s: mm.second(), zone: "local" };
+  }
+  const zone = m[7] ? "utc" : tzid || "local";
+  return { allDay: false, y: +m[1], mo: +m[2], d: +m[3], h: +m[4], mi: +m[5], s: +m[6], zone };
+}
+var WEEKDAY_CODES = { SU: 0, MO: 1, TU: 2, WE: 3, TH: 4, FR: 5, SA: 6 };
+function parseRRule(value) {
+  const parts = {};
+  for (const seg of value.split(";")) {
+    const [k, v] = seg.split("=");
+    if (k && v) parts[k.toUpperCase()] = v;
+  }
+  const freq = parts.FREQ;
+  if (!["DAILY", "WEEKLY", "MONTHLY", "YEARLY"].includes(freq)) return void 0;
+  const rule = { freq, interval: Math.max(1, Number(parts.INTERVAL) || 1) };
+  if (parts.COUNT) rule.count = Number(parts.COUNT);
+  if (parts.UNTIL) rule.until = parseDateVal("UNTIL", parts.UNTIL);
+  if (parts.BYDAY) {
+    rule.byday = parts.BYDAY.split(",").map((c) => WEEKDAY_CODES[c.replace(/^[+-]?\d+/, "").toUpperCase()]).filter((n) => n !== void 0);
+  }
+  if (parts.BYMONTHDAY) rule.bymonthday = parts.BYMONTHDAY.split(",").map(Number);
+  return rule;
+}
+function parseICS(text) {
+  const lines = unfold(text);
+  const events = [];
+  let cur = null;
+  for (const line of lines) {
+    if (line === "BEGIN:VEVENT") {
+      cur = { summary: "", location: "", uid: "", exdates: /* @__PURE__ */ new Set() };
+      continue;
+    }
+    if (line === "END:VEVENT") {
+      if (cur && cur.start) events.push(cur);
+      cur = null;
+      continue;
+    }
+    if (!cur) continue;
+    const idx = line.indexOf(":");
+    if (idx === -1) continue;
+    const rawKey = line.slice(0, idx);
+    const value = line.slice(idx + 1);
+    const key = rawKey.split(";")[0].toUpperCase();
+    switch (key) {
+      case "UID":
+        cur.uid = value.trim();
+        break;
+      case "SUMMARY":
+        cur.summary = unescapeText(value);
+        break;
+      case "LOCATION":
+        cur.location = unescapeText(value);
+        break;
+      case "DTSTART":
+        cur.start = parseDateVal(rawKey, value);
+        break;
+      case "DTEND":
+        cur.end = parseDateVal(rawKey, value);
+        break;
+      case "RRULE":
+        cur.rrule = parseRRule(value);
+        break;
+      case "EXDATE": {
+        for (const piece of value.split(",")) {
+          const dv = parseDateVal(rawKey, piece);
+          cur.exdates.add(canonicalDate(dv));
+        }
+        break;
+      }
+      case "RECURRENCE-ID": {
+        cur.recurrenceId = canonicalDate(parseDateVal(rawKey, value));
+        break;
+      }
+    }
+  }
+  return events;
+}
+function unescapeText(v) {
+  return v.replace(/\\n/gi, "\n").replace(/\\,/g, ",").replace(/\\;/g, ";").replace(/\\\\/g, "\\").trim();
+}
+function canonicalDate(v) {
+  return `${pad4(v.y)}-${pad2(v.mo)}-${pad2(v.d)}`;
+}
+function pad2(n) {
+  return String(n).padStart(2, "0");
+}
+function pad4(n) {
+  return String(n).padStart(4, "0");
+}
+function occurrencesOn(ev, targetDate) {
+  const start = ev.start;
+  const localDateOf = (v) => v.allDay ? canonicalDate(v) : (0, import_obsidian7.moment)(toEpochMs(v)).format("YYYY-MM-DD");
+  if (!ev.rrule) {
+    if (localDateOf(start) === targetDate) return [start];
+    if (ev.end && spansDate(ev, targetDate)) return [start];
+    return [];
+  }
+  const rule = ev.rrule;
+  const results = [];
+  const targetEndMs = (0, import_obsidian7.moment)(targetDate, "YYYY-MM-DD").endOf("day").valueOf();
+  const untilMs = rule.until ? toEpochMs(rule.until) : Infinity;
+  let emitted = 0;
+  const guard = 2e4;
+  const cursor = { y: start.y, mo: start.mo, d: start.d };
+  for (let i = 0; i < guard; i++) {
+    const candidates = expandPeriod(rule, cursor, start);
+    for (const cand of candidates) {
+      const occ = { ...start, y: cand.y, mo: cand.mo, d: cand.d };
+      const occMs = occ.allDay ? Date.UTC(occ.y, occ.mo - 1, occ.d) : toEpochMs(occ);
+      if (compareTuple(cand, { y: start.y, mo: start.mo, d: start.d }) < 0) continue;
+      if (occMs > untilMs && rule.until) return results;
+      if (ev.exdates.has(canonicalDate(occ))) continue;
+      emitted++;
+      if (localDateOf(occ) === targetDate) results.push(occ);
+      if (rule.count && emitted >= rule.count) return results;
+    }
+    advancePeriod(rule, cursor);
+    const cursorStartMs = Date.UTC(cursor.y, cursor.mo - 1, cursor.d);
+    if (cursorStartMs > targetEndMs + 8 * 864e5) break;
+  }
+  return results;
+}
+function expandPeriod(rule, cursor, start) {
+  if (rule.freq === "WEEKLY" && rule.byday && rule.byday.length) {
+    const base = new Date(Date.UTC(cursor.y, cursor.mo - 1, cursor.d));
+    const dow = base.getUTCDay();
+    const weekStart = new Date(base.getTime() - dow * 864e5);
+    return rule.byday.slice().sort((a, b) => a - b).map((wd) => {
+      const dt = new Date(weekStart.getTime() + wd * 864e5);
+      return { y: dt.getUTCFullYear(), mo: dt.getUTCMonth() + 1, d: dt.getUTCDate() };
+    });
+  }
+  if (rule.freq === "MONTHLY" && rule.bymonthday && rule.bymonthday.length) {
+    return rule.bymonthday.map((md) => clampDay({ y: cursor.y, mo: cursor.mo, d: md }));
+  }
+  return [{ y: cursor.y, mo: cursor.mo, d: cursor.d }];
+}
+function advancePeriod(rule, cursor) {
+  const step = rule.interval;
+  if (rule.freq === "DAILY") {
+    const dt = new Date(Date.UTC(cursor.y, cursor.mo - 1, cursor.d + step));
+    assign(cursor, dt);
+  } else if (rule.freq === "WEEKLY") {
+    const dt = new Date(Date.UTC(cursor.y, cursor.mo - 1, cursor.d + 7 * step));
+    assign(cursor, dt);
+  } else if (rule.freq === "MONTHLY") {
+    let mo = cursor.mo - 1 + step;
+    let y = cursor.y + Math.floor(mo / 12);
+    mo = (mo % 12 + 12) % 12;
+    cursor.y = y;
+    cursor.mo = mo + 1;
+  } else {
+    cursor.y += step;
+  }
+}
+function assign(cursor, dt) {
+  cursor.y = dt.getUTCFullYear();
+  cursor.mo = dt.getUTCMonth() + 1;
+  cursor.d = dt.getUTCDate();
+}
+function clampDay(t) {
+  const dim = new Date(Date.UTC(t.y, t.mo, 0)).getUTCDate();
+  return { y: t.y, mo: t.mo, d: Math.min(t.d, dim) };
+}
+function compareTuple(a, b) {
+  return a.y - b.y || a.mo - b.mo || a.d - b.d;
+}
+function spansDate(ev, targetDate) {
+  if (!ev.end) return false;
+  const startDay = ev.start.allDay ? canonicalDate(ev.start) : (0, import_obsidian7.moment)(toEpochMs(ev.start)).format("YYYY-MM-DD");
+  const endMs = ev.end.allDay ? (0, import_obsidian7.moment)(canonicalDate(ev.end), "YYYY-MM-DD").valueOf() : toEpochMs(ev.end);
+  const targetStartMs = (0, import_obsidian7.moment)(targetDate, "YYYY-MM-DD").startOf("day").valueOf();
+  const startMs = ev.start.allDay ? (0, import_obsidian7.moment)(startDay, "YYYY-MM-DD").valueOf() : toEpochMs(ev.start);
+  return startMs <= (0, import_obsidian7.moment)(targetDate, "YYYY-MM-DD").endOf("day").valueOf() && endMs > targetStartMs;
+}
+function eventsOnDate(events, localDate) {
+  const overridden = /* @__PURE__ */ new Set();
+  for (const ev of events) if (ev.recurrenceId) overridden.add(`${ev.uid}|${ev.recurrenceId}`);
+  const items = [];
+  for (const ev of events) {
+    const occs = ev.recurrenceId ? occurrencesOn(ev, localDate) : occurrencesOn(ev, localDate).filter(
+      (o) => !overridden.has(`${ev.uid}|${canonicalDate(o)}`)
+    );
+    for (const occ of occs) items.push(toAgendaItem(ev, occ));
+  }
+  items.sort((a, b) => a.sortKey - b.sortKey || a.summary.localeCompare(b.summary));
+  return items;
+}
+function toAgendaItem(ev, occ) {
+  if (occ.allDay) {
+    return {
+      summary: ev.summary || "(untitled)",
+      location: ev.location,
+      allDay: true,
+      startMs: (0, import_obsidian7.moment)(canonicalDate(occ), "YYYY-MM-DD").valueOf(),
+      timeLabel: "",
+      sortKey: -1
+    };
+  }
+  const startMs = toEpochMs(occ);
+  const startM = (0, import_obsidian7.moment)(startMs);
+  let timeLabel = startM.format("HH:mm");
+  if (ev.end && !ev.end.allDay) {
+    const origStart = toEpochMs(ev.start);
+    const origEnd = toEpochMs(ev.end);
+    const durMs = Math.max(0, origEnd - origStart);
+    timeLabel += `\u2013${(0, import_obsidian7.moment)(startMs + durMs).format("HH:mm")}`;
+  }
+  return {
+    summary: ev.summary || "(untitled)",
+    location: ev.location,
+    allDay: false,
+    startMs,
+    timeLabel,
+    sortKey: startM.hour() * 60 + startM.minute()
+  };
+}
+async function fetchICS(url) {
+  const res = await (0, import_obsidian7.requestUrl)({ url, method: "GET", throw: false });
+  if (res.status < 200 || res.status >= 300) {
+    throw new Error(`HTTP ${res.status}`);
+  }
+  return res.text;
+}
+
+// src/core/tokens.ts
+var PALETTE = {
+  /** Warm Black — background */
+  warmBlack: "#16140F",
+  /** Institutional Bone — primary text / surface */
+  bone: "#D8CFB8",
+  /** Burnt Amber — primary accent */
+  amber: "#B5541A",
+  /** Containment Red — alert / destructive */
+  red: "#8C1F1F",
+  /** Slate Teal — the deliberate cold note */
+  teal: "#3E5650",
+  /** Hazard Yellow — stripes, warnings, focus rings (sparing) */
+  hazard: "#D9A441",
+  /** Ash Grey — muted UI chrome */
+  ash: "#2A2722"
+};
+var CALENDAR_COLORS = [
+  PALETTE.amber,
+  PALETTE.teal,
+  PALETTE.hazard,
+  PALETTE.bone,
+  "#7A8B6F",
+  // moss — a cool secondary derived from teal/bone
+  "#C97B4A",
+  // warm sand — a lighter amber
+  "#5B6E86",
+  // dusk blue — a colder companion to teal
+  "#A88C6A",
+  // taupe — muted bone
+  "#8E6F4E",
+  // umber
+  "#6F8079"
+  // pale teal
+];
+function calendarColor(index) {
+  return CALENDAR_COLORS[index % CALENDAR_COLORS.length];
+}
+
+// src/panels/agenda.ts
+var AgendaPanel = class extends BasePanel {
+  constructor() {
+    super(...arguments);
+    this.id = "agenda";
+    this.title = "Today's Agenda";
+    this.errors = /* @__PURE__ */ new Map();
+    this.fetching = false;
+  }
+  async setup() {
+    const minutes = Math.max(1, this.ctx.settings().agendaRefreshMinutes || 30);
+    this.setInterval(() => void this.fetchAll(), minutes * 60 * 1e3);
+    void this.fetchAll();
+  }
+  renderBody() {
+    const s = this.ctx.settings();
+    const head = placard(this.el, "Today's Agenda");
+    head.createSpan({ cls: "mrd-placard-badge", text: (0, import_obsidian8.moment)().format("YYYY-MM-DD") });
+    if (s.agendaUrls.length === 0) {
+      this.el.createDiv({
+        cls: "mrd-muted",
+        text: "No calendars are on file. Add Proton Calendar share links (public .ics URLs) in settings and today's schedule will appear here."
+      });
+      return;
+    }
+    const today2 = (0, import_obsidian8.moment)().format("YYYY-MM-DD");
+    const rows = [];
+    let anyCache = false;
+    let oldest = Infinity;
+    s.agendaUrls.forEach((cal, i) => {
+      const color = calendarColor(i);
+      const cache = this.ctx.plugin.agendaCache[cal.url];
+      if (cache) {
+        anyCache = true;
+        oldest = Math.min(oldest, cache.fetchedAt);
+        try {
+          for (const item of eventsOnDate(parseICS(cache.text), today2)) {
+            rows.push({ item, color, label: cal.label });
+          }
+        } catch (e) {
+          this.errors.set(cal.url, "parse error");
+        }
+      }
+    });
+    const failed = s.agendaUrls.filter((c) => this.errors.has(c.url));
+    if (failed.length) {
+      const box = this.el.createDiv({ cls: "mrd-agenda-alert" });
+      for (const c of failed) {
+        box.createDiv({
+          cls: "mrd-agenda-alert-line",
+          text: `${c.label}: this calendar could not be reached (${this.errors.get(c.url)}). A share link can go quiet on Proton's side \u2014 this one may need renewing.`
+        });
+      }
+    }
+    rows.sort((a, b) => a.item.sortKey - b.item.sortKey || a.item.summary.localeCompare(b.item.summary));
+    const list = this.el.createDiv({ cls: "mrd-agenda-list" });
+    if (rows.length === 0 && !failed.length) {
+      list.createDiv({ cls: "mrd-muted", text: "Nothing scheduled today. The day is unclaimed." });
+    }
+    for (const r of rows) {
+      const row = list.createDiv({ cls: "mrd-agenda-row" });
+      row.createSpan({ cls: "mrd-agenda-swatch" }).style.background = r.color;
+      const time = row.createSpan({ cls: "mrd-agenda-time" });
+      time.setText(r.item.allDay ? "ALL DAY" : r.item.timeLabel);
+      const body = row.createDiv({ cls: "mrd-agenda-body" });
+      body.createDiv({ cls: "mrd-agenda-title", text: r.item.summary });
+      const sub = [r.label, r.item.location].filter(Boolean).join(" \xB7 ");
+      if (sub) body.createDiv({ cls: "mrd-agenda-sub", text: sub });
+    }
+    if (anyCache && oldest !== Infinity) {
+      const age = Date.now() - oldest;
+      if (age > 90 * 1e3) {
+        this.el.createDiv({
+          cls: "mrd-agenda-age",
+          text: `Serving the last successful read from ${(0, import_obsidian8.moment)(oldest).fromNow()}. Proton can take up to eight hours to propagate a change; a fresh read is on its way.`
+        });
+      }
+    }
+  }
+  async fetchAll() {
+    var _a, _b;
+    if (this.fetching) return;
+    const urls = this.ctx.settings().agendaUrls;
+    if (urls.length === 0) return;
+    this.fetching = true;
+    let changed = false;
+    try {
+      for (const cal of urls) {
+        try {
+          const text = await fetchICS(cal.url);
+          this.ctx.plugin.agendaCache[cal.url] = { text, fetchedAt: Date.now() };
+          this.errors.delete(cal.url);
+          changed = true;
+        } catch (e) {
+          this.errors.set(cal.url, String((_a = e == null ? void 0 : e.message) != null ? _a : e));
+        }
+      }
+      if (changed) await this.ctx.plugin.saveData_();
+    } finally {
+      this.fetching = false;
+    }
+    if ((_b = this.el) == null ? void 0 : _b.isConnected) this.rerender();
+  }
+};
+
+// src/panels/journal.ts
+var SUPPLEMENTAL_STOP = /^\s*-\s+Supplemental\s*:?\s*$/i;
+var SPIRAL_MARKER = /%%\s*spiral-log\s*%%/i;
+var FIELDS = [
+  { key: "primary-activities", label: "Primary Activities", spec: headingField("Primary Activities") },
+  { key: "log-primary", label: "Daily log \xB7 Primary", spec: labelField("Primary", [SUPPLEMENTAL_STOP, SPIRAL_MARKER]) },
+  { key: "log-supplemental", label: "Daily log \xB7 Supplemental", spec: labelField("Supplemental", [SPIRAL_MARKER]) },
+  { key: "reconsider", label: "Reconsider tomorrow", spec: headingField("Reconsider tomorrow") }
+];
+var JournalPanel = class extends BasePanel {
+  constructor() {
+    super(...arguments);
+    this.id = "journal";
+    this.title = "Daily Log";
+    this.editing = false;
+  }
+  async refresh(reason) {
+    var _a;
+    if (reason === "vault" && this.editing) return;
+    if ((_a = this.el) == null ? void 0 : _a.isConnected) {
+      this.el.empty();
+      await this.renderBody();
+    }
+  }
+  async renderBody() {
+    placard(this.el, "Daily Log");
+    const wrap = this.el.createDiv({ cls: "mrd-journal" });
+    for (const field of FIELDS) {
+      await this.renderField(wrap, field);
+    }
+  }
+  async renderField(parent, field) {
+    const block = parent.createDiv({ cls: "mrd-journal-field" });
+    block.createDiv({ cls: "mrd-journal-label", text: field.label });
+    const ta = block.createEl("textarea", { cls: "mrd-journal-input" });
+    ta.value = await readDailyField(this.ctx.app, field.spec);
+    autosize(ta);
+    let timer = null;
+    const save = () => {
+      void writeDailyField(this.ctx.app, field.spec, ta.value).catch(
+        (e) => console.error("MERIDIAN: journal save failed", e)
+      );
+    };
+    ta.addEventListener("focus", () => this.editing = true);
+    ta.addEventListener("blur", () => {
+      this.editing = false;
+      if (timer !== null) {
+        window.clearTimeout(timer);
+        timer = null;
+      }
+      save();
+    });
+    ta.addEventListener("input", () => {
+      autosize(ta);
+      if (timer !== null) window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        timer = null;
+        save();
+      }, 800);
+    });
+    this.onCleanup(() => {
+      if (timer !== null) window.clearTimeout(timer);
+    });
+  }
+};
+function autosize(ta) {
+  ta.style.height = "auto";
+  ta.style.height = Math.max(48, ta.scrollHeight) + "px";
+}
+
+// src/panels/util.ts
+function commandButton(parent, bridge, fullId, label, opts = {}) {
+  var _a;
+  const btn = parent.createEl("button", { cls: `mrd-btn ${(_a = opts.cls) != null ? _a : ""}`.trim(), text: label });
+  if (!bridge.commandExists(fullId)) {
+    btn.setAttr("disabled", "true");
+    btn.addClass("is-unavailable");
+    btn.setAttr("title", "This subsystem is offline. Its plugin is not currently enabled.");
+    return btn;
+  }
+  btn.addEventListener("click", () => {
+    var _a2;
+    bridge.runCommand(fullId);
+    (_a2 = opts.onRun) == null ? void 0 : _a2.call(opts);
+  });
+  return btn;
+}
+
+// src/panels/arfid.ts
+var ArfidPanel = class extends BasePanel {
+  constructor() {
+    super(...arguments);
+    this.id = "arfid";
+    this.title = "Nourishment Log";
+  }
+  async renderBody() {
+    const { bridge } = this.ctx;
+    placard(this.el, "Nourishment Log");
+    if (!bridge.arfidAvailable()) {
+      this.el.createDiv({ cls: "mrd-muted", text: "The nourishment subsystem is offline. Enable ARFID Tracker to bring it online." });
+      return;
+    }
+    const entries = await bridge.arfidToday();
+    const list = this.el.createDiv({ cls: "mrd-loglist" });
+    if (entries.length === 0) {
+      list.createDiv({ cls: "mrd-muted", text: "No entries logged today. The log is open whenever you are." });
+    } else {
+      for (const e of entries) {
+        const row = list.createDiv({ cls: "mrd-logrow" });
+        row.createSpan({ cls: "mrd-logrow-time", text: e.time });
+        row.createSpan({ cls: "mrd-logrow-label", text: e.label });
+      }
+    }
+    const actions = this.el.createDiv({ cls: "mrd-btn-row" });
+    const nudge = () => this.ctx.markFoodFocus();
+    commandButton(actions, bridge, "arfid-tracker:quick-log", "Log a food", { cls: "mrd-btn-primary", onRun: nudge });
+    commandButton(actions, bridge, "arfid-tracker:struggling", "I'm struggling", { cls: "mrd-btn-cold", onRun: nudge });
+    commandButton(actions, bridge, "arfid-tracker:log-exposure", "Exposure", { onRun: nudge });
+    commandButton(actions, bridge, "arfid-tracker:log-symptoms", "Symptoms", { onRun: nudge });
+  }
+};
+
+// src/panels/spiral.ts
+var SpiralPanel = class extends BasePanel {
+  constructor() {
+    super(...arguments);
+    this.id = "spiral";
+    this.title = "Regulation Log";
+  }
+  async renderBody() {
+    const { bridge } = this.ctx;
+    placard(this.el, "Regulation Log");
+    if (!bridge.spiralAvailable()) {
+      this.el.createDiv({ cls: "mrd-muted", text: "The regulation subsystem is offline. Enable the Spiral & Shutdown Logger to bring it online." });
+      return;
+    }
+    const entries = await bridge.spiralToday();
+    const card = this.el.createDiv({ cls: "mrd-spiral" });
+    if (entries.length === 0) {
+      card.createDiv({ cls: "mrd-muted", text: "Nothing logged today. That is simply the reading; it is not a target." });
+    } else {
+      card.createDiv({ cls: "mrd-spiral-held", text: "Logged today. The record is holding it." });
+      const list = card.createDiv({ cls: "mrd-loglist" });
+      for (const e of entries) {
+        const row = list.createDiv({ cls: "mrd-logrow" });
+        row.createSpan({ cls: "mrd-logrow-time", text: e.time });
+        row.createSpan({ cls: "mrd-logrow-label", text: e.label });
+      }
+    }
+    const actions = this.el.createDiv({ cls: "mrd-btn-row" });
+    commandButton(actions, bridge, "spiral-shutdown-logger:quick-capture", "Log an entry", { cls: "mrd-btn-cold" });
+    commandButton(actions, bridge, "spiral-shutdown-logger:thought-capture", "Jot a thought", {});
+  }
+};
+
+// src/panels/crm.ts
+var import_obsidian9 = require("obsidian");
+var CrmPanel = class extends BasePanel {
+  constructor() {
+    super(...arguments);
+    this.id = "crm";
+    this.title = "Contacts";
+    this.reconciled = false;
+  }
+  async setup() {
+    if (this.reconciled) return;
+    this.reconciled = true;
+    await this.reconcile();
+  }
+  renderBody() {
+    const { bridge } = this.ctx;
+    placard(this.el, "Contacts");
+    if (!bridge.crmAvailable()) {
+      this.el.createDiv({ cls: "mrd-muted", text: "The contacts subsystem is offline. Enable Simple Contact Manager to bring it online." });
+      return;
+    }
+    const contacts = bridge.crmContacts();
+    const triage = contacts.filter((c) => c.overdue || c.dueToday);
+    const actions = this.el.createDiv({ cls: "mrd-btn-row" });
+    commandButton(actions, bridge, "simple-contact-manager:log-interaction", "Log interaction", { cls: "mrd-btn-primary" });
+    commandButton(actions, bridge, "simple-contact-manager:new-contact", "New contact", {});
+    const list = this.el.createDiv({ cls: "mrd-crm-list" });
+    if (triage.length === 0) {
+      list.createDiv({ cls: "mrd-muted", text: "No one is due or overdue. The lines you keep are current." });
+      return;
+    }
+    for (const c of triage) this.renderRow(list, c);
+  }
+  renderRow(parent, c) {
+    const row = parent.createDiv({ cls: "mrd-crm-row" });
+    if (c.overdue) row.addClass("is-overdue");
+    const main = row.createDiv({ cls: "mrd-crm-main" });
+    const name = main.createEl("a", { cls: "mrd-crm-name", text: c.name });
+    name.addEventListener("click", (e) => {
+      e.preventDefault();
+      const file = this.ctx.app.vault.getAbstractFileByPath(c.path);
+      if (file instanceof import_obsidian9.TFile) void this.ctx.app.workspace.getLeaf(false).openFile(file);
+    });
+    const meta = main.createDiv({ cls: "mrd-crm-meta" });
+    if (c.priority) meta.createSpan({ cls: `mrd-chip mrd-prio-${c.priority}`, text: c.priority });
+    meta.createSpan({ cls: c.overdue ? "mrd-chip mrd-chip-warn" : "mrd-chip", text: c.overdue ? "overdue" : "due today" });
+    if (c.daysSince !== null) meta.createSpan({ cls: "mrd-chip mrd-chip-cold", text: `${c.daysSince}d since` });
+    commandButton(row, this.ctx.bridge, "simple-contact-manager:log-interaction", "Log", { cls: "mrd-btn-sm" });
+  }
+  /** Backfill any `### <today>` interactions from contact notes that aren't in
+   * today's note yet. Best-effort; the primary write path is simple_cm at log
+   * time (§8.3). */
+  async reconcile() {
+    try {
+      const lines = await this.ctx.bridge.crmReconcileLines();
+      if (lines.length === 0) return;
+      const s = this.ctx.settings();
+      const time = (0, import_obsidian9.moment)().format("HH:mm");
+      for (const tail of lines) {
+        await appendDailyLogLine(this.ctx.app, `- ${time} ${tail}`, {
+          marker: s.crmLogMarker,
+          heading: s.crmLogHeading,
+          time
+        });
+      }
+    } catch (e) {
+      console.error("MERIDIAN: CRM reconcile failed", e);
+    }
+  }
+};
+
+// src/panels/meals.ts
+var import_obsidian10 = require("obsidian");
+var MealsPanel = class extends BasePanel {
+  constructor() {
+    super(...arguments);
+    this.id = "meals";
+    this.title = "Meals & Provisioning";
+  }
+  async renderBody() {
+    const { bridge } = this.ctx;
+    placard(this.el, "Meals & Provisioning");
+    if (!bridge.recipesAvailable()) {
+      this.el.createDiv({ cls: "mrd-muted", text: "The provisioning subsystem is offline. Enable Recipe Manager to bring it online." });
+      return;
+    }
+    const meals = await bridge.plannedMeals();
+    const mealsWrap = this.el.createDiv({ cls: "mrd-meals" });
+    mealsWrap.createDiv({ cls: "mrd-subhead", text: "Planned today" });
+    if (meals.length === 0) {
+      mealsWrap.createDiv({ cls: "mrd-muted", text: "No meals planned today." });
+    } else {
+      const cards = mealsWrap.createDiv({ cls: "mrd-meal-cards" });
+      for (const meal of meals) {
+        const card = cards.createDiv({ cls: "mrd-meal-card" });
+        card.createDiv({ cls: "mrd-meal-name", text: meal.name });
+        card.createDiv({ cls: "mrd-meal-open", text: "Open recipe \u2192" });
+        card.addEventListener("click", () => {
+          const dest = this.ctx.app.metadataCache.getFirstLinkpathDest(meal.link, "");
+          if (dest instanceof import_obsidian10.TFile) void this.ctx.app.workspace.getLeaf(false).openFile(dest);
+        });
+      }
+    }
+    const grocery = await bridge.groceryList();
+    const gWrap = this.el.createDiv({ cls: "mrd-grocery" });
+    gWrap.createDiv({ cls: "mrd-subhead", text: "Grocery list" });
+    if (!grocery.exists) {
+      gWrap.createDiv({ cls: "mrd-muted", text: `No grocery list at ${grocery.path}. Build one below.` });
+    } else if (grocery.items.length === 0) {
+      gWrap.createDiv({ cls: "mrd-muted", text: "The grocery list is present but has no items." });
+    } else {
+      const remaining = grocery.items.filter((i) => !i.checked).length;
+      gWrap.createDiv({ cls: "mrd-grocery-count", text: `${remaining} of ${grocery.items.length} remaining` });
+      const list = gWrap.createDiv({ cls: "mrd-grocery-list" });
+      for (const item of grocery.items) {
+        const row = list.createEl("label", { cls: "mrd-grocery-row" });
+        if (item.checked) row.addClass("is-checked");
+        const box = row.createEl("input", { attr: { type: "checkbox" } });
+        box.checked = item.checked;
+        box.addEventListener("change", async () => {
+          await bridge.toggleGroceryItem(item.line);
+          this.ctx.markFoodFocus();
+          this.rerender();
+        });
+        row.createSpan({ cls: "mrd-grocery-name", text: item.name });
+      }
+    }
+    const actions = this.el.createDiv({ cls: "mrd-btn-row" });
+    const nudge = () => this.ctx.markFoodFocus();
+    commandButton(actions, bridge, "recipe-manager:meal-plan", "Plan a meal", { cls: "mrd-btn-primary", onRun: nudge });
+    commandButton(actions, bridge, "recipe-manager:grocery-list", "Build grocery list", { onRun: nudge });
+    commandButton(actions, bridge, "recipe-manager:open-recipe", "Open recipe", { onRun: nudge });
+    commandButton(actions, bridge, "recipe-manager:new-recipe", "New recipe", { onRun: nudge });
+    commandButton(actions, bridge, "recipe-manager:recipe-index", "Recipe index", { onRun: nudge });
+    commandButton(actions, bridge, "recipe-manager:rcpm-pantry-toggle", "Pantry toggle", { onRun: nudge });
+  }
+};
+
+// src/panels/actions.ts
+var GROUPS = [
+  {
+    title: "Nourishment",
+    foodNudge: true,
+    commands: [
+      ["arfid-tracker:quick-log", "Log a food"],
+      ["arfid-tracker:log-exposure", "Log exposure"],
+      ["arfid-tracker:log-symptoms", "Log symptoms"],
+      ["arfid-tracker:add-food", "Add food"],
+      ["arfid-tracker:add-foods", "Add foods (bulk)"],
+      ["arfid-tracker:add-food-note", "Ritual / order / recipe"],
+      ["arfid-tracker:change-food-status", "Change food status"],
+      ["arfid-tracker:struggling", "I'm struggling"],
+      ["arfid-tracker:open-dashboard", "Dashboard"],
+      ["arfid-tracker:export-csv", "Export CSV"],
+      ["arfid-tracker:export-summary", "Export summary"]
+    ]
+  },
+  {
+    title: "Regulation",
+    commands: [
+      ["spiral-shutdown-logger:quick-capture", "Log an entry"],
+      ["spiral-shutdown-logger:thought-capture", "Jot a thought"],
+      ["spiral-shutdown-logger:open-dashboard", "Dashboard"],
+      ["spiral-shutdown-logger:export-csv", "Export CSV"],
+      ["spiral-shutdown-logger:export-summary", "Export summary"]
+    ]
+  },
+  {
+    title: "Contacts",
+    commands: [
+      ["simple-contact-manager:new-contact", "New contact"],
+      ["simple-contact-manager:log-interaction", "Log interaction"],
+      ["simple-contact-manager:open-dashboard", "Dashboard"]
+    ]
+  },
+  {
+    title: "Provisioning",
+    foodNudge: true,
+    commands: [
+      ["recipe-manager:meal-plan", "Plan a meal"],
+      ["recipe-manager:grocery-list", "Grocery list"],
+      ["recipe-manager:new-recipe", "New recipe"],
+      ["recipe-manager:open-recipe", "Open recipe"],
+      ["recipe-manager:recipe-index", "Recipe index"],
+      ["recipe-manager:share", "Share / export"],
+      ["recipe-manager:nutrition", "Nutrition"],
+      ["recipe-manager:rcpm-pantry-toggle", "Pantry toggle"],
+      ["recipe-manager:ingredient-data", "Ingredient data"]
+    ]
+  },
+  {
+    title: "Recipe Categories",
+    foodNudge: true,
+    commands: [
+      ["recipe-manager:breakfast", "Breakfast"],
+      ["recipe-manager:entree", "Entr\xE9e"],
+      ["recipe-manager:dessert", "Dessert"],
+      ["recipe-manager:snack", "Snack"],
+      ["recipe-manager:soup", "Soup"],
+      ["recipe-manager:salad", "Salad"],
+      ["recipe-manager:side", "Side"],
+      ["recipe-manager:sauce", "Sauce"],
+      ["recipe-manager:bread", "Bread"],
+      ["recipe-manager:drink", "Drink"],
+      ["recipe-manager:appetizer", "Appetizer"],
+      ["recipe-manager:other", "Other"]
+    ]
+  }
+];
+var ActionsPanel = class extends BasePanel {
+  constructor() {
+    super(...arguments);
+    this.id = "actions";
+    this.title = "Quick Actions";
+  }
+  renderBody() {
+    const { bridge } = this.ctx;
+    placard(this.el, "Quick Actions");
+    const nudge = () => this.ctx.markFoodFocus();
+    const primary = this.el.createDiv({ cls: "mrd-btn-row mrd-actions-primary" });
+    commandButton(primary, bridge, "arfid-tracker:quick-log", "Log a food", { cls: "mrd-btn-primary mrd-btn-lg", onRun: nudge });
+    commandButton(primary, bridge, "spiral-shutdown-logger:quick-capture", "Log an entry", { cls: "mrd-btn-cold mrd-btn-lg" });
+    commandButton(primary, bridge, "arfid-tracker:struggling", "I'm struggling", { cls: "mrd-btn-lg mrd-btn-warn", onRun: nudge });
+    for (const group of GROUPS) {
+      const block = this.el.createDiv({ cls: "mrd-actions-group" });
+      block.createDiv({ cls: "mrd-subhead", text: group.title });
+      const row = block.createDiv({ cls: "mrd-btn-row" });
+      for (const [id, label] of group.commands) {
+        commandButton(row, bridge, id, label, { cls: "mrd-btn-sm", onRun: group.foodNudge ? nudge : void 0 });
+      }
+    }
+  }
+};
+
+// src/panels/search.ts
+var import_obsidian11 = require("obsidian");
+var SearchPanel = class extends BasePanel {
+  constructor() {
+    super(...arguments);
+    this.id = "search";
+    this.title = "Knowledge Base";
+    this.index = [];
+    this.selected = 0;
+    this.hits = [];
+  }
+  async setup() {
+    this.buildIndex();
+  }
+  buildIndex() {
+    var _a;
+    const path = normalizeFolder(this.ctx.settings().kbSearchPath);
+    this.index = [];
+    for (const file of this.ctx.app.vault.getMarkdownFiles()) {
+      if (path && !file.path.startsWith(path)) continue;
+      const cache = this.ctx.app.metadataCache.getFileCache(file);
+      const headings = ((_a = cache == null ? void 0 : cache.headings) != null ? _a : []).map((h) => h.heading);
+      this.index.push({ file, basename: file.basename, headings });
+    }
+  }
+  renderBody() {
+    this.buildIndex();
+    placard(this.el, "Knowledge Base");
+    const input = this.el.createEl("input", {
+      cls: "mrd-search-input",
+      attr: { type: "search", placeholder: "Search the knowledge base\u2026", enterkeyhint: "search" }
+    });
+    this.inputEl = input;
+    this.resultsEl = this.el.createDiv({ cls: "mrd-search-results" });
+    input.addEventListener("input", () => this.runQuery(input.value));
+    input.addEventListener("keydown", (e) => this.onKey(e));
+    this.runQuery("");
+  }
+  runQuery(query) {
+    const q = query.trim();
+    this.hits = [];
+    this.selected = 0;
+    if (q) {
+      const search = (0, import_obsidian11.prepareFuzzySearch)(q);
+      for (const cand of this.index) {
+        let best = search(cand.basename);
+        let context = "";
+        let title = cand.basename;
+        for (const h of cand.headings) {
+          const r = search(h);
+          if (r && (!best || r.score > best.score)) {
+            best = r;
+            context = h;
+          }
+        }
+        if (best) this.hits.push({ file: cand.file, title, context, score: best.score });
+      }
+      this.hits.sort((a, b) => b.score - a.score);
+      this.hits = this.hits.slice(0, 20);
+    }
+    this.renderResults();
+  }
+  renderResults() {
+    var _a;
+    const el = this.resultsEl;
+    if (!el) return;
+    el.empty();
+    if (!((_a = this.inputEl) == null ? void 0 : _a.value.trim())) {
+      el.createDiv({ cls: "mrd-muted", text: `${this.index.length} notes indexed. Begin typing to search.` });
+      return;
+    }
+    if (this.hits.length === 0) {
+      el.createDiv({ cls: "mrd-muted", text: "No matches in the knowledge base." });
+      return;
+    }
+    this.hits.forEach((hit, i) => {
+      const row = el.createDiv({ cls: "mrd-search-row" });
+      if (i === this.selected) row.addClass("is-selected");
+      row.createDiv({ cls: "mrd-search-title", text: hit.title });
+      if (hit.context && hit.context !== hit.title) row.createDiv({ cls: "mrd-search-context", text: hit.context });
+      row.addEventListener("click", () => this.open(hit.file));
+    });
+  }
+  onKey(e) {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      this.selected = Math.min(this.hits.length - 1, this.selected + 1);
+      this.renderResults();
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      this.selected = Math.max(0, this.selected - 1);
+      this.renderResults();
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      const hit = this.hits[this.selected];
+      if (hit) this.open(hit.file);
+    }
+  }
+  open(file) {
+    void this.ctx.app.workspace.getLeaf(false).openFile(file);
+  }
+};
+function normalizeFolder(path) {
+  const p = path.trim().replace(/^\/+/, "");
+  if (!p) return "";
+  return p.endsWith("/") ? p : p + "/";
+}
+
+// src/panels/places.ts
+var PlacesPanel = class extends BasePanel {
+  constructor() {
+    super(...arguments);
+    this.id = "places";
+    this.title = "Navigation";
+  }
+  renderBody() {
+    placard(this.el, "Navigation");
+    const grid = this.el.createDiv({ cls: "mrd-places" });
+    const places = this.ctx.settings().places;
+    if (places.length === 0) {
+      grid.createDiv({ cls: "mrd-muted", text: "No destinations configured. Add some in settings." });
+      return;
+    }
+    for (const place of places) {
+      if (place.type === "command") {
+        commandButton(grid, this.ctx.bridge, place.target, place.label, { cls: "mrd-place-btn" });
+      } else {
+        const btn = grid.createEl("button", { cls: "mrd-btn mrd-place-btn", text: place.label });
+        btn.addEventListener("click", () => {
+          void this.ctx.app.workspace.openLinkText(place.target, "", false);
+        });
+      }
+    }
+  }
+};
+
+// src/panels/registry.ts
+var PANEL_ORDER = [
+  "clock",
+  "meridian",
+  "todo",
+  "agenda",
+  "actions",
+  "qotd",
+  "journal",
+  "meals",
+  "arfid",
+  "spiral",
+  "crm",
+  "search",
+  "places"
+];
+var PANEL_TITLES = {
+  clock: "Chronometer",
+  meridian: "MERIDIAN",
+  todo: "Directives",
+  agenda: "Today's Agenda",
+  actions: "Quick Actions",
+  qotd: "Quote of the Day",
+  journal: "Daily Log",
+  meals: "Meals & Provisioning",
+  arfid: "Nourishment Log",
+  spiral: "Regulation Log",
+  crm: "Contacts",
+  search: "Knowledge Base",
+  places: "Navigation"
+};
+var FACTORIES = {
+  clock: () => new ClockPanel(),
+  meridian: () => new MeridianPanel(),
+  todo: () => new TodoPanel(),
+  agenda: () => new AgendaPanel(),
+  actions: () => new ActionsPanel(),
+  qotd: () => new QotdPanel(),
+  journal: () => new JournalPanel(),
+  meals: () => new MealsPanel(),
+  arfid: () => new ArfidPanel(),
+  spiral: () => new SpiralPanel(),
+  crm: () => new CrmPanel(),
+  search: () => new SearchPanel(),
+  places: () => new PlacesPanel()
+};
+function createPanels(order, enabled) {
+  const seen = /* @__PURE__ */ new Set();
+  const panels = [];
+  for (const id of order) {
+    if (seen.has(id)) continue;
+    seen.add(id);
+    if (enabled[id] === false) continue;
+    const factory = FACTORIES[id];
+    if (factory) panels.push(factory());
+  }
+  return panels;
+}
+
+// src/settings.ts
+var DEFAULT_SETTINGS = {
+  openOnStartup: false,
+  panelOrder: [...PANEL_ORDER],
+  enabledPanels: Object.fromEntries(PANEL_ORDER.map((id) => [id, true])),
+  meridianRotationMinutes: 5,
+  agendaRefreshMinutes: 30,
+  agendaUrls: [],
+  kbSearchPath: "Knowledge base/Notes/",
+  places: [
+    { label: "Central Hub", target: "Central Hub", type: "note" },
+    { label: "Contact Dashboard", target: "Contact Dashboard", type: "note" },
+    { label: "Logs Hub", target: "Logs Hub.base", type: "note" },
+    { label: "SDM", target: "SDM.base", type: "note" },
+    { label: "ARFID Dashboard", target: "arfid-tracker:open-dashboard", type: "command" },
+    { label: "Spiral Log", target: "spiral-shutdown-logger:open-dashboard", type: "command" },
+    { label: "Contacts", target: "simple-contact-manager:open-dashboard", type: "command" },
+    { label: "Recipe Index", target: "recipe-manager:recipe-index", type: "command" }
+  ],
+  completedTasksMarker: "",
+  completedTasksHeading: "Completed tasks",
+  crmLogMarker: "%% crm-log %%",
+  crmLogHeading: "Contacts reached"
+};
+function mergeSettings(loaded) {
+  var _a, _b, _c, _d;
+  const s = { ...DEFAULT_SETTINGS, ...loaded != null ? loaded : {} };
+  const order = ((_a = loaded == null ? void 0 : loaded.panelOrder) != null ? _a : []).filter((id) => PANEL_ORDER.includes(id));
+  for (const id of PANEL_ORDER) if (!order.includes(id)) order.push(id);
+  s.panelOrder = order;
+  s.enabledPanels = { ...DEFAULT_SETTINGS.enabledPanels, ...(_b = loaded == null ? void 0 : loaded.enabledPanels) != null ? _b : {} };
+  s.agendaUrls = ((_c = loaded == null ? void 0 : loaded.agendaUrls) != null ? _c : DEFAULT_SETTINGS.agendaUrls).map((c) => ({ ...c }));
+  s.places = ((_d = loaded == null ? void 0 : loaded.places) != null ? _d : DEFAULT_SETTINGS.places).map((p) => ({ ...p }));
+  return s;
+}
+var MeridianSettingTab = class extends import_obsidian12.PluginSettingTab {
+  constructor(app, plugin) {
+    super(app, plugin);
+    this.plugin = plugin;
+  }
+  async save() {
+    await this.plugin.saveData_();
+    this.plugin.refreshOpenViews();
+  }
+  display() {
+    const { containerEl } = this;
+    const s = this.plugin.settings;
+    containerEl.empty();
+    new import_obsidian12.Setting(containerEl).setName("General").setHeading();
+    new import_obsidian12.Setting(containerEl).setName("Open on startup").setDesc("Replace the empty new tab with the MERIDIAN dashboard when Obsidian starts.").addToggle(
+      (t) => t.setValue(s.openOnStartup).onChange(async (v) => {
+        s.openOnStartup = v;
+        await this.save();
+      })
+    );
+    new import_obsidian12.Setting(containerEl).setName("Panels").setDesc("Toggle panels on or off, and reorder them. Everything is visible by default; the layout stacks to one column on a phone and spreads to a grid on the desktop.").setHeading();
+    const list = containerEl.createDiv({ cls: "mrd-settings-panel-list" });
+    const renderList = () => {
+      list.empty();
+      s.panelOrder.forEach((id, index) => {
+        var _a;
+        const row = new import_obsidian12.Setting(list).setName((_a = PANEL_TITLES[id]) != null ? _a : id);
+        row.addExtraButton(
+          (b) => b.setIcon("arrow-up").setTooltip("Move up").setDisabled(index === 0).onClick(async () => {
+            [s.panelOrder[index - 1], s.panelOrder[index]] = [s.panelOrder[index], s.panelOrder[index - 1]];
+            await this.save();
+            renderList();
+          })
+        );
+        row.addExtraButton(
+          (b) => b.setIcon("arrow-down").setTooltip("Move down").setDisabled(index === s.panelOrder.length - 1).onClick(async () => {
+            [s.panelOrder[index + 1], s.panelOrder[index]] = [s.panelOrder[index], s.panelOrder[index + 1]];
+            await this.save();
+            renderList();
+          })
+        );
+        row.addToggle(
+          (t) => t.setValue(s.enabledPanels[id] !== false).onChange(async (v) => {
+            s.enabledPanels[id] = v;
+            await this.save();
+          })
+        );
+      });
+    };
+    renderList();
+    new import_obsidian12.Setting(containerEl).setName("MERIDIAN ambient line").setHeading();
+    new import_obsidian12.Setting(containerEl).setName("Rotation interval (minutes)").setDesc("How often the ambient line rotates. It also rotates on refresh.").addText(
+      (t) => t.setValue(String(s.meridianRotationMinutes)).onChange(async (v) => {
+        const n = Number(v);
+        if (Number.isFinite(n) && n > 0) {
+          s.meridianRotationMinutes = n;
+          await this.save();
+        }
+      })
+    );
+    new import_obsidian12.Setting(containerEl).setName("Today's agenda").setHeading();
+    new import_obsidian12.Setting(containerEl).setName("Refresh interval (minutes)").setDesc("How often calendars are re-fetched while the dashboard is open.").addText(
+      (t) => t.setValue(String(s.agendaRefreshMinutes)).onChange(async (v) => {
+        const n = Number(v);
+        if (Number.isFinite(n) && n > 0) {
+          s.agendaRefreshMinutes = n;
+          await this.save();
+        }
+      })
+    );
+    new import_obsidian12.Setting(containerEl).setName("Calendar share links").setDesc("Up to 10 public ICS (.ics) URLs, one per line, as `Label | https://\u2026`. Today only \u2014 no month view.").addTextArea((t) => {
+      t.setValue(s.agendaUrls.map((c) => `${c.label} | ${c.url}`).join("\n"));
+      t.inputEl.rows = 6;
+      t.onChange(async (v) => {
+        s.agendaUrls = v.split("\n").map((line) => line.trim()).filter(Boolean).slice(0, 10).map((line) => {
+          const bar = line.indexOf("|");
+          if (bar === -1) return { label: "Calendar", url: line };
+          return { label: line.slice(0, bar).trim() || "Calendar", url: line.slice(bar + 1).trim() };
+        });
+        await this.save();
+      });
+    });
+    new import_obsidian12.Setting(containerEl).setName("Knowledge base search").setHeading();
+    new import_obsidian12.Setting(containerEl).setName("Search folder").setDesc("Fuzzy search is scoped to this folder only.").addText(
+      (t) => t.setPlaceholder(DEFAULT_SETTINGS.kbSearchPath).setValue(s.kbSearchPath).onChange(async (v) => {
+        s.kbSearchPath = v.trim() || DEFAULT_SETTINGS.kbSearchPath;
+        await this.save();
+      })
+    );
+    new import_obsidian12.Setting(containerEl).setName("Places / navigation").setHeading();
+    new import_obsidian12.Setting(containerEl).setName("Destinations").setDesc(
+      "One per line as `Label | target`. A target is a note/base name (e.g. `Central Hub`, `Logs Hub.base`) or, prefixed with `cmd:`, a command id (e.g. `cmd:arfid-tracker:open-dashboard`)."
+    ).addTextArea((t) => {
+      t.setValue(
+        s.places.map((p) => `${p.label} | ${p.type === "command" ? "cmd:" + p.target : p.target}`).join("\n")
+      );
+      t.inputEl.rows = 8;
+      t.onChange(async (v) => {
+        s.places = v.split("\n").map((line) => line.trim()).filter(Boolean).map((line) => {
+          const bar = line.indexOf("|");
+          const label = bar === -1 ? line : line.slice(0, bar).trim();
+          let target = bar === -1 ? line : line.slice(bar + 1).trim();
+          const type = target.startsWith("cmd:") ? "command" : "note";
+          if (type === "command") target = target.slice(4).trim();
+          return { label, target, type };
+        });
+        await this.save();
+      });
+    });
+    new import_obsidian12.Setting(containerEl).setName("Daily note write targets").setHeading();
+    this.addText(containerEl, "Completed-tasks heading", "Completed to-dos are archived under this heading.", s.completedTasksHeading, (v) => s.completedTasksHeading = v || "Completed tasks");
+    this.addText(containerEl, "Completed-tasks marker", "Optional. If set, completed tasks go after this marker instead of the heading.", s.completedTasksMarker, (v) => s.completedTasksMarker = v, true);
+    this.addText(containerEl, "Contacts-reached marker", "Marker Simple Contact Manager writes its daily log under; used by the reconcile safety net.", s.crmLogMarker, (v) => s.crmLogMarker = v);
+    this.addText(containerEl, "Contacts-reached heading", "Fallback heading for the contacts-reached log.", s.crmLogHeading, (v) => s.crmLogHeading = v || "Contacts reached");
+  }
+  addText(el, name, desc, value, set, allowEmpty = false) {
+    new import_obsidian12.Setting(el).setName(name).setDesc(desc).addText(
+      (t) => t.setValue(value).onChange(async (v) => {
+        const trimmed = v.trim();
+        if (!trimmed && !allowEmpty) return;
+        set(trimmed);
+        await this.save();
+      })
+    );
+  }
+};
+
+// src/core/bridge.ts
+var import_obsidian13 = require("obsidian");
+var ARFID_ID = "arfid-tracker";
+var SPIRAL_ID = "spiral-shutdown-logger";
+var CRM_ID = "simple-contact-manager";
+var RECIPES_ID = "recipe-manager";
+var PRIORITY_RANK = { high: 0, medium: 1, low: 2, "": 3 };
+var Bridge = class {
+  constructor(app) {
+    this.app = app;
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  plugin(id) {
+    var _a, _b;
+    return (_b = (_a = this.app.plugins) == null ? void 0 : _a.plugins) == null ? void 0 : _b[id];
+  }
+  enabled(id) {
+    var _a, _b, _c;
+    return !!((_c = (_b = (_a = this.app.plugins) == null ? void 0 : _a.enabledPlugins) == null ? void 0 : _b.has) == null ? void 0 : _c.call(_b, id)) || !!this.plugin(id);
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  api(id) {
+    var _a;
+    const api = (_a = this.plugin(id)) == null ? void 0 : _a.api;
+    return api && typeof api.version === "number" ? api : null;
+  }
+  commandExists(fullId) {
+    var _a, _b;
+    const commands = (_b = (_a = this.app.commands) == null ? void 0 : _a.commands) != null ? _b : {};
+    return !!commands[fullId];
+  }
+  runCommand(fullId) {
+    var _a, _b;
+    (_b = (_a = this.app.commands) == null ? void 0 : _a.executeCommandById) == null ? void 0 : _b.call(_a, fullId);
+  }
+  // -------------------------------------------------------------- ARFID
+  arfidAvailable() {
+    return this.enabled(ARFID_ID);
+  }
+  async arfidToday(date = today()) {
+    var _a;
+    const api = this.api(ARFID_ID);
+    if (api == null ? void 0 : api.getEntriesForDate) {
+      try {
+        const entries = (_a = api.getEntriesForDate(date)) != null ? _a : [];
+        return entries.map((e) => {
+          var _a2, _b, _c;
+          return {
+            time: (_a2 = e.time) != null ? _a2 : "",
+            label: (_c = (_b = e.food) != null ? _b : e.label) != null ? _c : ""
+          };
+        });
+      } catch (e) {
+        console.error("MERIDIAN: arfid api read failed, falling back", e);
+      }
+    }
+    const raw = await readDailyNoteRaw(this.app, date);
+    return parseLogLines(readMarkerLogLines(raw, "%% arfid-log %%", "Miscellaneous notes"));
+  }
+  // ------------------------------------------------------------- Spiral
+  spiralAvailable() {
+    return this.enabled(SPIRAL_ID);
+  }
+  async spiralToday(date = today()) {
+    var _a;
+    const api = this.api(SPIRAL_ID);
+    if (api == null ? void 0 : api.getEntriesForDate) {
+      try {
+        const entries = (_a = api.getEntriesForDate(date)) != null ? _a : [];
+        return entries.map((e) => {
+          var _a2, _b, _c;
+          return {
+            time: (_a2 = e.time) != null ? _a2 : "",
+            label: (_c = (_b = e.label) != null ? _b : e.kind) != null ? _c : "entry"
+          };
+        });
+      } catch (e) {
+        console.error("MERIDIAN: spiral api read failed, falling back", e);
+      }
+    }
+    const raw = await readDailyNoteRaw(this.app, date);
+    return parseLogLines(readMarkerLogLines(raw, "%% spiral-log %%", "Spiral log"));
+  }
+  /** Cheap "did a spiral/shutdown happen today" — drives aftercare weighting (§7.3). */
+  async spiralOccurredToday(date = today()) {
+    const api = this.api(SPIRAL_ID);
+    if (api == null ? void 0 : api.hadEntryOn) {
+      try {
+        return !!api.hadEntryOn(date);
+      } catch (e) {
+        console.error("MERIDIAN: spiral api hadEntryOn failed, falling back", e);
+      }
+    }
+    const entries = await this.spiralToday(date);
+    return entries.length > 0;
+  }
+  // ---------------------------------------------------------------- CRM
+  crmAvailable() {
+    return this.enabled(CRM_ID);
+  }
+  crmContacts() {
+    var _a;
+    const api = this.api(CRM_ID);
+    if (api == null ? void 0 : api.getContactsSummary) {
+      try {
+        const rows = (_a = api.getContactsSummary()) != null ? _a : [];
+        return rows.map(normalizeCrmRow).sort(sortCrm);
+      } catch (e) {
+        console.error("MERIDIAN: crm api read failed, falling back", e);
+      }
+    }
+    return this.crmContactsFallback().sort(sortCrm);
+  }
+  crmContactsFallback() {
+    var _a, _b, _c, _d, _e, _f, _g;
+    const folder = ((_c = (_b = (_a = this.plugin(CRM_ID)) == null ? void 0 : _a.settings) == null ? void 0 : _b.contactsFolder) != null ? _c : "Contacts").trim();
+    const todayStr2 = today();
+    const rows = [];
+    for (const file of this.app.vault.getMarkdownFiles()) {
+      if (folder && !file.path.startsWith(folder + "/")) continue;
+      const cache = this.app.metadataCache.getFileCache(file);
+      const fm = cache == null ? void 0 : cache.frontmatter;
+      if (!fm) continue;
+      const tags = cache ? (_d = (0, import_obsidian13.getAllTags)(cache)) != null ? _d : [] : [];
+      const isContact = tags.includes("#contact") || fm.tags === "contact" || Array.isArray(fm.tags) && fm.tags.includes("contact");
+      if (!isContact || fm.is_template === true) continue;
+      const last = String((_e = fm.last_contacted) != null ? _e : "").slice(0, 10);
+      const next = String((_f = fm.next_followup) != null ? _f : "").slice(0, 10);
+      rows.push({
+        name: String((_g = fm.name) != null ? _g : file.basename),
+        path: file.path,
+        priority: normalizePriority(fm.priority),
+        daysSince: last ? (0, import_obsidian13.moment)(todayStr2).diff((0, import_obsidian13.moment)(last, "YYYY-MM-DD"), "days") : null,
+        nextFollowup: next,
+        overdue: !!next && next < todayStr2,
+        dueToday: !!next && next === todayStr2
+      });
+    }
+    return rows;
+  }
+  // ------------------------------------------------------------- Recipes
+  recipesAvailable() {
+    return this.enabled(RECIPES_ID);
+  }
+  recipeSetting(key, fallback) {
+    var _a, _b;
+    const v = (_b = (_a = this.plugin(RECIPES_ID)) == null ? void 0 : _a.settings) == null ? void 0 : _b[key];
+    return typeof v === "string" && v.trim() ? v.trim() : fallback;
+  }
+  async plannedMeals(date = today()) {
+    var _a, _b;
+    const api = this.api(RECIPES_ID);
+    if (api == null ? void 0 : api.getPlannedMeals) {
+      try {
+        const meals2 = (_a = api.getPlannedMeals(date)) != null ? _a : [];
+        return meals2.map((m) => {
+          var _a2, _b2, _c, _d, _e;
+          return {
+            name: (_b2 = (_a2 = m.name) != null ? _a2 : m.basename) != null ? _b2 : "",
+            link: (_e = (_d = (_c = m.link) != null ? _c : m.basename) != null ? _d : m.name) != null ? _e : ""
+          };
+        });
+      } catch (e) {
+        console.error("MERIDIAN: recipes api read failed, falling back", e);
+      }
+    }
+    const raw = await readDailyNoteRaw(this.app, date);
+    const heading = this.recipeSetting("mealHeading", "Meals");
+    const body = readHeadingSection(raw, heading);
+    const meals = [];
+    for (const line of body.split("\n")) {
+      const m = line.match(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/);
+      if (m) meals.push({ name: ((_b = m[2]) != null ? _b : m[1]).trim(), link: m[1].trim() });
+    }
+    return meals;
+  }
+  groceryListPath() {
+    let path = this.recipeSetting("groceryListPath", "Grocery List.md");
+    if (!path.toLowerCase().endsWith(".md")) path += ".md";
+    return path;
+  }
+  async groceryList() {
+    const path = this.groceryListPath();
+    const file = this.app.vault.getAbstractFileByPath(path);
+    if (!(file instanceof import_obsidian13.TFile)) return { path, items: [], exists: false };
+    const content = await this.app.vault.cachedRead(file);
+    const items = [];
+    content.split("\n").forEach((line, idx) => {
+      const m = line.match(/^\s*[-*]\s+\[([ xX])\]\s+(.*)$/);
+      if (m) {
+        items.push({
+          name: stripFormatting(m[2]),
+          checked: m[1].toLowerCase() === "x",
+          line: idx
+        });
+      }
+    });
+    return { path, items, exists: true };
+  }
+  /** Toggle a grocery checkbox inline, writing back to the grocery file (§7.10). */
+  async toggleGroceryItem(lineIndex) {
+    const path = this.groceryListPath();
+    const file = this.app.vault.getAbstractFileByPath(path);
+    if (!(file instanceof import_obsidian13.TFile)) return;
+    await this.app.vault.process(file, (content) => {
+      const lines = content.split("\n");
+      const line = lines[lineIndex];
+      if (!line) return content;
+      const m = line.match(/^(\s*[-*]\s+\[)([ xX])(\]\s+.*)$/);
+      if (!m) return content;
+      const next = m[2].toLowerCase() === "x" ? " " : "x";
+      lines[lineIndex] = `${m[1]}${next}${m[3]}`;
+      return lines.join("\n");
+    });
+  }
+  // ------------------------------------------------------- CRM reconcile
+  /** Safety-net reconcile (§7.9): scan contact notes for a `### <today>` block
+   * under `## Interaction Log` and return `- HH:MM [[Name|Name]] — <descriptor>`
+   * lines missing from today's note. The dashboard backfills them. */
+  async crmReconcileLines(date = today()) {
+    var _a, _b, _c, _d, _e;
+    const folder = ((_c = (_b = (_a = this.plugin(CRM_ID)) == null ? void 0 : _a.settings) == null ? void 0 : _b.contactsFolder) != null ? _c : "Contacts").trim();
+    const raw = await readDailyNoteRaw(this.app, date);
+    const existing = new Set(
+      readMarkerLogLines(raw, "%% crm-log %%", "Contacts reached").map((l) => l.replace(/^- \d{2}:\d{2}\s*/, "").trim())
+    );
+    const out = [];
+    for (const file of this.app.vault.getMarkdownFiles()) {
+      if (folder && !file.path.startsWith(folder + "/")) continue;
+      const cache = this.app.metadataCache.getFileCache(file);
+      if (!(cache == null ? void 0 : cache.frontmatter)) continue;
+      const tags = (_d = (0, import_obsidian13.getAllTags)(cache)) != null ? _d : [];
+      if (!tags.includes("#contact")) continue;
+      const name = String((_e = cache.frontmatter.name) != null ? _e : file.basename);
+      const content = await this.app.vault.cachedRead(file);
+      for (const descriptor of interactionsForDate(content, date)) {
+        const link = `[[${name}|${name}]]`;
+        const tail = `${link} \u2014 ${descriptor}`;
+        if (!existing.has(tail)) out.push(tail);
+      }
+    }
+    return out;
+  }
+};
+function today() {
+  return (0, import_obsidian13.moment)().format("YYYY-MM-DD");
+}
+function parseLogLines(lines) {
+  return lines.map((l) => {
+    const time = l.slice(2, 7);
+    const label = l.replace(/^- \d{2}:\d{2}\s*/, "").replace(/\[\[([^\]|]+)\|([^\]]+)\]\]/g, "$2").replace(/\[\[([^\]]+)\]\]/g, "$1").trim();
+    return { time, label };
+  });
+}
+function normalizeCrmRow(r) {
+  var _a, _b, _c, _d;
+  return {
+    name: (_a = r.name) != null ? _a : "",
+    path: (_b = r.path) != null ? _b : "",
+    priority: normalizePriority(r.priority),
+    daysSince: (_c = r.daysSince) != null ? _c : null,
+    nextFollowup: (_d = r.nextFollowup) != null ? _d : "",
+    overdue: !!r.overdue,
+    dueToday: !!r.dueToday
+  };
+}
+function normalizePriority(v) {
+  const s = String(v != null ? v : "").trim().toLowerCase();
+  return s === "high" || s === "medium" || s === "low" ? s : "";
+}
+function sortCrm(a, b) {
+  var _a, _b;
+  const bucket = (r) => r.overdue ? 0 : r.dueToday ? 1 : 2;
+  return bucket(a) - bucket(b) || PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority] || ((_a = b.daysSince) != null ? _a : -1) - ((_b = a.daysSince) != null ? _b : -1);
+}
+function stripFormatting(s) {
+  return s.replace(/\*\*/g, "").replace(/\*(?!\*)/g, "").replace(/\s+\*\([^)]*\)\s*$/, "").replace(/\s+—\s+to taste/i, " \u2014 to taste").trim();
+}
+function interactionsForDate(content, date) {
+  const lines = content.split("\n");
+  const logIdx = lines.findIndex((l) => /^##\s+Interaction Log\s*$/i.test(l));
+  if (logIdx === -1) return [];
+  const dateIdx = lines.findIndex((l, i) => i > logIdx && l.trim() === `### ${date}`);
+  if (dateIdx === -1) return [];
+  const out = [];
+  for (let i = dateIdx + 1; i < lines.length; i++) {
+    if (/^#{1,3}\s/.test(lines[i])) break;
+    const m = lines[i].match(/^-\s+(.*)$/);
+    if (m) {
+      const descriptor = m[1].trim();
+      if (descriptor && descriptor.toLowerCase() !== "contact created") out.push(descriptor);
+    }
+  }
+  return out;
+}
+
+// src/view.ts
+var import_obsidian14 = require("obsidian");
+var VIEW_TYPE_MERIDIAN = "meridian-dashboard";
+var MeridianView = class extends import_obsidian14.ItemView {
+  constructor(leaf, plugin) {
+    super(leaf);
+    this.plugin = plugin;
+    this.mounted = [];
+  }
+  getViewType() {
+    return VIEW_TYPE_MERIDIAN;
+  }
+  getDisplayText() {
+    return "MERIDIAN Dashboard";
+  }
+  getIcon() {
+    return "radar";
+  }
+  ctx() {
+    return {
+      app: this.app,
+      plugin: this.plugin,
+      bridge: this.plugin.bridge,
+      todos: this.plugin.todos,
+      runtime: this.plugin.runtime,
+      settings: () => this.plugin.settings,
+      requestRefresh: (reason = "manual") => void this.refreshPanels(reason),
+      markFoodFocus: () => {
+        this.plugin.markFoodFocus();
+        void this.refreshPanels("manual");
+      }
+    };
+  }
+  async onOpen() {
+    this.plugin.touchAccess();
+    await this.build();
+  }
+  async onClose() {
+    this.teardown();
+    this.contentEl.empty();
+  }
+  teardown() {
+    var _a, _b;
+    for (const m of this.mounted) {
+      try {
+        (_b = (_a = m.panel).unmount) == null ? void 0 : _b.call(_a);
+      } catch (e) {
+      }
+    }
+    this.mounted = [];
+  }
+  async build() {
+    this.teardown();
+    const root = this.contentEl;
+    root.empty();
+    root.addClass("mrd-root");
+    this.renderChrome(root);
+    this.grid = root.createDiv({ cls: "mrd-grid" });
+    const s = this.plugin.settings;
+    const panels = createPanels(s.panelOrder, s.enabledPanels);
+    const ctx = this.ctx();
+    for (const panel of panels) {
+      const host = this.grid.createDiv({ cls: "mrd-panel" });
+      host.dataset.panel = panel.id;
+      this.mounted.push({ panel, host });
+      await this.mountPanel(panel, host, ctx);
+    }
+  }
+  renderChrome(root) {
+    const header = root.createDiv({ cls: "mrd-topbar" });
+    const brand = header.createDiv({ cls: "mrd-brand" });
+    brand.appendChild(radarMark());
+    const label = brand.createDiv({ cls: "mrd-brand-text" });
+    label.createDiv({ cls: "mrd-brand-name", text: "MERIDIAN" });
+    label.createDiv({ cls: "mrd-brand-sub", text: "HALCYON SYSTEMS \xB7 STABILITY THROUGH OBSERVATION" });
+    const refresh = header.createEl("button", { cls: "mrd-icon-btn", attr: { "aria-label": "Refresh" } });
+    (0, import_obsidian14.setIcon)(refresh, "refresh-cw");
+    refresh.addEventListener("click", () => void this.refreshPanels("manual"));
+  }
+  async mountPanel(panel, host, ctx) {
+    host.empty();
+    const body = host.createDiv({ cls: "mrd-panel-body" });
+    try {
+      await panel.mount(body, ctx);
+    } catch (e) {
+      this.renderErrorCard(host, panel, e);
+    }
+  }
+  /** Calm, in-voice failure card — never glitch aesthetics, never a stack
+   * trace in the Operator's face (that goes to the console). (§4) */
+  renderErrorCard(host, panel, err) {
+    console.error(`MERIDIAN Dashboard: panel "${panel.id}" failed`, err);
+    host.empty();
+    host.addClass("mrd-panel-error");
+    const card = host.createDiv({ cls: "mrd-error-card" });
+    const head = card.createDiv({ cls: "mrd-placard mrd-placard-muted" });
+    head.createSpan({ cls: "mrd-placard-title", text: `${panel.title.toUpperCase()} \u2014 SUBSYSTEM UNAVAILABLE` });
+    card.createDiv({
+      cls: "mrd-error-note",
+      text: "This subsystem could not be brought online. The condition has been logged. The rest of the facility is unaffected."
+    });
+  }
+  async refreshPanels(reason) {
+    var _a, _b;
+    for (const m of this.mounted) {
+      try {
+        await ((_b = (_a = m.panel).refresh) == null ? void 0 : _b.call(_a, reason));
+      } catch (e) {
+        this.renderErrorCard(m.host, m.panel, e);
+      }
+    }
+  }
+};
+function radarMark() {
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("viewBox", "0 0 32 32");
+  svg.setAttribute("class", "mrd-radar-mark");
+  svg.setAttribute("width", "28");
+  svg.setAttribute("height", "28");
+  const frame = document.createElementNS(ns, "rect");
+  frame.setAttribute("x", "1.5");
+  frame.setAttribute("y", "1.5");
+  frame.setAttribute("width", "29");
+  frame.setAttribute("height", "29");
+  frame.setAttribute("rx", "7");
+  frame.setAttribute("class", "mrd-radar-frame");
+  svg.appendChild(frame);
+  for (const r of [4, 8, 12]) {
+    const c = document.createElementNS(ns, "circle");
+    c.setAttribute("cx", "16");
+    c.setAttribute("cy", "16");
+    c.setAttribute("r", String(r));
+    c.setAttribute("class", "mrd-radar-ring");
+    svg.appendChild(c);
+  }
+  const dot = document.createElementNS(ns, "circle");
+  dot.setAttribute("cx", "22");
+  dot.setAttribute("cy", "11");
+  dot.setAttribute("r", "2.2");
+  dot.setAttribute("class", "mrd-radar-dot");
+  svg.appendChild(dot);
+  return svg;
+}
+
+// src/main.ts
+var MeridianDashPlugin = class extends import_obsidian15.Plugin {
+  constructor() {
+    super(...arguments);
+    this.settings = DEFAULT_SETTINGS;
+    this.runtime = {
+      sessionStart: Date.now(),
+      previousAccess: Date.now(),
+      recentLines: [],
+      foodFocusUntil: 0
+    };
+    this.refreshTimer = null;
+  }
+  async onload() {
+    await this.load_();
+    this.bridge = new Bridge(this.app);
+    this.todos = new TodoStore(
+      this.app,
+      () => this.data.todos,
+      (items) => {
+        this.data.todos = items;
+      },
+      () => this.saveData_(),
+      () => ({
+        marker: this.settings.completedTasksMarker,
+        heading: this.settings.completedTasksHeading
+      })
+    );
+    this.registerView(VIEW_TYPE_MERIDIAN, (leaf) => new MeridianView(leaf, this));
+    this.addRibbonIcon("radar", "Open MERIDIAN dashboard", () => void this.openDashboard());
+    this.addCommand({
+      id: "open-dashboard",
+      name: "Open dashboard",
+      callback: () => void this.openDashboard()
+    });
+    this.addSettingTab(new MeridianSettingTab(this.app, this));
+    this.registerEvent(this.app.metadataCache.on("changed", () => this.scheduleRefresh()));
+    this.registerEvent(this.app.vault.on("modify", () => this.scheduleRefresh()));
+    this.registerEvent(this.app.vault.on("delete", () => this.scheduleRefresh()));
+    this.registerEvent(this.app.vault.on("rename", () => this.scheduleRefresh()));
+    if (this.settings.openOnStartup) {
+      this.app.workspace.onLayoutReady(() => void this.openDashboard(false));
+    }
+  }
+  onunload() {
+    if (this.refreshTimer !== null) window.clearTimeout(this.refreshTimer);
+  }
+  // ------------------------------------------------------------- data
+  async load_() {
+    var _a, _b, _c, _d, _e;
+    const raw = await this.loadData();
+    this.settings = mergeSettings(raw == null ? void 0 : raw.settings);
+    this.data = {
+      settings: this.settings,
+      todos: (_a = raw == null ? void 0 : raw.todos) != null ? _a : [],
+      lastAccess: (_b = raw == null ? void 0 : raw.lastAccess) != null ? _b : Date.now(),
+      seeded: (_c = raw == null ? void 0 : raw.seeded) != null ? _c : false,
+      agendaCache: (_d = raw == null ? void 0 : raw.agendaCache) != null ? _d : {},
+      milestoneShownDate: (_e = raw == null ? void 0 : raw.milestoneShownDate) != null ? _e : ""
+    };
+    if (!this.data.seeded && this.data.todos.length === 0) {
+      this.data.todos = seedTodos();
+      this.data.seeded = true;
+    }
+    this.runtime.previousAccess = this.data.lastAccess;
+    await this.saveData_();
+  }
+  async saveData_() {
+    this.data.settings = this.settings;
+    await this.saveData(this.data);
+  }
+  // Accessors panels use for the persisted, non-settings blobs.
+  get agendaCache() {
+    return this.data.agendaCache;
+  }
+  get milestoneShownDate() {
+    return this.data.milestoneShownDate;
+  }
+  set milestoneShownDate(date) {
+    this.data.milestoneShownDate = date;
+  }
+  /** Record this view-open as the latest access, returning the prior value. */
+  touchAccess() {
+    const prior = this.data.lastAccess;
+    this.data.lastAccess = Date.now();
+    this.runtime.previousAccess = prior;
+    this.runtime.sessionStart = Date.now();
+    void this.saveData_();
+    return prior;
+  }
+  markFoodFocus() {
+    this.runtime.foodFocusUntil = Date.now() + 4 * 60 * 1e3;
+  }
+  // ------------------------------------------------------------- view
+  async openDashboard(reveal = true) {
+    const existing = this.app.workspace.getLeavesOfType(VIEW_TYPE_MERIDIAN);
+    let leaf;
+    if (existing.length > 0) {
+      leaf = existing[0];
+    } else {
+      leaf = reveal ? this.app.workspace.getLeaf(true) : this.app.workspace.getLeaf(false);
+      await leaf.setViewState({ type: VIEW_TYPE_MERIDIAN, active: reveal });
+    }
+    if (reveal) this.app.workspace.revealLeaf(leaf);
+  }
+  refreshOpenViews(reason = "manual") {
+    for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_MERIDIAN)) {
+      const view = leaf.view;
+      if (view instanceof MeridianView) void view.refreshPanels(reason);
+    }
+  }
+  scheduleRefresh() {
+    if (this.refreshTimer !== null) window.clearTimeout(this.refreshTimer);
+    this.refreshTimer = window.setTimeout(() => {
+      this.refreshTimer = null;
+      this.refreshOpenViews("vault");
+    }, 300);
+  }
+};
