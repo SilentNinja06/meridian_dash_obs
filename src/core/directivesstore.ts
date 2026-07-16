@@ -2,23 +2,27 @@ import { App, TFile, TFolder, normalizePath } from "obsidian";
 import { TodoItem } from "./todostore";
 
 /**
- * Persistence for the Directives list as a **vault file** rather than plugin
- * `data.json`.
+ * Persistence for the Directives list as a **Markdown vault file**.
  *
- * Why: the to-do list is the one piece of dashboard state the Operator edits on
- * both the phone and the desktop, so it has to sync. Obsidian Sync is built to
- * propagate *vault files*; it treats a plugin's `data.json` as configuration
- * that only syncs when "installed community plugins" is enabled, with coarse
- * last-write-wins and no per-item merge — which is why the checklists weren't
- * crossing devices. A plain JSON file in the vault syncs like any note, and we
- * reload it live when the other device's copy lands.
+ * Why Markdown specifically: the to-do list is the one piece of dashboard state
+ * the Operator edits on both the phone and the desktop, so it must sync.
+ * Obsidian Sync always syncs Markdown; a plugin's `data.json` only syncs with
+ * "installed community plugins" enabled, and a plain `.json` vault file only
+ * syncs with "Sync all other file types" enabled (off by default) — which is
+ * why the checklists still weren't crossing devices. Storing the list as JSON
+ * inside a `.md` file removes that dependency entirely. We reload it live when
+ * the other device's copy lands.
  */
 interface DirectivesFile {
 	version: number;
 	todos: TodoItem[];
 }
 
-const DEFAULT_PATH = "MERIDIAN/Directives.json";
+const DEFAULT_PATH = "MERIDIAN/Directives.md";
+
+const HEADER =
+	"%% MERIDIAN Dashboard — persistent directives. Managed automatically; " +
+	"edit these in the dashboard, not here. %%";
 
 export class DirectivesStore {
 	private items: TodoItem[] = [];
@@ -36,33 +40,55 @@ export class DirectivesStore {
 		this.items = items;
 	}
 
+	/** The Markdown file the directives live in. Any configured extension is
+	 * coerced to `.md` so the file always syncs. */
 	path(): string {
-		return normalizePath(this.getPath() || DEFAULT_PATH);
+		const raw = (this.getPath() || DEFAULT_PATH).trim();
+		return normalizePath(raw.replace(/\.[^./]+$/, "") + ".md");
+	}
+
+	/** The pre-1.5.6 `.json` location, for one-time migration. */
+	legacyJsonPath(): string {
+		return this.path().replace(/\.md$/i, ".json");
 	}
 
 	isDirectivesPath(path: string): boolean {
 		return normalizePath(path) === this.path();
 	}
 
-	/** Load from the vault file. Returns true if the file existed. */
+	/** Load from the Markdown file. Returns true if the file existed. */
 	async load(): Promise<boolean> {
 		const file = this.app.vault.getAbstractFileByPath(this.path());
 		if (!(file instanceof TFile)) return false;
 		try {
 			const raw = await this.app.vault.read(file);
 			this.lastSerialized = raw;
-			const parsed = JSON.parse(raw) as DirectivesFile;
-			this.items = Array.isArray(parsed?.todos) ? parsed.todos : [];
+			this.items = parseTodos(raw);
 		} catch (e) {
 			console.error("MERIDIAN: could not read the directives file", e);
 		}
 		return true;
 	}
 
-	/** Write the current list to the vault file (creating it and its folder if
+	/** Migrate from the old `.json` file if it exists. Returns true if migrated. */
+	async loadLegacyJson(): Promise<boolean> {
+		const file = this.app.vault.getAbstractFileByPath(this.legacyJsonPath());
+		if (!(file instanceof TFile)) return false;
+		try {
+			const raw = await this.app.vault.read(file);
+			this.items = parseTodos(raw);
+			this.lastSerialized = ""; // force a write to the new .md on next save
+			return true;
+		} catch (e) {
+			console.error("MERIDIAN: could not read the legacy directives file", e);
+			return false;
+		}
+	}
+
+	/** Write the current list to the Markdown file (creating it and its folder if
 	 * needed). No-op when the content is unchanged. */
 	async save(): Promise<void> {
-		const body = JSON.stringify({ version: 1, todos: this.items } as DirectivesFile, null, 2) + "\n";
+		const body = buildMarkdown(this.items);
 		if (body === this.lastSerialized) return;
 		this.lastSerialized = body;
 		const path = this.path();
@@ -90,5 +116,24 @@ export class DirectivesStore {
 		if (!dir) return;
 		if (this.app.vault.getAbstractFileByPath(dir) instanceof TFolder) return;
 		await this.app.vault.createFolder(dir).catch(() => {});
+	}
+}
+
+/** JSON payload wrapped in a fenced block inside a Markdown file. */
+function buildMarkdown(items: TodoItem[]): string {
+	const json = JSON.stringify({ version: 1, todos: items } as DirectivesFile, null, 2);
+	return `${HEADER}\n\n\`\`\`json\n${json}\n\`\`\`\n`;
+}
+
+/** Extract the todo list from a directives file. Tolerates a fenced ```json
+ * block (current format) and a raw-JSON body (legacy `.json`). */
+function parseTodos(raw: string): TodoItem[] {
+	const fenced = raw.match(/```json\s*([\s\S]*?)```/);
+	const candidate = fenced ? fenced[1] : raw;
+	try {
+		const parsed = JSON.parse(candidate) as DirectivesFile;
+		return Array.isArray(parsed?.todos) ? parsed.todos : [];
+	} catch {
+		return [];
 	}
 }

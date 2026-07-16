@@ -79,7 +79,7 @@ export const DEFAULT_SETTINGS: MeridianSettings = {
 	secondBrainCategoriesSubfolder: "Categories",
 	secondBrainArchiveSubfolder: "Archive",
 	secondBrainListHeading: "Notes",
-	directivesPath: "MERIDIAN/Directives.json",
+	directivesPath: "MERIDIAN/Directives.md",
 	places: [
 		{ label: "Central Hub", target: "Central Hub", type: "note" },
 		{ label: "Contact Dashboard", target: "Contact Dashboard", type: "note" },
@@ -304,9 +304,9 @@ export class MeridianSettingTab extends PluginSettingTab {
 		this.addText(
 			containerEl,
 			"Directives file",
-			"Vault file (JSON) the persistent to-do list is stored in. Kept in the vault — not plugin data — so Obsidian Sync propagates it across devices. Change only if you want it somewhere else.",
+			"Markdown vault file the persistent to-do list is stored in. Markdown always syncs via Obsidian Sync, so the list crosses devices. Any extension you enter is coerced to .md.",
 			s.directivesPath,
-			(v) => (s.directivesPath = v || "MERIDIAN/Directives.json")
+			(v) => (s.directivesPath = v || "MERIDIAN/Directives.md")
 		);
 
 		// -------- daily-note write targets --------
