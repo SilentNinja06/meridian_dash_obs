@@ -1855,7 +1855,7 @@ var FIELDS = [
   { key: "musings", label: "Musings / random thoughts", spec: headingField("Musings") },
   { key: "log-primary", label: "Daily log \xB7 Primary", spec: labelField("Primary", [SUPPLEMENTAL_STOP, SPIRAL_MARKER]) },
   { key: "log-supplemental", label: "Daily log \xB7 Supplemental", spec: labelField("Supplemental", [SPIRAL_MARKER]) },
-  { key: "reconsider", label: "Reconsider tomorrow", spec: headingField("Reconsider tomorrow") }
+  { key: "reconsider", label: "Reconsider tomorrow", spec: headingField("Reconsider tomorrow"), stripPlaceholder: true }
 ];
 var JournalPanel = class extends BasePanel {
   constructor() {
@@ -1899,7 +1899,8 @@ var JournalPanel = class extends BasePanel {
     const block = parent.createDiv({ cls: "mrd-journal-field" });
     block.createDiv({ cls: "mrd-journal-label", text: field.label });
     const ta = block.createEl("textarea", { cls: "mrd-journal-input" });
-    ta.value = await readDailyField(this.ctx.app, field.spec);
+    const loaded = await readDailyField(this.ctx.app, field.spec);
+    ta.value = field.stripPlaceholder ? tidy(loaded) : loaded;
     autosize(ta);
     let timer = null;
     const save = () => {

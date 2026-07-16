@@ -32,4 +32,4 @@ await dv.view("scripts/qotd");
 %% crm-log %%
 
 # Reconsider tomorrow
-- [ ]
+
