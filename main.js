@@ -2747,7 +2747,8 @@ var Bridge = class {
     const api = this.api(RECIPES_ID);
     if (api == null ? void 0 : api.getPlannedMeals) {
       try {
-        const meals2 = (_a = api.getPlannedMeals(date)) != null ? _a : [];
+        const res = api.getPlannedMeals(date);
+        const meals2 = (_a = res && typeof res.then === "function" ? await res : res) != null ? _a : [];
         return meals2.map((m) => {
           var _a2, _b2, _c, _d, _e;
           return {
