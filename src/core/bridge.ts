@@ -147,6 +147,21 @@ export class Bridge {
 		return this.enabled(CRM_ID);
 	}
 
+	/** Log an interaction for a specific contact without a re-pick. Uses the
+	 * plugin's `logInteraction` API (v2+); falls back to the generic command
+	 * (which opens the contact picker) on older versions. */
+	crmLogInteraction(pathOrName: string): void {
+		const api = this.api(CRM_ID);
+		if (api?.logInteraction && api.version >= 2) {
+			try {
+				if (api.logInteraction(pathOrName)) return;
+			} catch (e) {
+				console.error("MERIDIAN: crm api logInteraction failed, falling back", e);
+			}
+		}
+		this.runCommand("simple-contact-manager:log-interaction");
+	}
+
 	crmContacts(): CrmRow[] {
 		const api = this.api(CRM_ID);
 		if (api?.getContactsSummary) {

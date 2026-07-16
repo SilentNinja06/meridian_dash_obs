@@ -608,6 +608,27 @@
 
 /* -------------------------------------------------------------- journal */
 
+.mrd-carry {
+	border-left: 2px solid var(--mrd-teal);
+	background: #17150f;
+	border-radius: 0 6px 6px 0;
+	padding: 8px 10px;
+	margin-bottom: 10px;
+}
+.mrd-carry-label {
+	font-family: var(--mrd-font-mono);
+	font-size: 0.64rem;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	color: var(--mrd-teal-soft);
+	margin-bottom: 4px;
+}
+.mrd-carry-body {
+	font-size: 0.88rem;
+	color: var(--mrd-bone-dim);
+	white-space: pre-wrap;
+}
+
 .mrd-journal {
 	display: flex;
 	flex-direction: column;
@@ -843,6 +864,84 @@
 .mrd-place-btn {
 	justify-content: flex-start;
 	text-align: left;
+}
+
+/* --------------------------------------------------------- second brain */
+
+.mrd-sb-results {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	max-height: 260px;
+	overflow-y: auto;
+}
+.mrd-sb-row,
+.mrd-sb-member {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 5px 6px;
+	border-radius: 5px;
+	border-bottom: 1px dotted var(--mrd-line);
+}
+.mrd-sb-row:hover {
+	background: #201d15;
+}
+.mrd-sb-link {
+	flex: 1;
+	min-width: 0;
+	color: var(--mrd-bone);
+	cursor: pointer;
+	text-decoration: none;
+	font-size: 0.88rem;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.mrd-sb-link:hover {
+	color: var(--mrd-amber-soft);
+	text-decoration: underline;
+}
+.mrd-sb-icon {
+	flex: none;
+	min-width: 32px;
+	min-height: 32px;
+	font-size: 0.85rem;
+}
+.mrd-sb-cats {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	margin-top: 6px;
+}
+.mrd-sb-cat > summary {
+	cursor: pointer;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 6px 4px;
+	list-style: none;
+}
+.mrd-sb-cat-name {
+	font-size: 0.88rem;
+	color: var(--mrd-bone);
+	flex: 1;
+}
+.mrd-sb-cat-body {
+	padding-left: 10px;
+	border-left: 2px solid var(--mrd-line);
+	margin: 2px 0 6px 6px;
+}
+.mrd-sb-archived {
+	margin-top: 8px;
+}
+.mrd-sb-archived > summary {
+	cursor: pointer;
+	font-family: var(--mrd-font-mono);
+	font-size: 0.7rem;
+	letter-spacing: 0.08em;
+	color: var(--mrd-bone-faint);
+	padding: 4px 0;
 }
 
 /* --------------------------------------------------------------- error */
