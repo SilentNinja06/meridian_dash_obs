@@ -119,6 +119,12 @@ export default class MeridianDashPlugin extends Plugin {
 	private async load_(): Promise<void> {
 		const raw = (await this.loadData()) as Partial<MeridianData> | null;
 		this.settings = mergeSettings(raw?.settings);
+		// Directives moved from a `.json` vault file to `.md` (Obsidian Sync only
+		// syncs `.json` with an opt-in setting; Markdown always syncs). Coerce any
+		// saved `.json` path so the setting UI and file match.
+		if (/\.json$/i.test(this.settings.directivesPath)) {
+			this.settings.directivesPath = this.settings.directivesPath.replace(/\.json$/i, ".md");
+		}
 		this.data = {
 			settings: this.settings,
 			// Legacy home of the to-do list; kept only for one-time migration to the
@@ -141,9 +147,15 @@ export default class MeridianDashPlugin extends Plugin {
 			this.data.seeded = true;
 			return;
 		}
-		// No vault file yet: migrate legacy plugin-data todos, else seed.
-		const legacy = this.data.todos ?? [];
-		this.directives.setItems(legacy.length > 0 || this.data.seeded ? legacy : seedTodos());
+		// No Markdown file yet. Migrate, in order of preference:
+		//   1. the pre-1.5.6 `.json` vault file (existing users' real list),
+		//   2. the legacy plugin-data todos,
+		//   3. the seed defaults on a truly fresh install.
+		const fromJson = await this.directives.loadLegacyJson();
+		if (!fromJson) {
+			const legacy = this.data.todos ?? [];
+			this.directives.setItems(legacy.length > 0 || this.data.seeded ? legacy : seedTodos());
+		}
 		this.data.seeded = true;
 		this.data.todos = [];
 		await this.directives.save();

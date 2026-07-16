@@ -2866,7 +2866,7 @@ var DEFAULT_SETTINGS = {
   secondBrainCategoriesSubfolder: "Categories",
   secondBrainArchiveSubfolder: "Archive",
   secondBrainListHeading: "Notes",
-  directivesPath: "MERIDIAN/Directives.json",
+  directivesPath: "MERIDIAN/Directives.md",
   places: [
     { label: "Central Hub", target: "Central Hub", type: "note" },
     { label: "Contact Dashboard", target: "Contact Dashboard", type: "note" },
@@ -3026,9 +3026,9 @@ var MeridianSettingTab = class extends import_obsidian15.PluginSettingTab {
     this.addText(
       containerEl,
       "Directives file",
-      "Vault file (JSON) the persistent to-do list is stored in. Kept in the vault \u2014 not plugin data \u2014 so Obsidian Sync propagates it across devices. Change only if you want it somewhere else.",
+      "Markdown vault file the persistent to-do list is stored in. Markdown always syncs via Obsidian Sync, so the list crosses devices. Any extension you enter is coerced to .md.",
       s.directivesPath,
-      (v) => s.directivesPath = v || "MERIDIAN/Directives.json"
+      (v) => s.directivesPath = v || "MERIDIAN/Directives.md"
     );
     new import_obsidian15.Setting(containerEl).setName("Daily note write targets").setHeading();
     this.addText(containerEl, "Completed-tasks heading", "Completed to-dos are archived under this heading.", s.completedTasksHeading, (v) => s.completedTasksHeading = v || "Completed tasks");
@@ -3421,7 +3421,8 @@ function interactionsForDate(content, date) {
 
 // src/core/directivesstore.ts
 var import_obsidian17 = require("obsidian");
-var DEFAULT_PATH = "MERIDIAN/Directives.json";
+var DEFAULT_PATH = "MERIDIAN/Directives.md";
+var HEADER = "%% MERIDIAN Dashboard \u2014 persistent directives. Managed automatically; edit these in the dashboard, not here. %%";
 var DirectivesStore = class {
   constructor(app, getPath) {
     this.app = app;
@@ -3437,30 +3438,50 @@ var DirectivesStore = class {
   setItems(items) {
     this.items = items;
   }
+  /** The Markdown file the directives live in. Any configured extension is
+   * coerced to `.md` so the file always syncs. */
   path() {
-    return (0, import_obsidian17.normalizePath)(this.getPath() || DEFAULT_PATH);
+    const raw = (this.getPath() || DEFAULT_PATH).trim();
+    return (0, import_obsidian17.normalizePath)(raw.replace(/\.[^./]+$/, "") + ".md");
+  }
+  /** The pre-1.5.6 `.json` location, for one-time migration. */
+  legacyJsonPath() {
+    return this.path().replace(/\.md$/i, ".json");
   }
   isDirectivesPath(path) {
     return (0, import_obsidian17.normalizePath)(path) === this.path();
   }
-  /** Load from the vault file. Returns true if the file existed. */
+  /** Load from the Markdown file. Returns true if the file existed. */
   async load() {
     const file = this.app.vault.getAbstractFileByPath(this.path());
     if (!(file instanceof import_obsidian17.TFile)) return false;
     try {
       const raw = await this.app.vault.read(file);
       this.lastSerialized = raw;
-      const parsed = JSON.parse(raw);
-      this.items = Array.isArray(parsed == null ? void 0 : parsed.todos) ? parsed.todos : [];
+      this.items = parseTodos(raw);
     } catch (e) {
       console.error("MERIDIAN: could not read the directives file", e);
     }
     return true;
   }
-  /** Write the current list to the vault file (creating it and its folder if
+  /** Migrate from the old `.json` file if it exists. Returns true if migrated. */
+  async loadLegacyJson() {
+    const file = this.app.vault.getAbstractFileByPath(this.legacyJsonPath());
+    if (!(file instanceof import_obsidian17.TFile)) return false;
+    try {
+      const raw = await this.app.vault.read(file);
+      this.items = parseTodos(raw);
+      this.lastSerialized = "";
+      return true;
+    } catch (e) {
+      console.error("MERIDIAN: could not read the legacy directives file", e);
+      return false;
+    }
+  }
+  /** Write the current list to the Markdown file (creating it and its folder if
    * needed). No-op when the content is unchanged. */
   async save() {
-    const body = JSON.stringify({ version: 1, todos: this.items }, null, 2) + "\n";
+    const body = buildMarkdown(this.items);
     if (body === this.lastSerialized) return;
     this.lastSerialized = body;
     const path = this.path();
@@ -3489,6 +3510,25 @@ var DirectivesStore = class {
     });
   }
 };
+function buildMarkdown(items) {
+  const json = JSON.stringify({ version: 1, todos: items }, null, 2);
+  return `${HEADER}
+
+\`\`\`json
+${json}
+\`\`\`
+`;
+}
+function parseTodos(raw) {
+  const fenced = raw.match(/```json\s*([\s\S]*?)```/);
+  const candidate = fenced ? fenced[1] : raw;
+  try {
+    const parsed = JSON.parse(candidate);
+    return Array.isArray(parsed == null ? void 0 : parsed.todos) ? parsed.todos : [];
+  } catch (e) {
+    return [];
+  }
+}
 
 // src/core/library.ts
 var import_obsidian18 = require("obsidian");
@@ -3958,6 +3998,9 @@ var MeridianDashPlugin = class extends import_obsidian20.Plugin {
     var _a, _b, _c, _d, _e;
     const raw = await this.loadData();
     this.settings = mergeSettings(raw == null ? void 0 : raw.settings);
+    if (/\.json$/i.test(this.settings.directivesPath)) {
+      this.settings.directivesPath = this.settings.directivesPath.replace(/\.json$/i, ".md");
+    }
     this.data = {
       settings: this.settings,
       // Legacy home of the to-do list; kept only for one-time migration to the
@@ -3980,8 +4023,11 @@ var MeridianDashPlugin = class extends import_obsidian20.Plugin {
       this.data.seeded = true;
       return;
     }
-    const legacy = (_a = this.data.todos) != null ? _a : [];
-    this.directives.setItems(legacy.length > 0 || this.data.seeded ? legacy : seedTodos());
+    const fromJson = await this.directives.loadLegacyJson();
+    if (!fromJson) {
+      const legacy = (_a = this.data.todos) != null ? _a : [];
+      this.directives.setItems(legacy.length > 0 || this.data.seeded ? legacy : seedTodos());
+    }
     this.data.seeded = true;
     this.data.todos = [];
     await this.directives.save();
