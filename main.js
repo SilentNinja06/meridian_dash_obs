@@ -3880,7 +3880,7 @@ var MeridianDashPlugin = class extends import_obsidian20.Plugin {
     this.refreshTimer = null;
   }
   async onload() {
-    await this.load_();
+    this.registerView(VIEW_TYPE_MERIDIAN, (leaf) => new MeridianView(leaf, this));
     this.bridge = new Bridge(this.app);
     this.secondBrain = new LibraryStore(this.app, () => ({
       root: this.settings.secondBrainPath,
@@ -3896,7 +3896,6 @@ var MeridianDashPlugin = class extends import_obsidian20.Plugin {
       listHeading: this.settings.kbListHeading
     }));
     this.directives = new DirectivesStore(this.app, () => this.settings.directivesPath);
-    await this.loadDirectives();
     this.todos = new TodoStore(
       this.app,
       () => this.directives.getItems(),
@@ -3907,7 +3906,7 @@ var MeridianDashPlugin = class extends import_obsidian20.Plugin {
         heading: this.settings.completedTasksHeading
       })
     );
-    this.registerView(VIEW_TYPE_MERIDIAN, (leaf) => new MeridianView(leaf, this));
+    await this.load_();
     this.addRibbonIcon("radar", "Open MERIDIAN dashboard", () => void this.openDashboard());
     this.addCommand({
       id: "open-dashboard",
@@ -3920,9 +3919,10 @@ var MeridianDashPlugin = class extends import_obsidian20.Plugin {
     this.registerEvent(this.app.vault.on("create", (file) => this.onVaultChange(file.path)));
     this.registerEvent(this.app.vault.on("delete", () => this.scheduleRefresh()));
     this.registerEvent(this.app.vault.on("rename", () => this.scheduleRefresh()));
-    if (this.settings.openOnStartup) {
-      this.app.workspace.onLayoutReady(() => void this.openDashboard(false));
-    }
+    this.app.workspace.onLayoutReady(() => {
+      void this.loadDirectives().then(() => this.refreshOpenViews("vault"));
+      if (this.settings.openOnStartup) void this.openDashboard(false);
+    });
   }
   onunload() {
     if (this.refreshTimer !== null) window.clearTimeout(this.refreshTimer);

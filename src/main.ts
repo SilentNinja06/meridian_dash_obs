@@ -31,8 +31,15 @@ export default class MeridianDashPlugin extends Plugin {
 	private refreshTimer: number | null = null;
 
 	async onload(): Promise<void> {
-		await this.load_();
+		// Register the view synchronously, *before any await*, so a dashboard leaf
+		// saved in the workspace can be deserialized on startup. If this ran after
+		// an await (or after vault work that can reject early in startup), a cold
+		// start would leave the view type unregistered and the restored leaf
+		// broken until the plugin is re-enabled.
+		this.registerView(VIEW_TYPE_MERIDIAN, (leaf) => new MeridianView(leaf, this));
 
+		// Stores read settings lazily via closures, so they can be constructed
+		// before settings finish loading — a restored view always finds them ready.
 		this.bridge = new Bridge(this.app);
 		this.secondBrain = new LibraryStore(this.app, () => ({
 			root: this.settings.secondBrainPath,
@@ -48,7 +55,6 @@ export default class MeridianDashPlugin extends Plugin {
 			listHeading: this.settings.kbListHeading,
 		}));
 		this.directives = new DirectivesStore(this.app, () => this.settings.directivesPath);
-		await this.loadDirectives();
 		this.todos = new TodoStore(
 			this.app,
 			() => this.directives.getItems(),
@@ -60,16 +66,15 @@ export default class MeridianDashPlugin extends Plugin {
 			})
 		);
 
-		this.registerView(VIEW_TYPE_MERIDIAN, (leaf) => new MeridianView(leaf, this));
+		// Plugin data only (no vault access) — safe during onload.
+		await this.load_();
 
 		this.addRibbonIcon("radar", "Open MERIDIAN dashboard", () => void this.openDashboard());
-
 		this.addCommand({
 			id: "open-dashboard",
 			name: "Open dashboard",
 			callback: () => void this.openDashboard(),
 		});
-
 		this.addSettingTab(new MeridianSettingTab(this.app, this));
 
 		// Refresh bus source: vault/metadata changes, debounced ~300ms (§4).
@@ -79,9 +84,12 @@ export default class MeridianDashPlugin extends Plugin {
 		this.registerEvent(this.app.vault.on("delete", () => this.scheduleRefresh()));
 		this.registerEvent(this.app.vault.on("rename", () => this.scheduleRefresh()));
 
-		if (this.settings.openOnStartup) {
-			this.app.workspace.onLayoutReady(() => void this.openDashboard(false));
-		}
+		// Everything that reads or writes the vault (loading/creating the
+		// directives file) or touches the workspace waits until it is ready.
+		this.app.workspace.onLayoutReady(() => {
+			void this.loadDirectives().then(() => this.refreshOpenViews("vault"));
+			if (this.settings.openOnStartup) void this.openDashboard(false);
+		});
 	}
 
 	onunload(): void {
