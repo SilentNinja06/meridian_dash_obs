@@ -24,6 +24,13 @@ export interface MeridianSettings {
 	agendaRefreshMinutes: number;
 	agendaUrls: CalendarLink[];
 	kbSearchPath: string;
+	/** Knowledge Base (information library) — root + subfolders + category list
+	 * heading, for category management on the KB card. */
+	kbRootPath: string;
+	kbNotesSubfolder: string;
+	kbCategoriesSubfolder: string;
+	kbArchiveSubfolder: string;
+	kbListHeading: string;
 	places: PlaceLink[];
 	/** Second Brain (ongoing-project library) folder + subfolders + list heading. */
 	secondBrainPath: string;
@@ -60,6 +67,11 @@ export const DEFAULT_SETTINGS: MeridianSettings = {
 	agendaRefreshMinutes: 30,
 	agendaUrls: [],
 	kbSearchPath: "Knowledge base/Notes/",
+	kbRootPath: "Knowledge base",
+	kbNotesSubfolder: "Notes",
+	kbCategoriesSubfolder: "Categories",
+	kbArchiveSubfolder: "Archive",
+	kbListHeading: "Notes",
 	secondBrainPath: "Second Brain",
 	secondBrainCategoriesSubfolder: "Categories",
 	secondBrainArchiveSubfolder: "Archive",
@@ -104,6 +116,13 @@ export class MeridianSettingTab extends PluginSettingTab {
 		this.plugin.refreshOpenViews();
 	}
 
+	/** Persist and re-mount open views — for panel enable/reorder changes, where
+	 * a refresh alone wouldn't change the mounted order. */
+	private async saveLayout(): Promise<void> {
+		await this.plugin.saveData_();
+		this.plugin.rebuildOpenViews();
+	}
+
 	display(): void {
 		const { containerEl } = this;
 		const s = this.plugin.settings;
@@ -139,7 +158,7 @@ export class MeridianSettingTab extends PluginSettingTab {
 						.setDisabled(index === 0)
 						.onClick(async () => {
 							[s.panelOrder[index - 1], s.panelOrder[index]] = [s.panelOrder[index], s.panelOrder[index - 1]];
-							await this.save();
+							await this.saveLayout();
 							renderList();
 						})
 				);
@@ -150,14 +169,14 @@ export class MeridianSettingTab extends PluginSettingTab {
 						.setDisabled(index === s.panelOrder.length - 1)
 						.onClick(async () => {
 							[s.panelOrder[index + 1], s.panelOrder[index]] = [s.panelOrder[index], s.panelOrder[index + 1]];
-							await this.save();
+							await this.saveLayout();
 							renderList();
 						})
 				);
 				row.addToggle((t) =>
 					t.setValue(s.enabledPanels[id] !== false).onChange(async (v) => {
 						s.enabledPanels[id] = v;
-						await this.save();
+						await this.saveLayout();
 					})
 				);
 			});
@@ -215,7 +234,7 @@ export class MeridianSettingTab extends PluginSettingTab {
 			});
 
 		// -------- knowledge base --------
-		new Setting(containerEl).setName("Knowledge base search").setHeading();
+		new Setting(containerEl).setName("Knowledge base").setHeading();
 		new Setting(containerEl)
 			.setName("Search folder")
 			.setDesc("Fuzzy search is scoped to this folder only.")
@@ -225,13 +244,15 @@ export class MeridianSettingTab extends PluginSettingTab {
 					await this.save();
 				})
 			);
+		this.addText(containerEl, "Library root", "Root folder for knowledge-base category management.", s.kbRootPath, (v) => (s.kbRootPath = v || "Knowledge base"));
+		this.addText(containerEl, "Notes subfolder", "Where notes live, relative to the library root — the pool you assign to categories.", s.kbNotesSubfolder, (v) => (s.kbNotesSubfolder = v), true);
+		this.addText(containerEl, "Categories subfolder", "Where category notes live, relative to the library root.", s.kbCategoriesSubfolder, (v) => (s.kbCategoriesSubfolder = v || "Categories"));
+		this.addText(containerEl, "Category list heading", "Heading in a category note under which the alphabetized wikilinks live.", s.kbListHeading, (v) => (s.kbListHeading = v || "Notes"));
 
 		// -------- second brain --------
 		new Setting(containerEl).setName("Second Brain").setHeading();
 		this.addText(containerEl, "Second Brain folder", "The ongoing-project library the Second Brain panel manages.", s.secondBrainPath, (v) => (s.secondBrainPath = v || "Second Brain"));
-		this.addText(containerEl, "Categories subfolder", "Where category notes live, relative to the Second Brain folder.", s.secondBrainCategoriesSubfolder, (v) => (s.secondBrainCategoriesSubfolder = v || "Categories"));
 		this.addText(containerEl, "Archive subfolder", "Where archived notes are moved, relative to the Second Brain folder.", s.secondBrainArchiveSubfolder, (v) => (s.secondBrainArchiveSubfolder = v || "Archive"));
-		this.addText(containerEl, "Category list heading", "The heading in a category note under which the alphabetized wikilinks live.", s.secondBrainListHeading, (v) => (s.secondBrainListHeading = v || "Notes"));
 
 		// -------- places --------
 		new Setting(containerEl).setName("Places / navigation").setHeading();

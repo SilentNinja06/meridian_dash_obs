@@ -1,16 +1,20 @@
 import { App, TFile, TFolder, normalizePath } from "obsidian";
 
 /**
- * Second Brain manager — the ongoing-project library (distinct from the
- * Knowledge Base information library). Handles searching the Second Brain
- * folder, archiving notes into its Archive subfolder, and category management:
- * category membership is tracked *both* ways (a `[[wikilink]]` in the category
- * note's list AND a `categories:` frontmatter entry on the note), and the
- * category note's list is kept alphabetized under a configurable heading.
+ * A note-library manager, shared by the Second Brain (ongoing-project library)
+ * and the Knowledge Base (information library). Handles listing/searching a
+ * folder, archiving notes into an Archive subfolder, adding and deleting notes,
+ * and — for libraries that use them — category management: membership is tracked
+ * *both* ways (a `[[wikilink]]` in the category note's list AND a `categories:`
+ * frontmatter entry on the note), with the category note's list kept
+ * alphabetized under a configurable heading.
  */
 
-export interface SecondBrainConfig {
+export interface LibraryConfig {
 	root: string;
+	/** If set, active notes live in `root/notesSubfolder`; otherwise they live in
+	 * `root` (excluding the Categories and Archive subfolders). */
+	notesSubfolder?: string;
 	categoriesSubfolder: string;
 	archiveSubfolder: string;
 	listHeading: string;
@@ -22,11 +26,16 @@ export interface CategoryInfo {
 	members: string[]; // wikilink targets, alphabetized
 }
 
-export class SecondBrainStore {
-	constructor(private app: App, private cfg: () => SecondBrainConfig) {}
+export class LibraryStore {
+	constructor(private app: App, private cfg: () => LibraryConfig) {}
 
 	root(): string {
-		return normalizePath((this.cfg().root || "Second Brain").replace(/\/+$/, ""));
+		return normalizePath((this.cfg().root || "Library").replace(/\/+$/, ""));
+	}
+	/** Folder new/active notes live in. */
+	notesFolder(): string {
+		const sub = (this.cfg().notesSubfolder ?? "").trim().replace(/\/+$/, "");
+		return sub ? normalizePath(this.root() + "/" + sub) : this.root();
 	}
 	categoriesFolder(): string {
 		return normalizePath(this.root() + "/" + (this.cfg().categoriesSubfolder || "Categories"));
@@ -42,19 +51,24 @@ export class SecondBrainStore {
 		return file.path === folder || file.path.startsWith(folder + "/");
 	}
 
-	/** Active notes: everything under the root except the Archive and Categories
-	 * subfolders. */
+	/** Active notes. With a notes subfolder, that folder's notes; otherwise
+	 * everything under the root except the Archive and Categories subfolders. */
 	listNotes(): TFile[] {
-		const root = this.root();
-		const cats = this.categoriesFolder();
-		const arch = this.archiveFolder();
-		return this.app.vault
-			.getMarkdownFiles()
-			.filter(
-				(f) =>
-					this.inFolder(f, root) && !this.inFolder(f, cats) && !this.inFolder(f, arch)
-			)
-			.sort((a, b) => a.basename.localeCompare(b.basename));
+		const sub = (this.cfg().notesSubfolder ?? "").trim();
+		const files = this.app.vault.getMarkdownFiles();
+		let active: TFile[];
+		if (sub) {
+			const notes = this.notesFolder();
+			active = files.filter((f) => this.inFolder(f, notes));
+		} else {
+			const root = this.root();
+			const cats = this.categoriesFolder();
+			const arch = this.archiveFolder();
+			active = files.filter(
+				(f) => this.inFolder(f, root) && !this.inFolder(f, cats) && !this.inFolder(f, arch)
+			);
+		}
+		return active.sort((a, b) => a.basename.localeCompare(b.basename));
 	}
 
 	listArchived(): TFile[] {
@@ -123,14 +137,26 @@ export class SecondBrainStore {
 		return this.app.vault.create(path, body);
 	}
 
-	/** Create a note in the Second Brain root, optionally assigning a category. */
+	/** Create a note in the notes folder, optionally assigning a category. */
 	async createNote(title: string, category?: string): Promise<TFile> {
 		const clean = this.sanitize(title);
-		await this.ensureFolder(this.root());
-		const path = this.uniquePath(this.root(), clean);
+		await this.ensureFolder(this.notesFolder());
+		const path = this.uniquePath(this.notesFolder(), clean);
 		const file = await this.app.vault.create(path, `# ${clean}\n\n`);
 		if (category) await this.assign(file, category);
 		return file;
+	}
+
+	/** Delete a note (to the user's configured trash) and delink it from every
+	 * category. */
+	async deleteNote(file: TFile): Promise<void> {
+		for (const cat of this.listCategories()) {
+			await this.removeMember(cat.file, file.basename);
+		}
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const fm = this.app.fileManager as any;
+		if (typeof fm.trashFile === "function") await fm.trashFile(file);
+		else await this.app.vault.trash(file, true);
 	}
 
 	/** Assign `file` to `category`: write the frontmatter entry AND the
@@ -183,10 +209,10 @@ export class SecondBrainStore {
 	}
 
 	async restoreNote(file: TFile): Promise<void> {
-		await this.ensureFolder(this.root());
-		let dest = normalizePath(`${this.root()}/${file.name}`);
+		await this.ensureFolder(this.notesFolder());
+		let dest = normalizePath(`${this.notesFolder()}/${file.name}`);
 		if (this.app.vault.getAbstractFileByPath(dest)) {
-			dest = this.uniquePath(this.root(), file.basename);
+			dest = this.uniquePath(this.notesFolder(), file.basename);
 		}
 		await this.app.fileManager.renameFile(file, dest);
 		await this.app.fileManager.processFrontMatter(file, (fm) => {

@@ -1,5 +1,6 @@
 import { TFile, prepareFuzzySearch } from "obsidian";
 import { BasePanel, placard } from "./types";
+import { NewCategoryModal, runAssignFlow } from "./categorymodals";
 
 /**
  * Knowledge-base search (§7.12). Fuzzy search scoped to the configured folder
@@ -48,6 +49,15 @@ export class SearchPanel extends BasePanel {
 	protected renderBody(): void {
 		this.buildIndex();
 		placard(this.el, "Knowledge Base");
+
+		// Category management.
+		const store = this.ctx.plugin.knowledgeBase;
+		const actions = this.el.createDiv({ cls: "mrd-btn-row" });
+		const cat = actions.createEl("button", { cls: "mrd-btn", text: "+ Category" });
+		cat.addEventListener("click", () => new NewCategoryModal(this.ctx.app, store, () => this.rerender()).open());
+		const assign = actions.createEl("button", { cls: "mrd-btn", text: "Assign to category" });
+		assign.addEventListener("click", () => runAssignFlow(this.ctx.app, store, () => this.rerender()));
+
 		const input = this.el.createEl("input", {
 			cls: "mrd-search-input",
 			attr: { type: "search", placeholder: "Search the knowledge base…", enterkeyhint: "search" },
@@ -58,6 +68,41 @@ export class SearchPanel extends BasePanel {
 		input.addEventListener("input", () => this.runQuery(input.value));
 		input.addEventListener("keydown", (e) => this.onKey(e));
 		this.runQuery("");
+
+		this.renderCategories();
+	}
+
+	private renderCategories(): void {
+		const store = this.ctx.plugin.knowledgeBase;
+		const cats = store.listCategories();
+		const section = this.el.createDiv({ cls: "mrd-sb-cats" });
+		section.createDiv({ cls: "mrd-subhead", text: `Categories · ${cats.length}` });
+		if (cats.length === 0) {
+			section.createDiv({ cls: "mrd-muted", text: "No categories yet. Create one to start organizing." });
+			return;
+		}
+		for (const cat of cats) {
+			const details = section.createEl("details", { cls: "mrd-sb-cat" });
+			const summary = details.createEl("summary");
+			summary.createSpan({ cls: "mrd-sb-cat-name", text: cat.name });
+			const count = summary.createSpan({ cls: "mrd-chip mrd-chip-cold", text: "…" });
+			details.addEventListener("toggle", async () => {
+				if (!details.open) return;
+				const members = await store.categoryMembers(cat.file);
+				count.setText(String(members.length));
+				const body = (details.querySelector(".mrd-sb-cat-body") as HTMLElement) ?? details.createDiv({ cls: "mrd-sb-cat-body" });
+				body.empty();
+				if (members.length === 0) body.createDiv({ cls: "mrd-muted", text: "Empty." });
+				for (const m of members) {
+					const row = body.createDiv({ cls: "mrd-sb-member" });
+					const link = row.createEl("a", { cls: "mrd-sb-link", text: m });
+					link.addEventListener("click", (e) => {
+						e.preventDefault();
+						void this.ctx.app.workspace.openLinkText(m, cat.file.path, false);
+					});
+				}
+			});
+		}
 	}
 
 	private runQuery(query: string): void {

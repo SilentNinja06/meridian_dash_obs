@@ -1,5 +1,5 @@
 import { App, TFile, getAllTags, moment } from "obsidian";
-import { readDailyNoteRaw, readMarkerLogLines, readHeadingSection } from "./dailynote";
+import { appendDailyLogLine, readDailyNoteRaw, readMarkerLogLines, readHeadingSection } from "./dailynote";
 
 /**
  * The one place that reaches into the sibling plugins (§8). Each read prefers
@@ -147,19 +147,63 @@ export class Bridge {
 		return this.enabled(CRM_ID);
 	}
 
-	/** Log an interaction for a specific contact without a re-pick. Uses the
-	 * plugin's `logInteraction` API (v2+); falls back to the generic command
-	 * (which opens the contact picker) on older versions. */
-	crmLogInteraction(pathOrName: string): void {
+	/** Try to log a specific contact through the plugin's own modal (API v2+).
+	 * Returns true if it handled it. */
+	crmLogViaApi(pathOrName: string): boolean {
 		const api = this.api(CRM_ID);
 		if (api?.logInteraction && api.version >= 2) {
 			try {
-				if (api.logInteraction(pathOrName)) return;
+				return !!api.logInteraction(pathOrName);
 			} catch (e) {
 				console.error("MERIDIAN: crm api logInteraction failed, falling back", e);
 			}
 		}
-		this.runCommand("simple-contact-manager:log-interaction");
+		return false;
+	}
+
+	private resolveContact(pathOrName: string): TFile | null {
+		const byPath = this.app.vault.getAbstractFileByPath(pathOrName);
+		if (byPath instanceof TFile) return byPath;
+		const folder = (this.plugin(CRM_ID)?.settings?.contactsFolder ?? "Contacts").trim();
+		return (
+			this.app.vault
+				.getMarkdownFiles()
+				.find((f) => (!folder || f.path.startsWith(folder + "/")) && f.basename === pathOrName) ?? null
+		);
+	}
+
+	/** Log an interaction for a specific contact ourselves, when the plugin's API
+	 * isn't available (older Simple Contact Manager). Mirrors the plugin's write:
+	 * update the contact note's Interaction Log, advance the follow-up cadence in
+	 * frontmatter, and write the daily-note line. Returns true on success. */
+	async crmWriteInteraction(pathOrName: string, noteText: string): Promise<boolean> {
+		const file = this.resolveContact(pathOrName);
+		if (!file) return false;
+		const text = noteText.trim();
+		if (!text) return false;
+		const fm = this.app.metadataCache.getFileCache(file)?.frontmatter ?? {};
+		const followupDays = Number(fm.followup_days) || 30;
+		const todayStr = today();
+		const next = moment().add(followupDays, "days").format("YYYY-MM-DD");
+		const name = String(fm.name ?? file.basename);
+
+		await this.app.fileManager.processFrontMatter(file, (f) => {
+			f.last_contacted = todayStr;
+			f.next_followup = next;
+		});
+		await this.app.vault.process(file, (content) => insertInteraction(content, todayStr, text));
+
+		// Daily-note line, under Simple Contact Manager's own marker/heading if set.
+		const s = this.plugin(CRM_ID)?.settings ?? {};
+		const marker = (s.dailyNoteMarker ?? "%% crm-log %%").trim();
+		const heading = (s.dailyNoteHeading ?? "Contacts reached").trim();
+		const time = moment().format("HH:mm");
+		try {
+			await appendDailyLogLine(this.app, `- ${time} [[${name}|${name}]] — ${text}`, { marker, heading, time });
+		} catch (e) {
+			console.error("MERIDIAN: crm daily-note write failed", e);
+		}
+		return true;
 	}
 
 	crmContacts(): CrmRow[] {
@@ -366,6 +410,22 @@ function stripFormatting(s: string): string {
 		.replace(/\s+\*\([^)]*\)\s*$/, "") // trailing "*(sources)*"
 		.replace(/\s+—\s+to taste/i, " — to taste")
 		.trim();
+}
+
+/** Insert `- noteText` under a contact note's `## Interaction Log` → `### date`,
+ * matching Simple Contact Manager's own placement (create the log / date heading
+ * as needed). */
+function insertInteraction(content: string, date: string, noteText: string): string {
+	const logHeading = /^## Interaction Log\s*$/m;
+	const todayHeading = `### ${date}`;
+	if (!logHeading.test(content)) {
+		return `${content.replace(/\s+$/, "")}\n\n## Interaction Log\n\n${todayHeading}\n- ${noteText}\n`;
+	}
+	const todayAtTop = new RegExp(`^## Interaction Log\\n+${todayHeading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "m");
+	if (todayAtTop.test(content)) {
+		return content.replace(todayAtTop, (match) => `${match}\n- ${noteText}`);
+	}
+	return content.replace(logHeading, (match) => `${match}\n\n${todayHeading}\n- ${noteText}\n`);
 }
 
 /** Descriptors logged under `### <date>` in a contact's `## Interaction Log`. */

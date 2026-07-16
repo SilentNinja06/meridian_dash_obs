@@ -1,4 +1,4 @@
-import { TFile, moment } from "obsidian";
+import { App, Modal, Notice, Setting, TFile, moment } from "obsidian";
 import { BasePanel, placard } from "./types";
 import { CrmRow } from "../core/bridge";
 import { appendDailyLogLine } from "../core/dailynote";
@@ -64,7 +64,19 @@ export class CrmPanel extends BasePanel {
 
 		// Log this specific contact — no re-pick from a fuzzy list.
 		const log = row.createEl("button", { cls: "mrd-btn mrd-btn-sm", text: "Log" });
-		log.addEventListener("click", () => this.ctx.bridge.crmLogInteraction(c.path));
+		log.addEventListener("click", () => {
+			// Prefer the plugin's own modal (API v2+); otherwise log it ourselves.
+			if (this.ctx.bridge.crmLogViaApi(c.path)) return;
+			new CrmInteractionModal(this.ctx.app, c.name, async (text) => {
+				const ok = await this.ctx.bridge.crmWriteInteraction(c.path, text);
+				if (ok) {
+					new Notice(`Logged interaction with ${c.name}.`);
+					this.ctx.requestRefresh("manual");
+				} else {
+					new Notice("Could not log the interaction.");
+				}
+			}).open();
+		});
 	}
 
 	/** Backfill any `### <today>` interactions from contact notes that aren't in
@@ -86,5 +98,43 @@ export class CrmPanel extends BasePanel {
 		} catch (e) {
 			console.error("MERIDIAN: CRM reconcile failed", e);
 		}
+	}
+}
+
+/** Capture the interaction note for a specific contact (dashboard-side path,
+ * used when Simple Contact Manager's log API isn't available). */
+class CrmInteractionModal extends Modal {
+	private note = "";
+	constructor(app: App, private contactName: string, private onSubmit: (note: string) => void) {
+		super(app);
+	}
+	onOpen(): void {
+		this.titleEl.setText(`Log interaction — ${this.contactName}`);
+		new Setting(this.contentEl).setName("Interaction note").addText((t) => {
+			t.setPlaceholder("e.g. Called re: contract renewal").onChange((v) => (this.note = v));
+			t.inputEl.classList.add("mrd-modal-wide");
+			t.inputEl.focus();
+			t.inputEl.addEventListener("keydown", (e) => {
+				if (e.key === "Enter") {
+					e.preventDefault();
+					this.submit();
+				}
+			});
+		});
+		new Setting(this.contentEl)
+			.addButton((b) => b.setButtonText("Cancel").onClick(() => this.close()))
+			.addButton((b) => b.setButtonText("Log interaction").setCta().onClick(() => this.submit()));
+	}
+	private submit(): void {
+		const note = this.note.trim();
+		if (!note) {
+			new Notice("Please enter an interaction note.");
+			return;
+		}
+		this.onSubmit(note);
+		this.close();
+	}
+	onClose(): void {
+		this.contentEl.empty();
 	}
 }

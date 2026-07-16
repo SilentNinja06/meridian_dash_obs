@@ -56,6 +56,12 @@ export class MeridianView extends ItemView {
 		await this.build();
 	}
 
+	/** Re-mount all panels — used when the panel set or order changes in
+	 * settings (a plain refresh keeps the old mount order). */
+	async rebuild(): Promise<void> {
+		await this.build();
+	}
+
 	async onClose(): Promise<void> {
 		this.teardown();
 		this.contentEl.empty();

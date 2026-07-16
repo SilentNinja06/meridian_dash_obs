@@ -9,7 +9,7 @@ import {
 import { Bridge } from "./core/bridge";
 import { TodoStore, seedTodos } from "./core/todostore";
 import { DirectivesStore } from "./core/directivesstore";
-import { SecondBrainStore } from "./core/secondbrain";
+import { LibraryStore } from "./core/library";
 import { MeridianRuntime, RefreshReason } from "./panels/types";
 import { MeridianView, VIEW_TYPE_MERIDIAN } from "./view";
 
@@ -18,7 +18,8 @@ export default class MeridianDashPlugin extends Plugin {
 	bridge!: Bridge;
 	todos!: TodoStore;
 	directives!: DirectivesStore;
-	secondBrain!: SecondBrainStore;
+	secondBrain!: LibraryStore;
+	knowledgeBase!: LibraryStore;
 	runtime: MeridianRuntime = {
 		sessionStart: Date.now(),
 		previousAccess: Date.now(),
@@ -33,11 +34,18 @@ export default class MeridianDashPlugin extends Plugin {
 		await this.load_();
 
 		this.bridge = new Bridge(this.app);
-		this.secondBrain = new SecondBrainStore(this.app, () => ({
+		this.secondBrain = new LibraryStore(this.app, () => ({
 			root: this.settings.secondBrainPath,
 			categoriesSubfolder: this.settings.secondBrainCategoriesSubfolder,
 			archiveSubfolder: this.settings.secondBrainArchiveSubfolder,
 			listHeading: this.settings.secondBrainListHeading,
+		}));
+		this.knowledgeBase = new LibraryStore(this.app, () => ({
+			root: this.settings.kbRootPath,
+			notesSubfolder: this.settings.kbNotesSubfolder,
+			categoriesSubfolder: this.settings.kbCategoriesSubfolder,
+			archiveSubfolder: this.settings.kbArchiveSubfolder,
+			listHeading: this.settings.kbListHeading,
 		}));
 		this.directives = new DirectivesStore(this.app, () => this.settings.directivesPath);
 		await this.loadDirectives();
@@ -179,6 +187,14 @@ export default class MeridianDashPlugin extends Plugin {
 		for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_MERIDIAN)) {
 			const view = leaf.view;
 			if (view instanceof MeridianView) void view.refreshPanels(reason);
+		}
+	}
+
+	/** Re-mount panels in every open view — for panel enable/reorder changes. */
+	rebuildOpenViews(): void {
+		for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_MERIDIAN)) {
+			const view = leaf.view;
+			if (view instanceof MeridianView) void view.rebuild();
 		}
 	}
 
