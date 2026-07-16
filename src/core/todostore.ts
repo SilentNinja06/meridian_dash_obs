@@ -57,6 +57,8 @@ export interface TodoInstance {
 	flagLabel: string;
 	/** True when done for the reference day (non-recurring completed, or today in completions). */
 	done: boolean;
+	/** True when this recurring occurrence was postponed (skipped) for the day. */
+	skipped: boolean;
 	recurring: boolean;
 }
 
@@ -199,9 +201,11 @@ export class TodoStore {
 			if (this.isRecurring(item)) {
 				if (!this.isOccurrence(item, date)) continue;
 				const done = (item.completions ?? []).includes(date);
+				const skipped = !done && (item.skips ?? []).includes(date);
 				const prev = this.previousOccurrence(item, date);
 				const missed =
 					!done &&
+					!skipped &&
 					!!prev &&
 					!(item.completions ?? []).includes(prev) &&
 					!(item.skips ?? []).includes(prev);
@@ -209,6 +213,7 @@ export class TodoStore {
 					item,
 					recurring: true,
 					done,
+					skipped,
 					flagged: missed,
 					flagLabel: missed ? missedLabel(prev, date) : "",
 				});
@@ -216,7 +221,7 @@ export class TodoStore {
 				// one-time
 				if (item.completed) {
 					if (item.completedDate === date) {
-						out.push({ item, recurring: false, done: true, flagged: false, flagLabel: "" });
+						out.push({ item, recurring: false, done: true, skipped: false, flagged: false, flagLabel: "" });
 					}
 					continue;
 				}
@@ -225,6 +230,7 @@ export class TodoStore {
 					item,
 					recurring: false,
 					done: false,
+					skipped: false,
 					flagged: carried,
 					flagLabel: carried ? "carried over" : "",
 				});
@@ -238,9 +244,9 @@ export class TodoStore {
 		return this.instancesFor(date).filter((i) => i.flagged && !i.done).length;
 	}
 
-	/** Count of pending (undone, eligible) items today. */
+	/** Count of pending (undone, un-postponed, eligible) items today. */
 	pendingCount(date = todayStr()): number {
-		return this.instancesFor(date).filter((i) => !i.done).length;
+		return this.instancesFor(date).filter((i) => !i.done && !i.skipped).length;
 	}
 
 	// ----------------------------------------------------------- mutations
@@ -338,6 +344,22 @@ export class TodoStore {
 			// One-time: dismissing an instance is dismissing the item.
 			item.completed = true;
 			item.completedDate = date;
+		}
+		this.setItems(items);
+		await this.save();
+	}
+
+	/** Un-postpone a skipped occurrence — bring it back to the active list. */
+	async unskipInstance(id: string, date = todayStr()): Promise<void> {
+		const items = this.getItems();
+		const item = items.find((i) => i.id === id);
+		if (!item) return;
+		if (this.isRecurring(item)) {
+			item.skips = (item.skips ?? []).filter((d) => d !== date);
+		} else if (item.completedDate === date) {
+			// One-time skip was a completion; undo it.
+			item.completed = false;
+			item.completedDate = undefined;
 		}
 		this.setItems(items);
 		await this.save();

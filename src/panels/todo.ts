@@ -23,7 +23,8 @@ export class TodoPanel extends BasePanel {
 	protected renderBody(): void {
 		const store = this.ctx.todos;
 		const instances = store.instancesFor();
-		const active = instances.filter((i) => !i.done).sort(activeSort);
+		const active = instances.filter((i) => !i.done && !i.skipped).sort(activeSort);
+		const postponed = instances.filter((i) => i.skipped);
 		const done = instances.filter((i) => i.done);
 
 		const head = placard(this.el, "Directives");
@@ -42,6 +43,13 @@ export class TodoPanel extends BasePanel {
 		}
 		active.forEach((inst, idx) => this.renderRow(list, inst, idx, active.length));
 
+		if (postponed.length > 0) {
+			const details = this.el.createEl("details", { cls: "mrd-todo-done" });
+			details.createEl("summary", { text: `Postponed · ${postponed.length}` });
+			const pList = details.createDiv({ cls: "mrd-todo-list" });
+			for (const inst of postponed) this.renderRow(pList, inst, -1, 0);
+		}
+
 		if (done.length > 0) {
 			const details = this.el.createEl("details", { cls: "mrd-todo-done" });
 			details.createEl("summary", { text: `Completed today · ${done.length}` });
@@ -55,7 +63,7 @@ export class TodoPanel extends BasePanel {
 		const item = inst.item;
 		const row = parent.createDiv({ cls: "mrd-todo-row" });
 		if (inst.flagged) row.addClass("is-flagged");
-		if (inst.done) row.addClass("is-done");
+		if (inst.done || inst.skipped) row.addClass("is-done");
 
 		const box = row.createEl("button", { cls: "mrd-todo-check", attr: { "aria-label": inst.done ? "Mark not done" : "Mark done" } });
 		box.setText(inst.done ? "✓" : "");
@@ -83,10 +91,15 @@ export class TodoPanel extends BasePanel {
 		this.iconBtn(actions, "✎", "Edit", false, () => {
 			new TodoEditModal(this.ctx.app, store, item, () => this.after()).open();
 		});
-		if (inst.recurring && !inst.done) {
-			this.iconBtn(actions, "⤼", "Skip just today", false, async () => {
+		if (inst.skipped) {
+			this.iconBtn(actions, "↩", "Un-postpone", false, async () => {
+				await store.unskipInstance(item.id);
+				this.after();
+			});
+		} else if (inst.recurring && !inst.done) {
+			this.iconBtn(actions, "⤼", "Postpone for today", false, async () => {
 				await store.skipInstance(item.id);
-				new Notice("Today's occurrence dismissed. Future occurrences are unaffected.");
+				new Notice("Postponed for today. It returns on the next occurrence.");
 				this.after();
 			});
 		}
