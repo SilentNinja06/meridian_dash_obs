@@ -992,26 +992,28 @@ var TodoStore = class {
   }
   /** Instances to render for `date` (default today): eligible, not future-hidden. */
   instancesFor(date = todayStr()) {
-    var _a, _b, _c;
+    var _a, _b, _c, _d;
     const out = [];
     for (const item of this.all()) {
       if (this.isHiddenByTime(item, date)) continue;
       if (this.isRecurring(item)) {
         if (!this.isOccurrence(item, date)) continue;
         const done = ((_a = item.completions) != null ? _a : []).includes(date);
+        const skipped = !done && ((_b = item.skips) != null ? _b : []).includes(date);
         const prev = this.previousOccurrence(item, date);
-        const missed = !done && !!prev && !((_b = item.completions) != null ? _b : []).includes(prev) && !((_c = item.skips) != null ? _c : []).includes(prev);
+        const missed = !done && !skipped && !!prev && !((_c = item.completions) != null ? _c : []).includes(prev) && !((_d = item.skips) != null ? _d : []).includes(prev);
         out.push({
           item,
           recurring: true,
           done,
+          skipped,
           flagged: missed,
           flagLabel: missed ? missedLabel(prev, date) : ""
         });
       } else {
         if (item.completed) {
           if (item.completedDate === date) {
-            out.push({ item, recurring: false, done: true, flagged: false, flagLabel: "" });
+            out.push({ item, recurring: false, done: true, skipped: false, flagged: false, flagLabel: "" });
           }
           continue;
         }
@@ -1020,6 +1022,7 @@ var TodoStore = class {
           item,
           recurring: false,
           done: false,
+          skipped: false,
           flagged: carried,
           flagLabel: carried ? "carried over" : ""
         });
@@ -1031,9 +1034,9 @@ var TodoStore = class {
   overdueCount(date = todayStr()) {
     return this.instancesFor(date).filter((i) => i.flagged && !i.done).length;
   }
-  /** Count of pending (undone, eligible) items today. */
+  /** Count of pending (undone, un-postponed, eligible) items today. */
   pendingCount(date = todayStr()) {
-    return this.instancesFor(date).filter((i) => !i.done).length;
+    return this.instancesFor(date).filter((i) => !i.done && !i.skipped).length;
   }
   // ----------------------------------------------------------- mutations
   async add(partial) {
@@ -1129,6 +1132,21 @@ var TodoStore = class {
     this.setItems(items);
     await this.save();
   }
+  /** Un-postpone a skipped occurrence — bring it back to the active list. */
+  async unskipInstance(id, date = todayStr()) {
+    var _a;
+    const items = this.getItems();
+    const item = items.find((i) => i.id === id);
+    if (!item) return;
+    if (this.isRecurring(item)) {
+      item.skips = ((_a = item.skips) != null ? _a : []).filter((d) => d !== date);
+    } else if (item.completedDate === date) {
+      item.completed = false;
+      item.completedDate = void 0;
+    }
+    this.setItems(items);
+    await this.save();
+  }
   async archiveCompletion(item) {
     const { marker, heading } = this.getLogTarget();
     const time = nowTime();
@@ -1184,7 +1202,8 @@ var TodoPanel = class extends BasePanel {
   renderBody() {
     const store = this.ctx.todos;
     const instances = store.instancesFor();
-    const active = instances.filter((i) => !i.done).sort(activeSort);
+    const active = instances.filter((i) => !i.done && !i.skipped).sort(activeSort);
+    const postponed = instances.filter((i) => i.skipped);
     const done = instances.filter((i) => i.done);
     const head = placard(this.el, "Directives");
     const overdue = active.filter((i) => i.flagged).length;
@@ -1200,6 +1219,12 @@ var TodoPanel = class extends BasePanel {
       list.createDiv({ cls: "mrd-muted", text: "No directives pending. The queue is clear. This is permitted." });
     }
     active.forEach((inst, idx) => this.renderRow(list, inst, idx, active.length));
+    if (postponed.length > 0) {
+      const details = this.el.createEl("details", { cls: "mrd-todo-done" });
+      details.createEl("summary", { text: `Postponed \xB7 ${postponed.length}` });
+      const pList = details.createDiv({ cls: "mrd-todo-list" });
+      for (const inst of postponed) this.renderRow(pList, inst, -1, 0);
+    }
     if (done.length > 0) {
       const details = this.el.createEl("details", { cls: "mrd-todo-done" });
       details.createEl("summary", { text: `Completed today \xB7 ${done.length}` });
@@ -1212,7 +1237,7 @@ var TodoPanel = class extends BasePanel {
     const item = inst.item;
     const row = parent.createDiv({ cls: "mrd-todo-row" });
     if (inst.flagged) row.addClass("is-flagged");
-    if (inst.done) row.addClass("is-done");
+    if (inst.done || inst.skipped) row.addClass("is-done");
     const box = row.createEl("button", { cls: "mrd-todo-check", attr: { "aria-label": inst.done ? "Mark not done" : "Mark done" } });
     box.setText(inst.done ? "\u2713" : "");
     box.addEventListener("click", async () => {
@@ -1237,10 +1262,15 @@ var TodoPanel = class extends BasePanel {
     this.iconBtn(actions, "\u270E", "Edit", false, () => {
       new TodoEditModal(this.ctx.app, store, item, () => this.after()).open();
     });
-    if (inst.recurring && !inst.done) {
-      this.iconBtn(actions, "\u293C", "Skip just today", false, async () => {
+    if (inst.skipped) {
+      this.iconBtn(actions, "\u21A9", "Un-postpone", false, async () => {
+        await store.unskipInstance(item.id);
+        this.after();
+      });
+    } else if (inst.recurring && !inst.done) {
+      this.iconBtn(actions, "\u293C", "Postpone for today", false, async () => {
         await store.skipInstance(item.id);
-        new import_obsidian6.Notice("Today's occurrence dismissed. Future occurrences are unaffected.");
+        new import_obsidian6.Notice("Postponed for today. It returns on the next occurrence.");
         this.after();
       });
     }
