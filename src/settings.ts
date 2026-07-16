@@ -25,6 +25,9 @@ export interface MeridianSettings {
 	agendaUrls: CalendarLink[];
 	kbSearchPath: string;
 	places: PlaceLink[];
+	/** Vault file the persistent directives (to-dos) live in, so Obsidian Sync
+	 * propagates them across devices. */
+	directivesPath: string;
 	/** Archive target for completed to-dos (§7.4). */
 	completedTasksMarker: string;
 	completedTasksHeading: string;
@@ -52,6 +55,7 @@ export const DEFAULT_SETTINGS: MeridianSettings = {
 	agendaRefreshMinutes: 30,
 	agendaUrls: [],
 	kbSearchPath: "Knowledge base/Notes/",
+	directivesPath: "MERIDIAN/Directives.json",
 	places: [
 		{ label: "Central Hub", target: "Central Hub", type: "note" },
 		{ label: "Contact Dashboard", target: "Contact Dashboard", type: "note" },
@@ -243,6 +247,16 @@ export class MeridianSettingTab extends PluginSettingTab {
 					await this.save();
 				});
 			});
+
+		// -------- directives storage --------
+		new Setting(containerEl).setName("Directives").setHeading();
+		this.addText(
+			containerEl,
+			"Directives file",
+			"Vault file (JSON) the persistent to-do list is stored in. Kept in the vault — not plugin data — so Obsidian Sync propagates it across devices. Change only if you want it somewhere else.",
+			s.directivesPath,
+			(v) => (s.directivesPath = v || "MERIDIAN/Directives.json")
+		);
 
 		// -------- daily-note write targets --------
 		new Setting(containerEl).setName("Daily note write targets").setHeading();

@@ -7,7 +7,8 @@ import {
 	mergeSettings,
 } from "./settings";
 import { Bridge } from "./core/bridge";
-import { TodoItem, TodoStore, seedTodos } from "./core/todostore";
+import { TodoStore, seedTodos } from "./core/todostore";
+import { DirectivesStore } from "./core/directivesstore";
 import { MeridianRuntime, RefreshReason } from "./panels/types";
 import { MeridianView, VIEW_TYPE_MERIDIAN } from "./view";
 
@@ -15,6 +16,7 @@ export default class MeridianDashPlugin extends Plugin {
 	settings: MeridianSettings = DEFAULT_SETTINGS;
 	bridge!: Bridge;
 	todos!: TodoStore;
+	directives!: DirectivesStore;
 	runtime: MeridianRuntime = {
 		sessionStart: Date.now(),
 		previousAccess: Date.now(),
@@ -29,13 +31,13 @@ export default class MeridianDashPlugin extends Plugin {
 		await this.load_();
 
 		this.bridge = new Bridge(this.app);
+		this.directives = new DirectivesStore(this.app, () => this.settings.directivesPath);
+		await this.loadDirectives();
 		this.todos = new TodoStore(
 			this.app,
-			() => this.data.todos,
-			(items: TodoItem[]) => {
-				this.data.todos = items;
-			},
-			() => this.saveData_(),
+			() => this.directives.getItems(),
+			(items) => this.directives.setItems(items),
+			() => this.directives.save(),
 			() => ({
 				marker: this.settings.completedTasksMarker,
 				heading: this.settings.completedTasksHeading,
@@ -56,7 +58,8 @@ export default class MeridianDashPlugin extends Plugin {
 
 		// Refresh bus source: vault/metadata changes, debounced ~300ms (§4).
 		this.registerEvent(this.app.metadataCache.on("changed", () => this.scheduleRefresh()));
-		this.registerEvent(this.app.vault.on("modify", () => this.scheduleRefresh()));
+		this.registerEvent(this.app.vault.on("modify", (file) => this.onVaultChange(file.path)));
+		this.registerEvent(this.app.vault.on("create", (file) => this.onVaultChange(file.path)));
 		this.registerEvent(this.app.vault.on("delete", () => this.scheduleRefresh()));
 		this.registerEvent(this.app.vault.on("rename", () => this.scheduleRefresh()));
 
@@ -76,18 +79,45 @@ export default class MeridianDashPlugin extends Plugin {
 		this.settings = mergeSettings(raw?.settings);
 		this.data = {
 			settings: this.settings,
+			// Legacy home of the to-do list; kept only for one-time migration to the
+			// vault-backed directives file (see loadDirectives).
 			todos: raw?.todos ?? [],
 			lastAccess: raw?.lastAccess ?? Date.now(),
 			seeded: raw?.seeded ?? false,
 			agendaCache: raw?.agendaCache ?? {},
 			milestoneShownDate: raw?.milestoneShownDate ?? "",
 		};
-		if (!this.data.seeded && this.data.todos.length === 0) {
-			this.data.todos = seedTodos();
-			this.data.seeded = true;
-		}
 		this.runtime.previousAccess = this.data.lastAccess;
 		await this.saveData_();
+	}
+
+	/** Load directives from the vault file, migrating from the old plugin-data
+	 * location (or the seed defaults) the first time. */
+	private async loadDirectives(): Promise<void> {
+		const existed = await this.directives.load();
+		if (existed) {
+			this.data.seeded = true;
+			return;
+		}
+		// No vault file yet: migrate legacy plugin-data todos, else seed.
+		const legacy = this.data.todos ?? [];
+		this.directives.setItems(legacy.length > 0 || this.data.seeded ? legacy : seedTodos());
+		this.data.seeded = true;
+		this.data.todos = [];
+		await this.directives.save();
+		await this.saveData_();
+	}
+
+	/** Vault create/modify router: reload directives when their file changes on
+	 * another device (Obsidian Sync), otherwise a plain debounced refresh. */
+	private onVaultChange(path: string): void {
+		if (this.directives.isDirectivesPath(path)) {
+			void this.directives.onExternalChange(path).then((changed) => {
+				if (changed) this.refreshOpenViews("vault");
+			});
+			return;
+		}
+		this.scheduleRefresh();
 	}
 
 	async saveData_(): Promise<void> {

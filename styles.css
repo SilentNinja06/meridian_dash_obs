@@ -110,21 +110,28 @@
 
 /* ---------------------------------------------------------------- grid */
 
+/* Masonry via CSS multi-column: panels pack tightly by height instead of
+ * sitting in fixed grid rows, so a short card (clock) no longer leaves a tall
+ * empty gap beside a tall one (directives). Columns balance automatically and
+ * reflow on resize with no JavaScript. */
 .mrd-grid {
-	display: grid;
-	grid-template-columns: 1fr;
-	gap: var(--mrd-gap);
-	align-items: start;
+	column-gap: var(--mrd-gap);
+	column-count: 1;
 }
 
 @media (min-width: 700px) {
 	.mrd-grid {
-		grid-template-columns: repeat(2, minmax(0, 1fr));
+		column-count: 2;
 	}
 }
 @media (min-width: 1180px) {
 	.mrd-grid {
-		grid-template-columns: repeat(3, minmax(0, 1fr));
+		column-count: 3;
+	}
+}
+@media (min-width: 1680px) {
+	.mrd-grid {
+		column-count: 4;
 	}
 }
 
@@ -137,6 +144,11 @@
 	padding: 14px;
 	position: relative;
 	overflow: hidden;
+	/* keep a panel whole within one column, and space stacked panels */
+	break-inside: avoid;
+	-webkit-column-break-inside: avoid;
+	margin-bottom: var(--mrd-gap);
+	width: 100%;
 }
 
 .mrd-panel::before {

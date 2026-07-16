@@ -27,7 +27,7 @@ __export(main_exports, {
   default: () => MeridianDashPlugin
 });
 module.exports = __toCommonJS(main_exports);
-var import_obsidian15 = require("obsidian");
+var import_obsidian16 = require("obsidian");
 
 // src/settings.ts
 var import_obsidian12 = require("obsidian");
@@ -2440,6 +2440,7 @@ var DEFAULT_SETTINGS = {
   agendaRefreshMinutes: 30,
   agendaUrls: [],
   kbSearchPath: "Knowledge base/Notes/",
+  directivesPath: "MERIDIAN/Directives.json",
   places: [
     { label: "Central Hub", target: "Central Hub", type: "note" },
     { label: "Contact Dashboard", target: "Contact Dashboard", type: "note" },
@@ -2575,6 +2576,14 @@ var MeridianSettingTab = class extends import_obsidian12.PluginSettingTab {
         await this.save();
       });
     });
+    new import_obsidian12.Setting(containerEl).setName("Directives").setHeading();
+    this.addText(
+      containerEl,
+      "Directives file",
+      "Vault file (JSON) the persistent to-do list is stored in. Kept in the vault \u2014 not plugin data \u2014 so Obsidian Sync propagates it across devices. Change only if you want it somewhere else.",
+      s.directivesPath,
+      (v) => s.directivesPath = v || "MERIDIAN/Directives.json"
+    );
     new import_obsidian12.Setting(containerEl).setName("Daily note write targets").setHeading();
     this.addText(containerEl, "Completed-tasks heading", "Completed to-dos are archived under this heading.", s.completedTasksHeading, (v) => s.completedTasksHeading = v || "Completed tasks");
     this.addText(containerEl, "Completed-tasks marker", "Optional. If set, completed tasks go after this marker instead of the heading.", s.completedTasksMarker, (v) => s.completedTasksMarker = v, true);
@@ -2890,10 +2899,81 @@ function interactionsForDate(content, date) {
   return out;
 }
 
-// src/view.ts
+// src/core/directivesstore.ts
 var import_obsidian14 = require("obsidian");
+var DEFAULT_PATH = "MERIDIAN/Directives.json";
+var DirectivesStore = class {
+  constructor(app, getPath) {
+    this.app = app;
+    this.getPath = getPath;
+    this.items = [];
+    /** The exact text we last read from / wrote to disk, so a modify event
+     * caused by our own write reloads to identical content and is ignored. */
+    this.lastSerialized = "";
+  }
+  getItems() {
+    return this.items;
+  }
+  setItems(items) {
+    this.items = items;
+  }
+  path() {
+    return (0, import_obsidian14.normalizePath)(this.getPath() || DEFAULT_PATH);
+  }
+  isDirectivesPath(path) {
+    return (0, import_obsidian14.normalizePath)(path) === this.path();
+  }
+  /** Load from the vault file. Returns true if the file existed. */
+  async load() {
+    const file = this.app.vault.getAbstractFileByPath(this.path());
+    if (!(file instanceof import_obsidian14.TFile)) return false;
+    try {
+      const raw = await this.app.vault.read(file);
+      this.lastSerialized = raw;
+      const parsed = JSON.parse(raw);
+      this.items = Array.isArray(parsed == null ? void 0 : parsed.todos) ? parsed.todos : [];
+    } catch (e) {
+      console.error("MERIDIAN: could not read the directives file", e);
+    }
+    return true;
+  }
+  /** Write the current list to the vault file (creating it and its folder if
+   * needed). No-op when the content is unchanged. */
+  async save() {
+    const body = JSON.stringify({ version: 1, todos: this.items }, null, 2) + "\n";
+    if (body === this.lastSerialized) return;
+    this.lastSerialized = body;
+    const path = this.path();
+    const existing = this.app.vault.getAbstractFileByPath(path);
+    if (existing instanceof import_obsidian14.TFile) {
+      await this.app.vault.modify(existing, body);
+    } else {
+      await this.ensureFolder(path);
+      await this.app.vault.create(path, body);
+    }
+  }
+  /** React to a vault change on the directives file (e.g. Obsidian Sync landing
+   * the other device's edit). Returns true if the in-memory list actually
+   * changed — our own writes reload to identical content and return false. */
+  async onExternalChange(path) {
+    if (!this.isDirectivesPath(path)) return false;
+    const before = this.lastSerialized;
+    await this.load();
+    return this.lastSerialized !== before;
+  }
+  async ensureFolder(path) {
+    const dir = path.split("/").slice(0, -1).join("/");
+    if (!dir) return;
+    if (this.app.vault.getAbstractFileByPath(dir) instanceof import_obsidian14.TFolder) return;
+    await this.app.vault.createFolder(dir).catch(() => {
+    });
+  }
+};
+
+// src/view.ts
+var import_obsidian15 = require("obsidian");
 var VIEW_TYPE_MERIDIAN = "meridian-dashboard";
-var MeridianView = class extends import_obsidian14.ItemView {
+var MeridianView = class extends import_obsidian15.ItemView {
   constructor(leaf, plugin) {
     super(leaf);
     this.plugin = plugin;
@@ -2966,7 +3046,7 @@ var MeridianView = class extends import_obsidian14.ItemView {
     label.createDiv({ cls: "mrd-brand-name", text: "MERIDIAN" });
     label.createDiv({ cls: "mrd-brand-sub", text: "HALCYON SYSTEMS \xB7 STABILITY THROUGH OBSERVATION" });
     const refresh = header.createEl("button", { cls: "mrd-icon-btn", attr: { "aria-label": "Refresh" } });
-    (0, import_obsidian14.setIcon)(refresh, "refresh-cw");
+    (0, import_obsidian15.setIcon)(refresh, "refresh-cw");
     refresh.addEventListener("click", () => void this.refreshPanels("manual"));
   }
   async mountPanel(panel, host, ctx) {
@@ -3036,7 +3116,7 @@ function radarMark() {
 }
 
 // src/main.ts
-var MeridianDashPlugin = class extends import_obsidian15.Plugin {
+var MeridianDashPlugin = class extends import_obsidian16.Plugin {
   constructor() {
     super(...arguments);
     this.settings = DEFAULT_SETTINGS;
@@ -3051,13 +3131,13 @@ var MeridianDashPlugin = class extends import_obsidian15.Plugin {
   async onload() {
     await this.load_();
     this.bridge = new Bridge(this.app);
+    this.directives = new DirectivesStore(this.app, () => this.settings.directivesPath);
+    await this.loadDirectives();
     this.todos = new TodoStore(
       this.app,
-      () => this.data.todos,
-      (items) => {
-        this.data.todos = items;
-      },
-      () => this.saveData_(),
+      () => this.directives.getItems(),
+      (items) => this.directives.setItems(items),
+      () => this.directives.save(),
       () => ({
         marker: this.settings.completedTasksMarker,
         heading: this.settings.completedTasksHeading
@@ -3072,7 +3152,8 @@ var MeridianDashPlugin = class extends import_obsidian15.Plugin {
     });
     this.addSettingTab(new MeridianSettingTab(this.app, this));
     this.registerEvent(this.app.metadataCache.on("changed", () => this.scheduleRefresh()));
-    this.registerEvent(this.app.vault.on("modify", () => this.scheduleRefresh()));
+    this.registerEvent(this.app.vault.on("modify", (file) => this.onVaultChange(file.path)));
+    this.registerEvent(this.app.vault.on("create", (file) => this.onVaultChange(file.path)));
     this.registerEvent(this.app.vault.on("delete", () => this.scheduleRefresh()));
     this.registerEvent(this.app.vault.on("rename", () => this.scheduleRefresh()));
     if (this.settings.openOnStartup) {
@@ -3089,18 +3170,43 @@ var MeridianDashPlugin = class extends import_obsidian15.Plugin {
     this.settings = mergeSettings(raw == null ? void 0 : raw.settings);
     this.data = {
       settings: this.settings,
+      // Legacy home of the to-do list; kept only for one-time migration to the
+      // vault-backed directives file (see loadDirectives).
       todos: (_a = raw == null ? void 0 : raw.todos) != null ? _a : [],
       lastAccess: (_b = raw == null ? void 0 : raw.lastAccess) != null ? _b : Date.now(),
       seeded: (_c = raw == null ? void 0 : raw.seeded) != null ? _c : false,
       agendaCache: (_d = raw == null ? void 0 : raw.agendaCache) != null ? _d : {},
       milestoneShownDate: (_e = raw == null ? void 0 : raw.milestoneShownDate) != null ? _e : ""
     };
-    if (!this.data.seeded && this.data.todos.length === 0) {
-      this.data.todos = seedTodos();
-      this.data.seeded = true;
-    }
     this.runtime.previousAccess = this.data.lastAccess;
     await this.saveData_();
+  }
+  /** Load directives from the vault file, migrating from the old plugin-data
+   * location (or the seed defaults) the first time. */
+  async loadDirectives() {
+    var _a;
+    const existed = await this.directives.load();
+    if (existed) {
+      this.data.seeded = true;
+      return;
+    }
+    const legacy = (_a = this.data.todos) != null ? _a : [];
+    this.directives.setItems(legacy.length > 0 || this.data.seeded ? legacy : seedTodos());
+    this.data.seeded = true;
+    this.data.todos = [];
+    await this.directives.save();
+    await this.saveData_();
+  }
+  /** Vault create/modify router: reload directives when their file changes on
+   * another device (Obsidian Sync), otherwise a plain debounced refresh. */
+  onVaultChange(path) {
+    if (this.directives.isDirectivesPath(path)) {
+      void this.directives.onExternalChange(path).then((changed) => {
+        if (changed) this.refreshOpenViews("vault");
+      });
+      return;
+    }
+    this.scheduleRefresh();
   }
   async saveData_() {
     this.data.settings = this.settings;
