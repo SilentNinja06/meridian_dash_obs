@@ -1,6 +1,66 @@
 import { App, FuzzySuggestModal, Modal, Notice, Setting, TFile } from "obsidian";
 import { LibraryStore } from "../core/library";
 
+/** Create a note in a library and optionally assign it to a category (existing
+ * from the dropdown, or a new one typed in) right from the creation modal. */
+export class NewNoteModal extends Modal {
+	private title = "";
+	private picked = "";
+	private newCategory = "";
+	constructor(app: App, private store: LibraryStore, private onDone: () => void) {
+		super(app);
+	}
+	onOpen(): void {
+		this.titleEl.setText("New note");
+		const cats = this.store.listCategories().map((c) => c.name);
+		this.picked = "";
+
+		new Setting(this.contentEl).setName("Title").addText((t) => {
+			t.setPlaceholder("Note title").onChange((v) => (this.title = v));
+			t.inputEl.focus();
+			t.inputEl.addEventListener("keydown", (e) => {
+				if (e.key === "Enter") {
+					e.preventDefault();
+					void this.submit();
+				}
+			});
+		});
+
+		new Setting(this.contentEl)
+			.setName("Category")
+			.setDesc("Optional — assign on creation.")
+			.addDropdown((dd) => {
+				dd.addOption("", "(none)");
+				for (const c of cats) dd.addOption(c, c);
+				dd.setValue("").onChange((v) => (this.picked = v));
+			});
+
+		new Setting(this.contentEl)
+			.setName("Or a new category")
+			.setDesc("Creates the category and assigns this note to it.")
+			.addText((t) => t.setPlaceholder("New category name").onChange((v) => (this.newCategory = v)));
+
+		new Setting(this.contentEl)
+			.addButton((b) => b.setButtonText("Cancel").onClick(() => this.close()))
+			.addButton((b) => b.setButtonText("Create").setCta().onClick(() => void this.submit()));
+	}
+	private async submit(): Promise<void> {
+		const title = this.title.trim();
+		if (!title) {
+			new Notice("A note needs a title.");
+			return;
+		}
+		const category = this.newCategory.trim() || this.picked.trim();
+		const file = await this.store.createNote(title, category || undefined);
+		this.close();
+		this.onDone();
+		await this.app.workspace.getLeaf(false).openFile(file);
+	}
+	onClose(): void {
+		this.contentEl.empty();
+	}
+}
+
 /** Create a new category note in a library. */
 export class NewCategoryModal extends Modal {
 	private name = "";
