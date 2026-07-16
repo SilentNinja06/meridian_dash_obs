@@ -39,10 +39,19 @@
 	color: var(--mrd-bone);
 	font-family: var(--mrd-font-body);
 	padding: 16px;
+	/* Extra bottom room + the iOS safe area so the last card can scroll clear of
+	 * anything overlapping the bottom edge. */
+	padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px));
 	min-height: 100%;
 	overflow-x: hidden;
 	overflow-y: auto;
 	line-height: 1.45;
+}
+
+/* On mobile, Obsidian's floating navigation toolbar hovers over the bottom of
+ * the view — pad enough that the final card scrolls fully above it. */
+.is-mobile .mrd-root {
+	padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
 }
 
 .mrd-root *,
