@@ -1,45 +1,37 @@
-import { App, FuzzySuggestModal, Modal, Notice, Setting, TFile, prepareFuzzySearch } from "obsidian";
+import { App, Modal, Notice, Setting, TFile, prepareFuzzySearch } from "obsidian";
 import { BasePanel, placard } from "./types";
-import { SecondBrainStore } from "../core/secondbrain";
+import { LibraryStore } from "../core/library";
 
 /**
- * Second Brain panel — manage the ongoing-project library from the dashboard:
- * search it, archive notes into its Archive subfolder, create notes and
- * categories, assign notes to categories (writing both the frontmatter entry
- * and the alphabetized wikilink in the category note).
+ * Second Brain panel — the ongoing-project library. Search it, add notes, and
+ * delete / archive / unarchive them. (Category management lives on the Knowledge
+ * Base card, not here.)
  */
 export class SecondBrainPanel extends BasePanel {
 	id = "secondbrain";
 	title = "Second Brain";
 	private query = "";
 
-	private get store(): SecondBrainStore {
+	private get store(): LibraryStore {
 		return this.ctx.plugin.secondBrain;
 	}
 
-	protected async renderBody(): Promise<void> {
+	protected renderBody(): void {
 		const head = placard(this.el, "Second Brain");
 		const notes = this.store.listNotes();
 		head.createSpan({ cls: "mrd-placard-badge", text: `${notes.length} active` });
 
-		// --- actions ---
 		const actions = this.el.createDiv({ cls: "mrd-btn-row" });
-		this.btn(actions, "+ Note", "mrd-btn-primary", () =>
-			new NewNoteModal(this.ctx.app, this.store, () => this.rerender()).open()
-		);
-		this.btn(actions, "+ Category", "", () =>
-			new NewCategoryModal(this.ctx.app, this.store, () => this.rerender()).open()
-		);
-		this.btn(actions, "Assign to category", "", () => this.startAssign());
+		const add = actions.createEl("button", { cls: "mrd-btn mrd-btn-primary", text: "+ Note" });
+		add.addEventListener("click", () => new NewNoteModal(this.ctx.app, this.store, () => this.rerender()).open());
 
-		// --- search ---
 		const input = this.el.createEl("input", {
 			cls: "mrd-search-input",
 			attr: { type: "search", placeholder: "Search the Second Brain…" },
 		});
 		input.value = this.query;
 		const results = this.el.createDiv({ cls: "mrd-sb-results" });
-		const renderResults = () => {
+		const render = () => {
 			results.empty();
 			const q = this.query.trim();
 			const list = q ? this.fuzzy(notes, q) : notes.slice(0, 12);
@@ -54,45 +46,10 @@ export class SecondBrainPanel extends BasePanel {
 		};
 		input.addEventListener("input", () => {
 			this.query = input.value;
-			renderResults();
+			render();
 		});
-		renderResults();
+		render();
 
-		// --- categories ---
-		const cats = this.store.listCategories();
-		const catSection = this.el.createDiv({ cls: "mrd-sb-cats" });
-		catSection.createDiv({ cls: "mrd-subhead", text: `Categories · ${cats.length}` });
-		if (cats.length === 0) {
-			catSection.createDiv({ cls: "mrd-muted", text: "No categories yet. Create one to start organizing." });
-		}
-		for (const cat of cats) {
-			const details = catSection.createEl("details", { cls: "mrd-sb-cat" });
-			const summary = details.createEl("summary");
-			summary.createSpan({ cls: "mrd-sb-cat-name", text: cat.name });
-			const count = summary.createSpan({ cls: "mrd-chip mrd-chip-cold", text: "…" });
-			details.addEventListener(
-				"toggle",
-				async () => {
-					if (!details.open) return;
-					const members = await this.store.categoryMembers(cat.file);
-					count.setText(String(members.length));
-					const body = details.querySelector(".mrd-sb-cat-body") ?? details.createDiv({ cls: "mrd-sb-cat-body" });
-					body.empty();
-					if (members.length === 0) body.createDiv({ cls: "mrd-muted", text: "Empty." });
-					for (const m of members) {
-						const row = body.createDiv({ cls: "mrd-sb-member" });
-						const link = row.createEl("a", { cls: "mrd-sb-link", text: m });
-						link.addEventListener("click", (e) => {
-							e.preventDefault();
-							void this.ctx.app.workspace.openLinkText(m, cat.file.path, false);
-						});
-					}
-				},
-				{ once: false }
-			);
-		}
-
-		// --- archived ---
 		const archived = this.store.listArchived();
 		if (archived.length > 0) {
 			const arch = this.el.createEl("details", { cls: "mrd-sb-archived" });
@@ -105,8 +62,7 @@ export class SecondBrainPanel extends BasePanel {
 					e.preventDefault();
 					void this.ctx.app.workspace.getLeaf(false).openFile(file);
 				});
-				const restore = row.createEl("button", { cls: "mrd-icon-btn mrd-sb-icon", text: "⤺", attr: { title: "Restore" } });
-				restore.addEventListener("click", async () => {
+				this.iconBtn(row, "⤺", "Unarchive", async () => {
 					await this.store.restoreNote(file);
 					new Notice(`Restored ${file.basename}.`);
 					this.rerender();
@@ -122,28 +78,23 @@ export class SecondBrainPanel extends BasePanel {
 			e.preventDefault();
 			void this.ctx.app.workspace.getLeaf(false).openFile(file);
 		});
-		const archive = row.createEl("button", { cls: "mrd-icon-btn mrd-sb-icon", text: "🗄", attr: { title: "Archive" } });
-		archive.addEventListener("click", async () => {
+		this.iconBtn(row, "🗄", "Archive", async () => {
 			await this.store.archiveNote(file);
 			new Notice(`Archived ${file.basename}.`);
 			this.rerender();
 		});
-	}
-
-	private startAssign(): void {
-		const notes = this.store.listNotes();
-		if (notes.length === 0) {
-			new Notice("No notes to assign yet.");
-			return;
-		}
-		new NoteSuggestModal(this.ctx.app, notes, (note) => {
-			const cats = this.store.listCategories().map((c) => c.name);
-			new CategoryPromptModal(this.ctx.app, cats, async (category) => {
-				await this.store.assign(note, category);
-				new Notice(`Assigned ${note.basename} to ${category}.`);
+		this.iconBtn(row, "🗑", "Delete", () => {
+			new ConfirmModal(this.ctx.app, `Delete “${file.basename}”?`, "It goes to your configured trash and is removed from any category.", async () => {
+				await this.store.deleteNote(file);
+				new Notice(`Deleted ${file.basename}.`);
 				this.rerender();
 			}).open();
-		}).open();
+		});
+	}
+
+	private iconBtn(parent: HTMLElement, glyph: string, label: string, onClick: () => void): void {
+		const b = parent.createEl("button", { cls: "mrd-icon-btn mrd-sb-icon", text: glyph, attr: { title: label, "aria-label": label } });
+		b.addEventListener("click", onClick);
 	}
 
 	private fuzzy(files: TFile[], query: string): TFile[] {
@@ -160,24 +111,17 @@ export class SecondBrainPanel extends BasePanel {
 		}
 		return scored.sort((a, b) => b.score - a.score).slice(0, 20).map((s) => s.file);
 	}
-
-	private btn(parent: HTMLElement, label: string, cls: string, onClick: () => void): void {
-		const b = parent.createEl("button", { cls: `mrd-btn ${cls}`.trim(), text: label });
-		b.addEventListener("click", onClick);
-	}
 }
 
 // --------------------------------------------------------------- modals
 
 class NewNoteModal extends Modal {
 	private title = "";
-	private category = "";
-	constructor(app: App, private store: SecondBrainStore, private onDone: () => void) {
+	constructor(app: App, private store: LibraryStore, private onDone: () => void) {
 		super(app);
 	}
 	onOpen(): void {
-		this.titleEl.setText("New Second Brain note");
-		const cats = this.store.listCategories().map((c) => c.name);
+		this.titleEl.setText("New note");
 		new Setting(this.contentEl).setName("Title").addText((t) => {
 			t.setPlaceholder("Note title").onChange((v) => (this.title = v));
 			t.inputEl.focus();
@@ -187,11 +131,6 @@ class NewNoteModal extends Modal {
 					void this.submit();
 				}
 			});
-		});
-		new Setting(this.contentEl).setName("Category").setDesc("Optional — assign on creation.").addDropdown((dd) => {
-			dd.addOption("", "(none)");
-			for (const c of cats) dd.addOption(c, c);
-			dd.onChange((v) => (this.category = v));
 		});
 		new Setting(this.contentEl)
 			.addButton((b) => b.setButtonText("Cancel").onClick(() => this.close()))
@@ -203,7 +142,7 @@ class NewNoteModal extends Modal {
 			new Notice("A note needs a title.");
 			return;
 		}
-		const file = await this.store.createNote(title, this.category || undefined);
+		const file = await this.store.createNote(title);
 		this.close();
 		this.onDone();
 		await this.app.workspace.getLeaf(false).openFile(file);
@@ -213,99 +152,24 @@ class NewNoteModal extends Modal {
 	}
 }
 
-class NewCategoryModal extends Modal {
-	private name = "";
-	constructor(app: App, private store: SecondBrainStore, private onDone: () => void) {
+export class ConfirmModal extends Modal {
+	constructor(app: App, private heading: string, private body: string, private onConfirm: () => void) {
 		super(app);
 	}
 	onOpen(): void {
-		this.titleEl.setText("New category");
-		new Setting(this.contentEl).setName("Name").addText((t) => {
-			t.setPlaceholder("Category name").onChange((v) => (this.name = v));
-			t.inputEl.focus();
-			t.inputEl.addEventListener("keydown", (e) => {
-				if (e.key === "Enter") {
-					e.preventDefault();
-					void this.submit();
-				}
-			});
-		});
+		this.titleEl.setText(this.heading);
+		this.contentEl.createEl("p", { text: this.body });
 		new Setting(this.contentEl)
 			.addButton((b) => b.setButtonText("Cancel").onClick(() => this.close()))
-			.addButton((b) => b.setButtonText("Create").setCta().onClick(() => void this.submit()));
-	}
-	private async submit(): Promise<void> {
-		const name = this.name.trim();
-		if (!name) {
-			new Notice("A category needs a name.");
-			return;
-		}
-		await this.store.createCategory(name);
-		this.close();
-		this.onDone();
-	}
-	onClose(): void {
-		this.contentEl.empty();
-	}
-}
-
-class NoteSuggestModal extends FuzzySuggestModal<TFile> {
-	constructor(app: App, private notes: TFile[], private onChoose: (file: TFile) => void) {
-		super(app);
-		this.setPlaceholder("Pick a note to assign…");
-	}
-	getItems(): TFile[] {
-		return this.notes;
-	}
-	getItemText(file: TFile): string {
-		return file.basename;
-	}
-	onChooseItem(file: TFile): void {
-		this.onChoose(file);
-	}
-}
-
-/** Pick an existing category from a dropdown, or type a new one. */
-class CategoryPromptModal extends Modal {
-	private picked = "";
-	private newName = "";
-	constructor(app: App, private categories: string[], private onChoose: (category: string) => void) {
-		super(app);
-	}
-	onOpen(): void {
-		this.titleEl.setText("Assign to category");
-		this.picked = this.categories[0] ?? "";
-		if (this.categories.length > 0) {
-			new Setting(this.contentEl).setName("Existing category").addDropdown((dd) => {
-				for (const c of this.categories) dd.addOption(c, c);
-				dd.setValue(this.picked).onChange((v) => (this.picked = v));
-			});
-		}
-		new Setting(this.contentEl)
-			.setName("Or a new category")
-			.setDesc("Leave blank to use the one above.")
-			.addText((t) => {
-				t.setPlaceholder("New category name").onChange((v) => (this.newName = v));
-				if (this.categories.length === 0) t.inputEl.focus();
-				t.inputEl.addEventListener("keydown", (e) => {
-					if (e.key === "Enter") {
-						e.preventDefault();
-						this.submit();
-					}
-				});
-			});
-		new Setting(this.contentEl)
-			.addButton((b) => b.setButtonText("Cancel").onClick(() => this.close()))
-			.addButton((b) => b.setButtonText("Assign").setCta().onClick(() => this.submit()));
-	}
-	private submit(): void {
-		const category = this.newName.trim() || this.picked.trim();
-		if (!category) {
-			new Notice("Pick or name a category.");
-			return;
-		}
-		this.close();
-		this.onChoose(category);
+			.addButton((b) =>
+				b
+					.setButtonText("Delete")
+					.setWarning()
+					.onClick(() => {
+						this.close();
+						this.onConfirm();
+					})
+			);
 	}
 	onClose(): void {
 		this.contentEl.empty();
