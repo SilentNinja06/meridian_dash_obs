@@ -3,7 +3,7 @@
 ---
 [[SDM.base]] [[Contact Dashboard]]
 
-# Primary Activities
+# Musings
 
 
 # Completed tasks

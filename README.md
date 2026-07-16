@@ -11,10 +11,11 @@ Mobile-first, desktop-capable. One plugin, a layout shell hosting registered pan
 - **Directives** — a persistent to-do engine: recurring items, future scheduling, per-occurrence dismiss, and roll-and-flag for slipped items. Does not reset overnight; completions are archived under `# Completed tasks`.
 - **Today's Agenda** — up to 10 Proton Calendar share links (public ICS), today only, with an offline cache and visible fetch failures.
 - **Quote of the Day** — reads `scripts/qotd/quotes.json` and stays in sync with the daily-note block.
-- **Daily Log** — free-text editors for Primary Activities, Daily log → Primary/Supplemental, and Reconsider tomorrow, writing straight into today's note.
-- **Nourishment / Regulation / Contacts / Meals** — read-only surfaces over the ARFID, Spiral & Shutdown, Simple Contact Manager, and Recipe Manager plugins, with one-tap actions.
+- **Daily Log** — free-text editors for Musings / random thoughts, Daily log → Primary/Supplemental, and Reconsider tomorrow, writing straight into today's note, plus a read-only carry-over of *yesterday's* Reconsider-tomorrow.
+- **Nourishment / Regulation / Contacts / Meals** — read-only surfaces over the ARFID, Spiral & Shutdown, Simple Contact Manager, and Recipe Manager plugins, with one-tap actions. The Contacts card logs a specific contact directly (no re-pick).
 - **Quick Actions** — every registered command, grouped, with the hard-moment actions one tap away.
 - **Knowledge Base** — fuzzy search scoped to `Knowledge base/Notes/`.
+- **Second Brain** — manage the ongoing-project library: search it, archive notes into its Archive subfolder, create notes and categories, and assign notes to categories (writing both a `categories:` frontmatter entry and an alphabetized `[[wikilink]]` into the category note).
 - **Navigation** — user-editable destinations (notes, Bases, and plugin dashboards).
 
 Every panel is toggleable and reorderable in settings. A throwing panel renders a calm error card and never takes down the dashboard.

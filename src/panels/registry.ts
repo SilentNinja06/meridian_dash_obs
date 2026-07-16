@@ -11,6 +11,7 @@ import { CrmPanel } from "./crm";
 import { MealsPanel } from "./meals";
 import { ActionsPanel } from "./actions";
 import { SearchPanel } from "./search";
+import { SecondBrainPanel } from "./secondbrain";
 import { PlacesPanel } from "./places";
 
 /** Registration order = default panel order (§4, §11.2). Everything ships
@@ -29,6 +30,7 @@ export const PANEL_ORDER: string[] = [
 	"spiral",
 	"crm",
 	"search",
+	"secondbrain",
 	"places",
 ];
 
@@ -45,6 +47,7 @@ export const PANEL_TITLES: Record<string, string> = {
 	spiral: "Regulation Log",
 	crm: "Contacts",
 	search: "Knowledge Base",
+	secondbrain: "Second Brain",
 	places: "Navigation",
 };
 
@@ -63,6 +66,7 @@ const FACTORIES: Record<string, PanelFactory> = {
 	spiral: () => new SpiralPanel(),
 	crm: () => new CrmPanel(),
 	search: () => new SearchPanel(),
+	secondbrain: () => new SecondBrainPanel(),
 	places: () => new PlacesPanel(),
 };
 

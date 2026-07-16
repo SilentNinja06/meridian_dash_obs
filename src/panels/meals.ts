@@ -74,6 +74,5 @@ export class MealsPanel extends BasePanel {
 		commandButton(actions, bridge, "recipe-manager:open-recipe", "Open recipe", { onRun: nudge });
 		commandButton(actions, bridge, "recipe-manager:new-recipe", "New recipe", { onRun: nudge });
 		commandButton(actions, bridge, "recipe-manager:recipe-index", "Recipe index", { onRun: nudge });
-		commandButton(actions, bridge, "recipe-manager:rcpm-pantry-toggle", "Pantry toggle", { onRun: nudge });
 	}
 }

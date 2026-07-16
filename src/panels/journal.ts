@@ -1,12 +1,23 @@
+import { moment } from "obsidian";
 import { BasePanel, RefreshReason, placard } from "./types";
-import { FieldSpec, headingField, labelField, readDailyField, writeDailyField } from "../core/dailynote";
+import {
+	FieldSpec,
+	headingField,
+	labelField,
+	readDailyField,
+	readDailyNoteRaw,
+	readField,
+	writeDailyField,
+} from "../core/dailynote";
 
 /**
- * Journal / free-text panel (§7.6). Four fields, each an editor for a section of
- * today's note: Primary Activities, Daily log → Primary, Daily log →
- * Supplemental, and Reconsider tomorrow. Debounced autosave (~800ms); textareas
- * that grow. These are editors *for the note*, not a separate store. On an
- * external refresh we reload values unless the Operator is mid-edit.
+ * Journal / free-text panel (§7.6). Four editable fields, each an editor for a
+ * section of today's note: Musings / random thoughts, Daily log → Primary,
+ * Daily log → Supplemental, and Reconsider tomorrow. Plus a read-only view of
+ * *yesterday's* Reconsider-tomorrow, carried onto today. Debounced autosave
+ * (~800ms); textareas that grow. These are editors *for the note*, not a
+ * separate store. On an external refresh we reload values unless the Operator
+ * is mid-edit.
  */
 const SUPPLEMENTAL_STOP = /^\s*-\s+Supplemental\s*:?\s*$/i;
 const SPIRAL_MARKER = /%%\s*spiral-log\s*%%/i;
@@ -18,7 +29,7 @@ interface FieldDef {
 }
 
 const FIELDS: FieldDef[] = [
-	{ key: "primary-activities", label: "Primary Activities", spec: headingField("Primary Activities") },
+	{ key: "musings", label: "Musings / random thoughts", spec: headingField("Musings") },
 	{ key: "log-primary", label: "Daily log · Primary", spec: labelField("Primary", [SUPPLEMENTAL_STOP, SPIRAL_MARKER]) },
 	{ key: "log-supplemental", label: "Daily log · Supplemental", spec: labelField("Supplemental", [SPIRAL_MARKER]) },
 	{ key: "reconsider", label: "Reconsider tomorrow", spec: headingField("Reconsider tomorrow") },
@@ -40,10 +51,27 @@ export class JournalPanel extends BasePanel {
 
 	protected async renderBody(): Promise<void> {
 		placard(this.el, "Daily Log");
+		await this.renderYesterdayReconsider();
 		const wrap = this.el.createDiv({ cls: "mrd-journal" });
 		for (const field of FIELDS) {
 			await this.renderField(wrap, field);
 		}
+	}
+
+	/** Read-only carry-over of yesterday's "Reconsider tomorrow" onto today. */
+	private async renderYesterdayReconsider(): Promise<void> {
+		const yesterday = moment().subtract(1, "day").format("YYYY-MM-DD");
+		let text = "";
+		try {
+			const raw = await readDailyNoteRaw(this.ctx.app, yesterday);
+			text = tidy(readField(raw, headingField("Reconsider tomorrow")));
+		} catch (e) {
+			console.error("MERIDIAN: could not read yesterday's reconsider", e);
+		}
+		if (!text) return; // nothing worth carrying — stay quiet
+		const block = this.el.createDiv({ cls: "mrd-carry" });
+		block.createDiv({ cls: "mrd-carry-label", text: "Carried from yesterday · to reconsider" });
+		block.createDiv({ cls: "mrd-carry-body", text });
 	}
 
 	private async renderField(parent: HTMLElement, field: FieldDef): Promise<void> {
@@ -85,4 +113,15 @@ export class JournalPanel extends BasePanel {
 function autosize(ta: HTMLTextAreaElement): void {
 	ta.style.height = "auto";
 	ta.style.height = Math.max(48, ta.scrollHeight) + "px";
+}
+
+/** Drop empty bullet/checkbox placeholders so an untouched section reads as
+ * empty rather than carrying a lone "- [ ]". */
+function tidy(text: string): string {
+	return text
+		.split("\n")
+		.map((l) => l.replace(/\s+$/, ""))
+		.filter((l) => l.trim() !== "" && !/^\s*-\s*(\[[ xX]?\]\s*)?$/.test(l))
+		.join("\n")
+		.trim();
 }

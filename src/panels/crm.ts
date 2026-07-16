@@ -62,7 +62,9 @@ export class CrmPanel extends BasePanel {
 		meta.createSpan({ cls: c.overdue ? "mrd-chip mrd-chip-warn" : "mrd-chip", text: c.overdue ? "overdue" : "due today" });
 		if (c.daysSince !== null) meta.createSpan({ cls: "mrd-chip mrd-chip-cold", text: `${c.daysSince}d since` });
 
-		commandButton(row, this.ctx.bridge, "simple-contact-manager:log-interaction", "Log", { cls: "mrd-btn-sm" });
+		// Log this specific contact — no re-pick from a fuzzy list.
+		const log = row.createEl("button", { cls: "mrd-btn mrd-btn-sm", text: "Log" });
+		log.addEventListener("click", () => this.ctx.bridge.crmLogInteraction(c.path));
 	}
 
 	/** Backfill any `### <today>` interactions from contact notes that aren't in

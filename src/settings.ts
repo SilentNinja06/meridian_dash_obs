@@ -25,6 +25,11 @@ export interface MeridianSettings {
 	agendaUrls: CalendarLink[];
 	kbSearchPath: string;
 	places: PlaceLink[];
+	/** Second Brain (ongoing-project library) folder + subfolders + list heading. */
+	secondBrainPath: string;
+	secondBrainCategoriesSubfolder: string;
+	secondBrainArchiveSubfolder: string;
+	secondBrainListHeading: string;
 	/** Vault file the persistent directives (to-dos) live in, so Obsidian Sync
 	 * propagates them across devices. */
 	directivesPath: string;
@@ -55,6 +60,10 @@ export const DEFAULT_SETTINGS: MeridianSettings = {
 	agendaRefreshMinutes: 30,
 	agendaUrls: [],
 	kbSearchPath: "Knowledge base/Notes/",
+	secondBrainPath: "Second Brain",
+	secondBrainCategoriesSubfolder: "Categories",
+	secondBrainArchiveSubfolder: "Archive",
+	secondBrainListHeading: "Notes",
 	directivesPath: "MERIDIAN/Directives.json",
 	places: [
 		{ label: "Central Hub", target: "Central Hub", type: "note" },
@@ -216,6 +225,13 @@ export class MeridianSettingTab extends PluginSettingTab {
 					await this.save();
 				})
 			);
+
+		// -------- second brain --------
+		new Setting(containerEl).setName("Second Brain").setHeading();
+		this.addText(containerEl, "Second Brain folder", "The ongoing-project library the Second Brain panel manages.", s.secondBrainPath, (v) => (s.secondBrainPath = v || "Second Brain"));
+		this.addText(containerEl, "Categories subfolder", "Where category notes live, relative to the Second Brain folder.", s.secondBrainCategoriesSubfolder, (v) => (s.secondBrainCategoriesSubfolder = v || "Categories"));
+		this.addText(containerEl, "Archive subfolder", "Where archived notes are moved, relative to the Second Brain folder.", s.secondBrainArchiveSubfolder, (v) => (s.secondBrainArchiveSubfolder = v || "Archive"));
+		this.addText(containerEl, "Category list heading", "The heading in a category note under which the alphabetized wikilinks live.", s.secondBrainListHeading, (v) => (s.secondBrainListHeading = v || "Notes"));
 
 		// -------- places --------
 		new Setting(containerEl).setName("Places / navigation").setHeading();

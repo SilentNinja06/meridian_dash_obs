@@ -9,6 +9,7 @@ import {
 import { Bridge } from "./core/bridge";
 import { TodoStore, seedTodos } from "./core/todostore";
 import { DirectivesStore } from "./core/directivesstore";
+import { SecondBrainStore } from "./core/secondbrain";
 import { MeridianRuntime, RefreshReason } from "./panels/types";
 import { MeridianView, VIEW_TYPE_MERIDIAN } from "./view";
 
@@ -17,6 +18,7 @@ export default class MeridianDashPlugin extends Plugin {
 	bridge!: Bridge;
 	todos!: TodoStore;
 	directives!: DirectivesStore;
+	secondBrain!: SecondBrainStore;
 	runtime: MeridianRuntime = {
 		sessionStart: Date.now(),
 		previousAccess: Date.now(),
@@ -31,6 +33,12 @@ export default class MeridianDashPlugin extends Plugin {
 		await this.load_();
 
 		this.bridge = new Bridge(this.app);
+		this.secondBrain = new SecondBrainStore(this.app, () => ({
+			root: this.settings.secondBrainPath,
+			categoriesSubfolder: this.settings.secondBrainCategoriesSubfolder,
+			archiveSubfolder: this.settings.secondBrainArchiveSubfolder,
+			listHeading: this.settings.secondBrainListHeading,
+		}));
 		this.directives = new DirectivesStore(this.app, () => this.settings.directivesPath);
 		await this.loadDirectives();
 		this.todos = new TodoStore(
