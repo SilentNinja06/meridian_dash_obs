@@ -18,6 +18,8 @@ export interface PlaceLink {
 
 export interface MeridianSettings {
 	openOnStartup: boolean;
+	/** Replace the empty New Tab page with the dashboard. */
+	replaceNewTab: boolean;
 	panelOrder: string[];
 	enabledPanels: Record<string, boolean>;
 	meridianRotationMinutes: number;
@@ -61,6 +63,7 @@ export interface MeridianData {
 
 export const DEFAULT_SETTINGS: MeridianSettings = {
 	openOnStartup: false,
+	replaceNewTab: false,
 	panelOrder: [...PANEL_ORDER],
 	enabledPanels: Object.fromEntries(PANEL_ORDER.map((id) => [id, true])),
 	meridianRotationMinutes: 5,
@@ -132,11 +135,22 @@ export class MeridianSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName("Open on startup")
-			.setDesc("Replace the empty new tab with the MERIDIAN dashboard when Obsidian starts.")
+			.setDesc("Open the MERIDIAN dashboard when Obsidian starts.")
 			.addToggle((t) =>
 				t.setValue(s.openOnStartup).onChange(async (v) => {
 					s.openOnStartup = v;
 					await this.save();
+				})
+			);
+
+		new Setting(containerEl)
+			.setName("Replace the New Tab page")
+			.setDesc("Turn every empty New Tab into the dashboard, so it becomes your landing view instead of the empty page or the daily note.")
+			.addToggle((t) =>
+				t.setValue(s.replaceNewTab).onChange(async (v) => {
+					s.replaceNewTab = v;
+					await this.save();
+					if (v) this.plugin.replaceActiveEmptyLeaf();
 				})
 			);
 

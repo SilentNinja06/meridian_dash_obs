@@ -88,8 +88,26 @@ export default class MeridianDashPlugin extends Plugin {
 		// directives file) or touches the workspace waits until it is ready.
 		this.app.workspace.onLayoutReady(() => {
 			void this.loadDirectives().then(() => this.refreshOpenViews("vault"));
+			// Turn empty New Tab pages into the dashboard when that's enabled.
+			this.registerEvent(
+				this.app.workspace.on("active-leaf-change", (leaf) => this.maybeReplaceEmptyLeaf(leaf))
+			);
+			if (this.settings.replaceNewTab) this.replaceActiveEmptyLeaf();
 			if (this.settings.openOnStartup) void this.openDashboard(false);
 		});
+	}
+
+	/** If enabled, swap an empty New Tab leaf for the dashboard. */
+	private maybeReplaceEmptyLeaf(leaf: WorkspaceLeaf | null): void {
+		if (!this.settings.replaceNewTab || !leaf) return;
+		if (leaf.view?.getViewType() === "empty") {
+			void leaf.setViewState({ type: VIEW_TYPE_MERIDIAN });
+		}
+	}
+
+	/** Replace the currently-active leaf if it's an empty New Tab. */
+	replaceActiveEmptyLeaf(): void {
+		this.maybeReplaceEmptyLeaf(this.app.workspace.activeLeaf ?? null);
 	}
 
 	onunload(): void {

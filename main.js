@@ -2849,6 +2849,7 @@ function createPanels(order, enabled) {
 // src/settings.ts
 var DEFAULT_SETTINGS = {
   openOnStartup: false,
+  replaceNewTab: false,
   panelOrder: [...PANEL_ORDER],
   enabledPanels: Object.fromEntries(PANEL_ORDER.map((id) => [id, true])),
   meridianRotationMinutes: 5,
@@ -2911,10 +2912,17 @@ var MeridianSettingTab = class extends import_obsidian15.PluginSettingTab {
     const s = this.plugin.settings;
     containerEl.empty();
     new import_obsidian15.Setting(containerEl).setName("General").setHeading();
-    new import_obsidian15.Setting(containerEl).setName("Open on startup").setDesc("Replace the empty new tab with the MERIDIAN dashboard when Obsidian starts.").addToggle(
+    new import_obsidian15.Setting(containerEl).setName("Open on startup").setDesc("Open the MERIDIAN dashboard when Obsidian starts.").addToggle(
       (t) => t.setValue(s.openOnStartup).onChange(async (v) => {
         s.openOnStartup = v;
         await this.save();
+      })
+    );
+    new import_obsidian15.Setting(containerEl).setName("Replace the New Tab page").setDesc("Turn every empty New Tab into the dashboard, so it becomes your landing view instead of the empty page or the daily note.").addToggle(
+      (t) => t.setValue(s.replaceNewTab).onChange(async (v) => {
+        s.replaceNewTab = v;
+        await this.save();
+        if (v) this.plugin.replaceActiveEmptyLeaf();
       })
     );
     new import_obsidian15.Setting(containerEl).setName("Panels").setDesc("Toggle panels on or off, and reorder them. Everything is visible by default; the layout stacks to one column on a phone and spreads to a grid on the desktop.").setHeading();
@@ -3921,8 +3929,25 @@ var MeridianDashPlugin = class extends import_obsidian20.Plugin {
     this.registerEvent(this.app.vault.on("rename", () => this.scheduleRefresh()));
     this.app.workspace.onLayoutReady(() => {
       void this.loadDirectives().then(() => this.refreshOpenViews("vault"));
+      this.registerEvent(
+        this.app.workspace.on("active-leaf-change", (leaf) => this.maybeReplaceEmptyLeaf(leaf))
+      );
+      if (this.settings.replaceNewTab) this.replaceActiveEmptyLeaf();
       if (this.settings.openOnStartup) void this.openDashboard(false);
     });
+  }
+  /** If enabled, swap an empty New Tab leaf for the dashboard. */
+  maybeReplaceEmptyLeaf(leaf) {
+    var _a;
+    if (!this.settings.replaceNewTab || !leaf) return;
+    if (((_a = leaf.view) == null ? void 0 : _a.getViewType()) === "empty") {
+      void leaf.setViewState({ type: VIEW_TYPE_MERIDIAN });
+    }
+  }
+  /** Replace the currently-active leaf if it's an empty New Tab. */
+  replaceActiveEmptyLeaf() {
+    var _a;
+    this.maybeReplaceEmptyLeaf((_a = this.app.workspace.activeLeaf) != null ? _a : null);
   }
   onunload() {
     if (this.refreshTimer !== null) window.clearTimeout(this.refreshTimer);
