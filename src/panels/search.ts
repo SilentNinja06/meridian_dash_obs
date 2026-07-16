@@ -1,6 +1,6 @@
 import { TFile, prepareFuzzySearch } from "obsidian";
 import { BasePanel, placard } from "./types";
-import { NewCategoryModal, runAssignFlow } from "./categorymodals";
+import { NewCategoryModal, NewNoteModal, runAssignFlow } from "./categorymodals";
 
 /**
  * Knowledge-base search (§7.12). Fuzzy search scoped to the configured folder
@@ -50,9 +50,11 @@ export class SearchPanel extends BasePanel {
 		this.buildIndex();
 		placard(this.el, "Knowledge Base");
 
-		// Category management.
+		// Notes + category management.
 		const store = this.ctx.plugin.knowledgeBase;
 		const actions = this.el.createDiv({ cls: "mrd-btn-row" });
+		const note = actions.createEl("button", { cls: "mrd-btn mrd-btn-primary", text: "+ Note" });
+		note.addEventListener("click", () => new NewNoteModal(this.ctx.app, store, () => this.rerender()).open());
 		const cat = actions.createEl("button", { cls: "mrd-btn", text: "+ Category" });
 		cat.addEventListener("click", () => new NewCategoryModal(this.ctx.app, store, () => this.rerender()).open());
 		const assign = actions.createEl("button", { cls: "mrd-btn", text: "Assign to category" });

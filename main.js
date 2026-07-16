@@ -2288,6 +2288,53 @@ var import_obsidian13 = require("obsidian");
 
 // src/panels/categorymodals.ts
 var import_obsidian12 = require("obsidian");
+var NewNoteModal = class extends import_obsidian12.Modal {
+  constructor(app, store, onDone) {
+    super(app);
+    this.store = store;
+    this.onDone = onDone;
+    this.title = "";
+    this.picked = "";
+    this.newCategory = "";
+  }
+  onOpen() {
+    this.titleEl.setText("New note");
+    const cats = this.store.listCategories().map((c) => c.name);
+    this.picked = "";
+    new import_obsidian12.Setting(this.contentEl).setName("Title").addText((t) => {
+      t.setPlaceholder("Note title").onChange((v) => this.title = v);
+      t.inputEl.focus();
+      t.inputEl.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          void this.submit();
+        }
+      });
+    });
+    new import_obsidian12.Setting(this.contentEl).setName("Category").setDesc("Optional \u2014 assign on creation.").addDropdown((dd) => {
+      dd.addOption("", "(none)");
+      for (const c of cats) dd.addOption(c, c);
+      dd.setValue("").onChange((v) => this.picked = v);
+    });
+    new import_obsidian12.Setting(this.contentEl).setName("Or a new category").setDesc("Creates the category and assigns this note to it.").addText((t) => t.setPlaceholder("New category name").onChange((v) => this.newCategory = v));
+    new import_obsidian12.Setting(this.contentEl).addButton((b) => b.setButtonText("Cancel").onClick(() => this.close())).addButton((b) => b.setButtonText("Create").setCta().onClick(() => void this.submit()));
+  }
+  async submit() {
+    const title = this.title.trim();
+    if (!title) {
+      new import_obsidian12.Notice("A note needs a title.");
+      return;
+    }
+    const category = this.newCategory.trim() || this.picked.trim();
+    const file = await this.store.createNote(title, category || void 0);
+    this.close();
+    this.onDone();
+    await this.app.workspace.getLeaf(false).openFile(file);
+  }
+  onClose() {
+    this.contentEl.empty();
+  }
+};
 var NewCategoryModal = class extends import_obsidian12.Modal {
   constructor(app, store, onDone) {
     super(app);
@@ -2428,6 +2475,8 @@ var SearchPanel = class extends BasePanel {
     placard(this.el, "Knowledge Base");
     const store = this.ctx.plugin.knowledgeBase;
     const actions = this.el.createDiv({ cls: "mrd-btn-row" });
+    const note = actions.createEl("button", { cls: "mrd-btn mrd-btn-primary", text: "+ Note" });
+    note.addEventListener("click", () => new NewNoteModal(this.ctx.app, store, () => this.rerender()).open());
     const cat = actions.createEl("button", { cls: "mrd-btn", text: "+ Category" });
     cat.addEventListener("click", () => new NewCategoryModal(this.ctx.app, store, () => this.rerender()).open());
     const assign2 = actions.createEl("button", { cls: "mrd-btn", text: "Assign to category" });
@@ -2564,7 +2613,7 @@ var SecondBrainPanel = class extends BasePanel {
     head.createSpan({ cls: "mrd-placard-badge", text: `${notes.length} active` });
     const actions = this.el.createDiv({ cls: "mrd-btn-row" });
     const add = actions.createEl("button", { cls: "mrd-btn mrd-btn-primary", text: "+ Note" });
-    add.addEventListener("click", () => new NewNoteModal(this.ctx.app, this.store, () => this.rerender()).open());
+    add.addEventListener("click", () => new NewNoteModal2(this.ctx.app, this.store, () => this.rerender()).open());
     const input = this.el.createEl("input", {
       cls: "mrd-search-input",
       attr: { type: "search", placeholder: "Search the Second Brain\u2026" }
@@ -2649,7 +2698,7 @@ var SecondBrainPanel = class extends BasePanel {
     return scored.sort((a, b) => b.score - a.score).slice(0, 20).map((s) => s.file);
   }
 };
-var NewNoteModal = class extends import_obsidian14.Modal {
+var NewNoteModal2 = class extends import_obsidian14.Modal {
   constructor(app, store, onDone) {
     super(app);
     this.store = store;
