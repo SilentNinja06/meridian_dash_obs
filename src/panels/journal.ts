@@ -26,13 +26,15 @@ interface FieldDef {
 	key: string;
 	label: string;
 	spec: FieldSpec;
+	/** Strip empty `- [ ]` / bullet placeholders when loading the field. */
+	stripPlaceholder?: boolean;
 }
 
 const FIELDS: FieldDef[] = [
 	{ key: "musings", label: "Musings / random thoughts", spec: headingField("Musings") },
 	{ key: "log-primary", label: "Daily log · Primary", spec: labelField("Primary", [SUPPLEMENTAL_STOP, SPIRAL_MARKER]) },
 	{ key: "log-supplemental", label: "Daily log · Supplemental", spec: labelField("Supplemental", [SPIRAL_MARKER]) },
-	{ key: "reconsider", label: "Reconsider tomorrow", spec: headingField("Reconsider tomorrow") },
+	{ key: "reconsider", label: "Reconsider tomorrow", spec: headingField("Reconsider tomorrow"), stripPlaceholder: true },
 ];
 
 export class JournalPanel extends BasePanel {
@@ -78,7 +80,8 @@ export class JournalPanel extends BasePanel {
 		const block = parent.createDiv({ cls: "mrd-journal-field" });
 		block.createDiv({ cls: "mrd-journal-label", text: field.label });
 		const ta = block.createEl("textarea", { cls: "mrd-journal-input" });
-		ta.value = await readDailyField(this.ctx.app, field.spec);
+		const loaded = await readDailyField(this.ctx.app, field.spec);
+		ta.value = field.stripPlaceholder ? tidy(loaded) : loaded;
 		autosize(ta);
 
 		let timer: number | null = null;
