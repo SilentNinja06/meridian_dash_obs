@@ -90,9 +90,13 @@ export class JournalPanel extends BasePanel {
 				console.error("MERIDIAN: journal save failed", e)
 			);
 		};
-		ta.addEventListener("focus", () => (this.editing = true));
+		ta.addEventListener("focus", () => {
+			this.editing = true;
+			this.ctx.runtime.typingUntil = Date.now() + 2000;
+		});
 		ta.addEventListener("blur", () => {
 			this.editing = false;
+			this.ctx.runtime.typingUntil = 0;
 			if (timer !== null) {
 				window.clearTimeout(timer);
 				timer = null;
@@ -100,6 +104,9 @@ export class JournalPanel extends BasePanel {
 			save();
 		});
 		ta.addEventListener("input", () => {
+			// Hold off the vault-refresh bus while actively typing so the layout
+			// doesn't jump; the window is renewed on each keystroke.
+			this.ctx.runtime.typingUntil = Date.now() + 2000;
 			autosize(ta);
 			if (timer !== null) window.clearTimeout(timer);
 			timer = window.setTimeout(() => {

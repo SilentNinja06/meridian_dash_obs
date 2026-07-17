@@ -16,6 +16,9 @@ export interface MeridianRuntime {
 	recentLines: string[];
 	/** While `Date.now() < foodFocusUntil`, the `food` pool is eligible (§7.3). */
 	foodFocusUntil: number;
+	/** While `Date.now() < typingUntil`, the Operator is typing in a free-text
+	 * field; the vault-refresh bus is deferred so the layout doesn't jump. */
+	typingUntil: number;
 }
 
 export interface PanelContext {

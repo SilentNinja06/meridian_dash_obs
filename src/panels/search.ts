@@ -83,17 +83,20 @@ export class SearchPanel extends BasePanel {
 			section.createDiv({ cls: "mrd-muted", text: "No categories yet. Create one to start organizing." });
 			return;
 		}
-		for (const cat of cats) {
-			const details = section.createEl("details", { cls: "mrd-sb-cat" });
-			const summary = details.createEl("summary");
-			summary.createSpan({ cls: "mrd-sb-cat-name", text: cat.name });
-			const count = summary.createSpan({ cls: "mrd-chip mrd-chip-cold", text: "…" });
-			details.addEventListener("toggle", async () => {
-				if (!details.open) return;
-				const members = await store.categoryMembers(cat.file);
-				count.setText(String(members.length));
-				const body = (details.querySelector(".mrd-sb-cat-body") as HTMLElement) ?? details.createDiv({ cls: "mrd-sb-cat-body" });
-				body.empty();
+		const listEl = section.createDiv();
+		// Read every category's members up front so the counts show immediately
+		// (cachedRead is memory-cached, so this is cheap on subsequent renders).
+		void (async () => {
+			const withMembers = await Promise.all(
+				cats.map(async (c) => ({ cat: c, members: await store.categoryMembers(c.file) }))
+			);
+			if (!listEl.isConnected) return;
+			for (const { cat, members } of withMembers) {
+				const details = listEl.createEl("details", { cls: "mrd-sb-cat" });
+				const summary = details.createEl("summary");
+				summary.createSpan({ cls: "mrd-sb-cat-name", text: cat.name });
+				summary.createSpan({ cls: "mrd-chip mrd-chip-cold", text: String(members.length) });
+				const body = details.createDiv({ cls: "mrd-sb-cat-body" });
 				if (members.length === 0) body.createDiv({ cls: "mrd-muted", text: "Empty." });
 				for (const m of members) {
 					const row = body.createDiv({ cls: "mrd-sb-member" });
@@ -103,8 +106,8 @@ export class SearchPanel extends BasePanel {
 						void this.ctx.app.workspace.openLinkText(m, cat.file.path, false);
 					});
 				}
-			});
-		}
+			}
+		})();
 	}
 
 	private runQuery(query: string): void {
