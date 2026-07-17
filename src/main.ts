@@ -25,6 +25,7 @@ export default class MeridianDashPlugin extends Plugin {
 		previousAccess: Date.now(),
 		recentLines: [],
 		foodFocusUntil: 0,
+		typingUntil: 0,
 	};
 
 	private data!: MeridianData;
@@ -240,6 +241,12 @@ export default class MeridianDashPlugin extends Plugin {
 		if (this.refreshTimer !== null) window.clearTimeout(this.refreshTimer);
 		this.refreshTimer = window.setTimeout(() => {
 			this.refreshTimer = null;
+			// Don't re-render (and reflow the masonry) while the Operator is typing
+			// in a free-text field — defer until a beat after they stop.
+			if (Date.now() < this.runtime.typingUntil) {
+				this.scheduleRefresh();
+				return;
+			}
 			this.refreshOpenViews("vault");
 		}, 300);
 	}

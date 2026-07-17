@@ -1938,9 +1938,13 @@ var JournalPanel = class extends BasePanel {
         (e) => console.error("MERIDIAN: journal save failed", e)
       );
     };
-    ta.addEventListener("focus", () => this.editing = true);
+    ta.addEventListener("focus", () => {
+      this.editing = true;
+      this.ctx.runtime.typingUntil = Date.now() + 2e3;
+    });
     ta.addEventListener("blur", () => {
       this.editing = false;
+      this.ctx.runtime.typingUntil = 0;
       if (timer !== null) {
         window.clearTimeout(timer);
         timer = null;
@@ -1948,6 +1952,7 @@ var JournalPanel = class extends BasePanel {
       save();
     });
     ta.addEventListener("input", () => {
+      this.ctx.runtime.typingUntil = Date.now() + 2e3;
       autosize(ta);
       if (timer !== null) window.clearTimeout(timer);
       timer = window.setTimeout(() => {
@@ -2532,18 +2537,18 @@ var SearchPanel = class extends BasePanel {
       section.createDiv({ cls: "mrd-muted", text: "No categories yet. Create one to start organizing." });
       return;
     }
-    for (const cat of cats) {
-      const details = section.createEl("details", { cls: "mrd-sb-cat" });
-      const summary = details.createEl("summary");
-      summary.createSpan({ cls: "mrd-sb-cat-name", text: cat.name });
-      const count = summary.createSpan({ cls: "mrd-chip mrd-chip-cold", text: "\u2026" });
-      details.addEventListener("toggle", async () => {
-        var _a;
-        if (!details.open) return;
-        const members = await store.categoryMembers(cat.file);
-        count.setText(String(members.length));
-        const body = (_a = details.querySelector(".mrd-sb-cat-body")) != null ? _a : details.createDiv({ cls: "mrd-sb-cat-body" });
-        body.empty();
+    const listEl = section.createDiv();
+    void (async () => {
+      const withMembers = await Promise.all(
+        cats.map(async (c) => ({ cat: c, members: await store.categoryMembers(c.file) }))
+      );
+      if (!listEl.isConnected) return;
+      for (const { cat, members } of withMembers) {
+        const details = listEl.createEl("details", { cls: "mrd-sb-cat" });
+        const summary = details.createEl("summary");
+        summary.createSpan({ cls: "mrd-sb-cat-name", text: cat.name });
+        summary.createSpan({ cls: "mrd-chip mrd-chip-cold", text: String(members.length) });
+        const body = details.createDiv({ cls: "mrd-sb-cat-body" });
         if (members.length === 0) body.createDiv({ cls: "mrd-muted", text: "Empty." });
         for (const m of members) {
           const row = body.createDiv({ cls: "mrd-sb-member" });
@@ -2553,8 +2558,8 @@ var SearchPanel = class extends BasePanel {
             void this.ctx.app.workspace.openLinkText(m, cat.file.path, false);
           });
         }
-      });
-    }
+      }
+    })();
   }
   runQuery(query) {
     const q = query.trim();
@@ -3954,7 +3959,8 @@ var MeridianDashPlugin = class extends import_obsidian20.Plugin {
       sessionStart: Date.now(),
       previousAccess: Date.now(),
       recentLines: [],
-      foodFocusUntil: 0
+      foodFocusUntil: 0,
+      typingUntil: 0
     };
     this.refreshTimer = null;
   }
@@ -4129,6 +4135,10 @@ var MeridianDashPlugin = class extends import_obsidian20.Plugin {
     if (this.refreshTimer !== null) window.clearTimeout(this.refreshTimer);
     this.refreshTimer = window.setTimeout(() => {
       this.refreshTimer = null;
+      if (Date.now() < this.runtime.typingUntil) {
+        this.scheduleRefresh();
+        return;
+      }
       this.refreshOpenViews("vault");
     }, 300);
   }
