@@ -20,6 +20,8 @@ export interface MeridianSettings {
 	openOnStartup: boolean;
 	/** Replace the empty New Tab page with the dashboard. */
 	replaceNewTab: boolean;
+	/** Note/base opened by the Calendar card's header button. */
+	logsBaseNote: string;
 	panelOrder: string[];
 	enabledPanels: Record<string, boolean>;
 	meridianRotationMinutes: number;
@@ -64,6 +66,7 @@ export interface MeridianData {
 export const DEFAULT_SETTINGS: MeridianSettings = {
 	openOnStartup: false,
 	replaceNewTab: false,
+	logsBaseNote: "Logs Hub.base",
 	panelOrder: [...PANEL_ORDER],
 	enabledPanels: Object.fromEntries(PANEL_ORDER.map((id) => [id, true])),
 	meridianRotationMinutes: 5,
@@ -246,6 +249,17 @@ export class MeridianSettingTab extends PluginSettingTab {
 					await this.save();
 				});
 			});
+
+		// -------- calendar --------
+		new Setting(containerEl).setName("Calendar").setHeading();
+		this.addText(
+			containerEl,
+			"Logs base note",
+			"Note or .base file opened by the Calendar card's header button (e.g. Logs Hub.base). Leave blank to hide the button.",
+			s.logsBaseNote,
+			(v) => (s.logsBaseNote = v),
+			true
+		);
 
 		// -------- knowledge base --------
 		new Setting(containerEl).setName("Knowledge base").setHeading();

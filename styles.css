@@ -875,6 +875,105 @@
 	text-align: left;
 }
 
+/* ------------------------------------------------------------- calendar */
+
+.mrd-cal-basebtn {
+	margin-left: auto;
+}
+.mrd-cal-nav {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin: 2px 0 8px;
+}
+.mrd-cal-title {
+	flex: 1;
+	font-family: var(--mrd-font-display);
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	font-size: 0.86rem;
+	color: var(--mrd-bone);
+}
+.mrd-cal-navbtn {
+	min-height: 34px;
+	min-width: 34px;
+	padding: 0 8px;
+	background: var(--mrd-ash);
+	border: 1px solid var(--mrd-line);
+	border-radius: 5px;
+	color: var(--mrd-bone-dim);
+	cursor: pointer;
+	font-size: 0.8rem;
+}
+.mrd-cal-navbtn:hover {
+	color: var(--mrd-bone);
+	border-color: var(--mrd-amber);
+}
+.mrd-cal-grid {
+	display: grid;
+	grid-template-columns: repeat(7, 1fr);
+	gap: 3px;
+}
+.mrd-cal-dow {
+	text-align: center;
+	font-family: var(--mrd-font-mono);
+	font-size: 0.6rem;
+	letter-spacing: 0.06em;
+	color: var(--mrd-bone-faint);
+	padding-bottom: 2px;
+	text-transform: uppercase;
+}
+.mrd-cal-cell {
+	position: relative;
+	aspect-ratio: 1 / 1;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	min-height: 38px;
+	border: 1px solid var(--mrd-line);
+	border-radius: 5px;
+	background: #17150f;
+	color: var(--mrd-bone-dim);
+	cursor: pointer;
+	font-size: 0.82rem;
+	font-variant-numeric: tabular-nums;
+	transition: border-color 0.1s, background 0.1s;
+}
+.mrd-cal-cell:hover {
+	border-color: var(--mrd-amber);
+	color: var(--mrd-bone);
+}
+.mrd-cal-cell.is-outside {
+	opacity: 0.35;
+}
+.mrd-cal-cell.has-note {
+	background: #23201733;
+	color: var(--mrd-bone);
+	border-color: var(--mrd-teal);
+}
+.mrd-cal-cell.is-today {
+	border-color: var(--mrd-amber);
+	box-shadow: inset 0 0 0 1px var(--mrd-amber);
+	color: var(--mrd-amber-soft);
+	font-weight: 600;
+}
+.mrd-cal-dot {
+	position: absolute;
+	bottom: 4px;
+	left: 50%;
+	transform: translateX(-50%);
+	width: 4px;
+	height: 4px;
+	border-radius: 50%;
+	background: var(--mrd-amber);
+}
+.mrd-cal-legend {
+	font-size: 0.7rem;
+	color: var(--mrd-bone-faint);
+	font-style: italic;
+	margin-top: 8px;
+}
+
 /* --------------------------------------------------------- second brain */
 
 .mrd-sb-results {
