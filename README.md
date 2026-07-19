@@ -9,7 +9,7 @@ Mobile-first, desktop-capable. One plugin, a layout shell hosting registered pan
 - **Chronometer** — four-digit 24h clock + time since last access.
 - **MERIDIAN** — a contextual, weighted ambient line (288 canon lines across 12 pools).
 - **Directives** — a persistent to-do engine: recurring items, future scheduling, per-occurrence dismiss, and roll-and-flag for slipped items. Does not reset overnight; completions are archived under `# Completed tasks`.
-- **Today's Agenda** — up to 10 Proton Calendar share links (public ICS), today only, with an offline cache and visible fetch failures.
+- **Today's Agenda** — up to 10 Proton Calendar share links (public ICS), today only, with an offline cache and visible fetch failures. A **Print week** button opens a printable week-at-a-glance planner: each day's events colour-coded by their source calendar (with a legend), plus ruled space to write in.
 - **Calendar** — a month grid of daily notes; days with a note are marked, tapping a day opens it (creating it from the template if needed), plus a button to open the Logs base note.
 - **Quote of the Day** — reads `scripts/qotd/quotes.json` and stays in sync with the daily-note block.
 - **Daily Log** — free-text editors for Musings / random thoughts, Daily log → Primary/Supplemental, and Reconsider tomorrow, writing straight into today's note, plus a read-only carry-over of *yesterday's* Reconsider-tomorrow.

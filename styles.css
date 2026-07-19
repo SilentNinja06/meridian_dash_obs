@@ -974,6 +974,175 @@
 	margin-top: 8px;
 }
 
+.mrd-agenda-print {
+	margin-left: auto;
+}
+
+/* --------------------------------------------------- week-at-a-glance print */
+
+.mrd-week-modal {
+	width: min(96vw, 1100px);
+}
+.mrd-week-controls {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	flex-wrap: wrap;
+	margin-bottom: 12px;
+}
+.mrd-week-nav {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	flex: 1;
+	flex-wrap: wrap;
+}
+.mrd-week-range {
+	font-family: var(--mrd-font-mono);
+	font-size: 0.8rem;
+	color: var(--mrd-bone);
+}
+
+/* The printable sheet: light-on-white so it reads on paper. Explicit colours
+ * (not the dark theme tokens) so it looks the same on screen preview and print. */
+.mrd-week-print {
+	background: #fff;
+	color: #16140f;
+	padding: 16px 18px;
+	border-radius: 6px;
+	font-family: "Inter", -apple-system, system-ui, sans-serif;
+	-webkit-print-color-adjust: exact;
+	print-color-adjust: exact;
+}
+.mrd-week-header {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	border-bottom: 2px solid #16140f;
+	padding-bottom: 6px;
+	margin-bottom: 8px;
+}
+.mrd-week-title {
+	font-family: "Oswald", "Archivo Narrow", sans-serif;
+	font-weight: 600;
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+	font-size: 1.15rem;
+}
+.mrd-week-dates {
+	font-size: 0.85rem;
+	color: #444;
+}
+.mrd-week-legend {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 12px;
+	margin-bottom: 10px;
+	font-size: 0.72rem;
+	color: #333;
+}
+.mrd-week-legend-item {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+}
+.mrd-week-swatch {
+	width: 11px;
+	height: 11px;
+	border-radius: 2px;
+	display: inline-block;
+}
+.mrd-week-grid {
+	display: grid;
+	grid-template-columns: repeat(4, 1fr);
+	gap: 6px;
+}
+@media (max-width: 640px) {
+	.mrd-week-grid {
+		grid-template-columns: repeat(2, 1fr);
+	}
+}
+.mrd-week-cell {
+	border: 1px solid #999;
+	border-radius: 4px;
+	padding: 5px 7px;
+	min-height: 3.4cm;
+	display: flex;
+	flex-direction: column;
+}
+.mrd-week-cell-head {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	border-bottom: 1px solid #ccc;
+	padding-bottom: 3px;
+	margin-bottom: 4px;
+}
+.mrd-week-dow {
+	font-weight: 700;
+	font-size: 0.82rem;
+}
+.mrd-week-date {
+	font-size: 0.7rem;
+	color: #666;
+}
+.mrd-week-notes .mrd-week-cell-head {
+	font-weight: 700;
+	font-size: 0.82rem;
+}
+.mrd-week-events {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	margin-bottom: 4px;
+}
+.mrd-week-event {
+	border-left: 4px solid #999;
+	padding-left: 5px;
+	font-size: 0.68rem;
+	line-height: 1.25;
+	color: #16140f;
+}
+.mrd-week-lines {
+	flex: 1;
+	min-height: 1.6cm;
+	background-image: repeating-linear-gradient(
+		to bottom,
+		transparent 0,
+		transparent 0.56cm,
+		#d8d8d8 0.56cm,
+		#d8d8d8 calc(0.56cm + 1px)
+	);
+}
+
+@media print {
+	@page {
+		size: landscape;
+		margin: 10mm;
+	}
+	body.mrd-printing * {
+		visibility: hidden !important;
+	}
+	body.mrd-printing .mrd-week-print,
+	body.mrd-printing .mrd-week-print * {
+		visibility: visible !important;
+	}
+	body.mrd-printing .mrd-week-print {
+		position: fixed;
+		inset: 0;
+		width: 100%;
+		margin: 0;
+		border-radius: 0;
+		padding: 0;
+	}
+	body.mrd-printing .mrd-week-noprint {
+		display: none !important;
+	}
+	.mrd-week-cell {
+		min-height: 5.6cm;
+	}
+}
+
 /* --------------------------------------------------------- second brain */
 
 .mrd-sb-results {

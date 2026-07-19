@@ -2,6 +2,7 @@ import { moment } from "obsidian";
 import { BasePanel, placard } from "./types";
 import { AgendaItem, eventsOnDate, fetchICS, parseICS } from "../core/ics";
 import { calendarColor } from "../core/tokens";
+import { WeekPrintModal } from "./weekprint";
 
 /**
  * Today's agenda (§7.5). Today only — no month view. Fetches each Proton share
@@ -26,6 +27,12 @@ export class AgendaPanel extends BasePanel {
 		const s = this.ctx.settings();
 		const head = placard(this.el, "Today's Agenda");
 		head.createSpan({ cls: "mrd-placard-badge", text: moment().format("YYYY-MM-DD") });
+		const printBtn = head.createEl("button", { cls: "mrd-btn mrd-btn-sm mrd-agenda-print", text: "Print week" });
+		printBtn.addEventListener("click", () => {
+			// Best-effort freshen, then open the planner from cache.
+			void this.fetchAll();
+			new WeekPrintModal(this.ctx.app, s.agendaUrls, this.ctx.plugin.agendaCache).open();
+		});
 
 		if (s.agendaUrls.length === 0) {
 			this.el.createDiv({
