@@ -4,6 +4,7 @@ import { QotdPanel } from "./qotd";
 import { MeridianPanel } from "./meridian";
 import { TodoPanel } from "./todo";
 import { AgendaPanel } from "./agenda";
+import { CalendarPanel } from "./calendar";
 import { JournalPanel } from "./journal";
 import { ArfidPanel } from "./arfid";
 import { SpiralPanel } from "./spiral";
@@ -22,6 +23,7 @@ export const PANEL_ORDER: string[] = [
 	"meridian",
 	"todo",
 	"agenda",
+	"calendar",
 	"actions",
 	"qotd",
 	"journal",
@@ -39,6 +41,7 @@ export const PANEL_TITLES: Record<string, string> = {
 	meridian: "MERIDIAN",
 	todo: "Directives",
 	agenda: "Today's Agenda",
+	calendar: "Calendar",
 	actions: "Quick Actions",
 	qotd: "Quote of the Day",
 	journal: "Daily Log",
@@ -58,6 +61,7 @@ const FACTORIES: Record<string, PanelFactory> = {
 	meridian: () => new MeridianPanel(),
 	todo: () => new TodoPanel(),
 	agenda: () => new AgendaPanel(),
+	calendar: () => new CalendarPanel(),
 	actions: () => new ActionsPanel(),
 	qotd: () => new QotdPanel(),
 	journal: () => new JournalPanel(),
