@@ -1,6 +1,7 @@
 import { moment } from "obsidian";
 import { BasePanel, placard } from "./types";
 import { AgendaItem, eventsOnDate, fetchICS, parseICS } from "../core/ics";
+import { agendaState, formatGap } from "../core/agendamath";
 import { calendarColor } from "../core/tokens";
 import { WeekPrintModal } from "./weekprint";
 
@@ -16,10 +17,18 @@ export class AgendaPanel extends BasePanel {
 	title = "Today's Agenda";
 	private errors = new Map<string, string>();
 	private fetching = false;
+	/** Today's merged, sorted items — kept so the 1-minute countdown tick can
+	 * recompute from the cached parse without re-fetching (§1.3). */
+	private dayItems: AgendaItem[] = [];
+	private hadEvents = false;
+	private countdownEl?: HTMLElement;
 
 	protected async setup(): Promise<void> {
 		const minutes = Math.max(1, this.ctx.settings().agendaRefreshMinutes || 30);
 		this.setInterval(() => void this.fetchAll(), minutes * 60 * 1000);
+		// The countdown ticks on the clock's cadence — recompute from cache only,
+		// never a network fetch.
+		this.setInterval(() => this.tickCountdown(), 60 * 1000);
 		void this.fetchAll();
 	}
 
@@ -43,19 +52,20 @@ export class AgendaPanel extends BasePanel {
 		}
 
 		const today = moment().format("YYYY-MM-DD");
-		const rows: Array<{ item: AgendaItem; color: string; label: string }> = [];
+		const rows: Array<{ item: AgendaItem; color: string; label: string; countdown: boolean }> = [];
 		let anyCache = false;
 		let oldest = Infinity;
 
 		s.agendaUrls.forEach((cal, i) => {
 			const color = calendarColor(i);
+			const countdown = cal.countdown !== false;
 			const cache = this.ctx.plugin.agendaCache[cal.url];
 			if (cache) {
 				anyCache = true;
 				oldest = Math.min(oldest, cache.fetchedAt);
 				try {
 					for (const item of eventsOnDate(parseICS(cache.text), today)) {
-						rows.push({ item, color, label: cal.label });
+						rows.push({ item, color, label: cal.label, countdown });
 					}
 				} catch {
 					this.errors.set(cal.url, "parse error");
@@ -77,10 +87,15 @@ export class AgendaPanel extends BasePanel {
 
 		rows.sort((a, b) => a.item.sortKey - b.item.sortKey || a.item.summary.localeCompare(b.item.summary));
 
+		// Next-event / open-gap placard, above the list (§1.3). Calendars toggled
+		// out of the countdown still render in the list but are excluded here.
+		this.dayItems = rows.filter((r) => r.countdown).map((r) => r.item);
+		this.hadEvents = rows.length > 0;
+		this.countdownEl = this.el.createDiv({ cls: "mrd-agenda-next" });
+		this.renderCountdown();
+
 		const list = this.el.createDiv({ cls: "mrd-agenda-list" });
-		if (rows.length === 0 && !failed.length) {
-			list.createDiv({ cls: "mrd-muted", text: "Nothing scheduled today. The day is unclaimed." });
-		}
+		// The empty/clear state is carried by the countdown placard above.
 		for (const r of rows) {
 			const row = list.createDiv({ cls: "mrd-agenda-row" });
 			row.createSpan({ cls: "mrd-agenda-swatch" }).style.background = r.color;
@@ -104,6 +119,57 @@ export class AgendaPanel extends BasePanel {
 		}
 	}
 
+	/** Draw the NEXT / NOW / clear placard from the cached day items. */
+	private renderCountdown(): void {
+		const el = this.countdownEl;
+		if (!el) return;
+		el.empty();
+		const state = agendaState(this.dayItems, Date.now());
+
+		if (state.kind === "clear") {
+			el.addClass("is-clear");
+			el.removeClass("is-now");
+			el.createDiv({
+				cls: "mrd-agenda-next-line",
+				text: this.hadEvents
+					? "Clear for the rest of the day. The remaining hours are unclaimed."
+					: "The day's agenda is clear. This is a reading, not an absence.",
+			});
+			return;
+		}
+
+		el.removeClass("is-clear");
+		el.toggleClass("is-now", state.kind === "now");
+		const label = state.kind === "now" ? "NOW" : "NEXT";
+		const line = el.createDiv({ cls: "mrd-agenda-next-line" });
+		line.createSpan({ cls: "mrd-agenda-next-label", text: label });
+		line.createSpan({ cls: "mrd-agenda-next-summary", text: state.summary ?? "" });
+		const until = formatGap(state.untilMs ?? 0);
+		line.createSpan({
+			cls: "mrd-agenda-next-when",
+			text: state.kind === "now" ? `ends in ${until}` : `in ${until}`,
+		});
+
+		// Open-gap sub-line.
+		if (state.kind === "now") {
+			el.createDiv({
+				cls: "mrd-agenda-gap",
+				text:
+					state.gapMs === undefined
+						? "Then clear for the rest of the day."
+						: `Then open for ${formatGap(state.gapMs)} before the next.`,
+			});
+		} else {
+			el.createDiv({ cls: "mrd-agenda-gap", text: `Open until then — ${until} free.` });
+		}
+	}
+
+	/** 1-minute tick: recompute the placard only, guarding against unmount. */
+	private tickCountdown(): void {
+		if (!this.el?.isConnected || !this.countdownEl?.isConnected) return;
+		this.renderCountdown();
+	}
+
 	private async fetchAll(): Promise<void> {
 		if (this.fetching) return;
 		const urls = this.ctx.settings().agendaUrls;
@@ -112,6 +178,7 @@ export class AgendaPanel extends BasePanel {
 		let changed = false;
 		try {
 			for (const cal of urls) {
+				if (!cal.url) continue; // a blank row in the editor — nothing to fetch
 				try {
 					const text = await fetchICS(cal.url);
 					this.ctx.plugin.agendaCache[cal.url] = { text, fetchedAt: Date.now() };

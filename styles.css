@@ -557,6 +557,180 @@
 	width: 100%;
 }
 
+.mrd-todo-review {
+	margin-left: auto;
+}
+
+/* --------------------------------------------------------- weekly review */
+
+.mrd-review {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+}
+.mrd-review-header {
+	font-family: var(--mrd-font-mono);
+	font-size: 0.72rem;
+	letter-spacing: 0.1em;
+	color: var(--mrd-amber-soft);
+	padding-bottom: 8px;
+	border-bottom: 1px solid var(--mrd-line);
+}
+.mrd-review-block {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+.mrd-review-stat-head {
+	font-family: var(--mrd-font-mono);
+	font-size: 0.66rem;
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	color: var(--mrd-bone-faint);
+}
+.mrd-review-figure {
+	font-family: var(--mrd-font-display);
+	font-size: 1.8rem;
+	color: var(--mrd-amber-soft);
+	line-height: 1;
+}
+.mrd-review-line {
+	font-size: 0.86rem;
+	color: var(--mrd-bone);
+}
+.mrd-review-chips {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 5px;
+}
+.mrd-review-bars {
+	display: flex;
+	gap: 6px;
+	align-items: flex-end;
+}
+.mrd-review-bar-cell {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 3px;
+}
+.mrd-review-bar-track {
+	width: 100%;
+	height: 48px;
+	display: flex;
+	align-items: flex-end;
+	background: #17130d;
+	border-radius: 3px;
+	overflow: hidden;
+}
+.mrd-review-bar-fill {
+	width: 100%;
+	background: var(--mrd-amber);
+	min-height: 2px;
+}
+.mrd-review-bar-fill.is-empty {
+	background: var(--mrd-line);
+}
+.mrd-review-bar-day {
+	font-family: var(--mrd-font-mono);
+	font-size: 0.6rem;
+	color: var(--mrd-bone-faint);
+	text-transform: uppercase;
+}
+.mrd-review-bar-count {
+	font-family: var(--mrd-font-mono);
+	font-size: 0.7rem;
+	color: var(--mrd-bone-dim);
+	font-variant-numeric: tabular-nums;
+}
+
+/* ------------------------------------------------- todo sub-tasks + note */
+
+.mrd-todo-item {
+	display: flex;
+	flex-direction: column;
+}
+.mrd-todo-detail {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	margin: 4px 0 2px 36px;
+	padding: 8px 8px 8px 10px;
+	border-left: 2px solid var(--mrd-line);
+}
+.mrd-todo-note-input,
+.mrd-subtask-input {
+	width: 100%;
+	min-height: 40px;
+	background: #17130d;
+	border: 1px solid var(--mrd-line);
+	border-radius: 5px;
+	color: var(--mrd-bone);
+	padding: 6px 8px;
+	font-family: var(--mrd-font-body);
+	font-size: 0.86rem;
+}
+.mrd-todo-note-input {
+	color: var(--mrd-bone-dim);
+	font-style: italic;
+}
+.mrd-todo-note-input:focus,
+.mrd-subtask-input:focus {
+	outline: none;
+	border-color: var(--mrd-amber);
+}
+.mrd-subtask-list {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+.mrd-subtask-row {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	min-height: 44px;
+	padding: 2px 0;
+}
+.mrd-subtask-check {
+	flex: none;
+	width: 24px;
+	height: 24px;
+	border-radius: 5px;
+	border: 1.5px solid var(--mrd-bone-faint);
+	background: transparent;
+	color: var(--mrd-amber);
+	font-size: 0.85rem;
+	cursor: pointer;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+.mrd-subtask-row.is-done .mrd-subtask-check {
+	border-color: var(--mrd-teal);
+	color: var(--mrd-teal-soft);
+}
+.mrd-subtask-text {
+	flex: 1;
+	min-width: 0;
+	font-size: 0.86rem;
+	color: var(--mrd-bone);
+	word-break: break-word;
+}
+.mrd-subtask-row.is-done .mrd-subtask-text {
+	text-decoration: line-through;
+	text-decoration-color: var(--mrd-bone-faint);
+	color: var(--mrd-bone-dim);
+}
+.mrd-subtask-add {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+.mrd-subtask-add .mrd-subtask-input {
+	flex: 1;
+}
+
 /* --------------------------------------------------------------- agenda */
 
 .mrd-agenda-list {
@@ -613,6 +787,56 @@
 	color: var(--mrd-bone-faint);
 	font-style: italic;
 	margin-top: 4px;
+}
+
+/* next-event / open-gap placard */
+.mrd-agenda-next {
+	border: 1px solid var(--mrd-line);
+	border-left: 3px solid var(--mrd-amber);
+	border-radius: 6px;
+	padding: 8px 10px;
+	background: #191712;
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+}
+.mrd-agenda-next.is-now {
+	border-left-color: var(--mrd-hazard);
+}
+.mrd-agenda-next.is-clear {
+	border-left-color: var(--mrd-teal);
+}
+.mrd-agenda-next-line {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 8px;
+	font-size: 0.9rem;
+	color: var(--mrd-bone);
+}
+.mrd-agenda-next-label {
+	font-family: var(--mrd-font-mono);
+	font-size: 0.68rem;
+	letter-spacing: 0.14em;
+	color: var(--mrd-amber-soft);
+}
+.mrd-agenda-next.is-now .mrd-agenda-next-label {
+	color: var(--mrd-hazard);
+}
+.mrd-agenda-next-summary {
+	flex: 1;
+	min-width: 0;
+	word-break: break-word;
+}
+.mrd-agenda-next-when {
+	font-family: var(--mrd-font-mono);
+	font-size: 0.74rem;
+	color: var(--mrd-amber-soft);
+	font-variant-numeric: tabular-nums;
+}
+.mrd-agenda-gap {
+	font-size: 0.74rem;
+	color: var(--mrd-bone-faint);
 }
 
 /* -------------------------------------------------------------- journal */
@@ -1241,4 +1465,13 @@
 	border-radius: 6px;
 	padding: 4px 10px;
 	margin-bottom: 10px;
+}
+.mrd-settings-cal-list {
+	border: 1px solid var(--background-modifier-border, #444);
+	border-radius: 6px;
+	padding: 4px 10px;
+	margin-bottom: 10px;
+}
+.mrd-settings-cal-url {
+	min-width: 220px;
 }

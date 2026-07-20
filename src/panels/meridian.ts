@@ -53,7 +53,9 @@ export class MeridianPanel extends BasePanel {
 		await this.renderBody();
 	}
 
-	private async rotate(): Promise<void> {
+	/** Force-rotate the ambient line (§1.1 `new-meridian-line`). Public so the
+	 * command can drive a mounted panel through the full weighted selection. */
+	async rotate(): Promise<void> {
 		this.currentLine = await this.pick();
 		if (this.el?.isConnected) await this.paint();
 	}
@@ -149,6 +151,30 @@ export class MeridianPanel extends BasePanel {
 		const doneToday = this.ctx.todos.instancesFor().filter((i) => i.done).length;
 		return doneToday > 0 && doneToday % 5 === 0;
 	}
+}
+
+/** A uniformly random line from the whole closed canon (all 288 lines across
+ * every pool). Used only for the headless `new-meridian-line` Notice when no
+ * dashboard leaf is mounted — still the closed pool, never generated. */
+export function anyCanonLine(): string {
+	const all: string[] = [
+		...POOLS.session,
+		...POOLS.standard,
+		...POOLS.time_of_day.morning,
+		...POOLS.time_of_day.afternoon,
+		...POOLS.time_of_day.evening,
+		...POOLS.time_of_day.late_night,
+		...POOLS.affirming,
+		...POOLS.identity,
+		...POOLS.care,
+		...POOLS.productivity,
+		...POOLS.overdue,
+		...POOLS.idle,
+		...POOLS.food,
+		...POOLS.aftercare,
+		...POOLS.milestone,
+	];
+	return all[Math.floor(Math.random() * all.length)] ?? "STABILITY THROUGH OBSERVATION.";
 }
 
 function timeSegment(): TimeSegment {

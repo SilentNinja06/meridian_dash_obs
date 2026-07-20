@@ -1,7 +1,7 @@
 {
 	"id": "meridian-dash",
 	"name": "MERIDIAN Dashboard",
-	"version": "1.7.0",
+	"version": "1.8.0",
 	"minAppVersion": "1.4.0",
 	"description": "A central dashboard home surface for the vault — clock, quote of the day, agenda, persistent to-dos, journal, and one-tap access to the food, spiral, contact, and recipe plugins. Mobile-first. STABILITY THROUGH OBSERVATION.",
 	"author": "SilentNinja06",

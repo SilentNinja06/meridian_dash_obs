@@ -8,8 +8,8 @@ Mobile-first, desktop-capable. One plugin, a layout shell hosting registered pan
 
 - **Chronometer** — four-digit 24h clock + time since last access.
 - **MERIDIAN** — a contextual, weighted ambient line (288 canon lines across 12 pools).
-- **Directives** — a persistent to-do engine: recurring items, future scheduling, per-occurrence dismiss, and roll-and-flag for slipped items. Does not reset overnight; completions are archived under `# Completed tasks`.
-- **Today's Agenda** — up to 10 Proton Calendar share links (public ICS), today only, with an offline cache and visible fetch failures. A **Print week** button opens a printable week-at-a-glance planner: each day's events colour-coded by their source calendar (with a legend), plus ruled space to write in.
+- **Directives** — a persistent to-do engine: recurring items, future scheduling, per-occurrence dismiss, and roll-and-flag for slipped items. Does not reset overnight; completions are archived under `# Completed tasks`. Each directive can also hold a collapsible checklist of sub-tasks (per-occurrence for recurring items) and one muted note line. A **Weekly review** button opens a read-only 7-day observation summary compiled from the daily notes.
+- **Today's Agenda** — up to 10 Proton Calendar share links (public ICS), today only, with an offline cache and visible fetch failures. A **NEXT / NOW** placard shows what's next and how long you're free (ticking each minute), and each calendar can be toggled out of that countdown while still showing on the agenda. A **Print week** button opens a printable week-at-a-glance planner: each day's events colour-coded by their source calendar (with a legend), plus ruled space to write in.
 - **Calendar** — a month grid of daily notes; days with a note are marked, tapping a day opens it (creating it from the template if needed), plus a button to open the Logs base note.
 - **Quote of the Day** — reads `scripts/qotd/quotes.json` and stays in sync with the daily-note block.
 - **Daily Log** — free-text editors for Musings / random thoughts, Daily log → Primary/Supplemental, and Reconsider tomorrow, writing straight into today's note, plus a read-only carry-over of *yesterday's* Reconsider-tomorrow.
@@ -20,6 +20,47 @@ Mobile-first, desktop-capable. One plugin, a layout shell hosting registered pan
 - **Navigation** — user-editable destinations (notes, Bases, and plugin dashboards).
 
 Every panel is toggleable and reorderable in settings. A throwing panel renders a calm error card and never takes down the dashboard.
+
+## Remote control
+
+Everything the dashboard does is reachable without a dashboard leaf open — from the command palette, a mobile shortcut, or a desktop keybind. Each command operates on the store directly and then refreshes any open dashboards.
+
+### Commands
+
+- **Open dashboard**
+- **Complete next directive** — completes the top pending, non-skipped directive for today (same path as tapping it, so it archives under `# Completed tasks`). No-op with a notice if none pending.
+- **Add a directive** — opens the add-directive modal.
+- **Log to Daily log — Primary** / **— Supplemental** — appends a line under that part of `# Daily log` in today's note.
+- **Log a musing** — appends under `# Musings`.
+- **Log to Reconsider tomorrow** — appends under `# Reconsider tomorrow`.
+- **New MERIDIAN line** — force-rotates the ambient line (or, with no dashboard open, shows one as a notice).
+- **Weekly review** — opens the 7-day observation summary.
+- **Refresh dashboard** — refreshes every open dashboard.
+
+All log commands write through the same daily-note writer as the Daily Log panel (`app.vault.process()`, reconciling against a live editor if today's note is open).
+
+### URI actions
+
+```
+obsidian://meridian-dash?action=open
+obsidian://meridian-dash?action=complete-next
+obsidian://meridian-dash?action=add-directive&text=<urlencoded>
+obsidian://meridian-dash?action=log&field=primary|supplemental|musing|reconsider&text=<urlencoded>
+```
+
+With `text`, `add-directive` and `log` act headlessly and confirm with a notice; without it they fall back to the modal. An unknown `field` is rejected with a notice and no write. Every URI write goes through the same writer as the commands — there is no separate write path.
+
+**GNOME** — a custom keyboard shortcut running:
+
+```
+xdg-open "obsidian://meridian-dash?action=complete-next"
+```
+
+**iOS / macOS Shortcuts** — an *Open URLs* action with:
+
+```
+obsidian://meridian-dash?action=log&field=musing&text=A%20passing%20thought
+```
 
 ## Setup
 

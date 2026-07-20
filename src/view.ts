@@ -2,6 +2,7 @@ import { ItemView, WorkspaceLeaf, setIcon } from "obsidian";
 import type MeridianDashPlugin from "./main";
 import { Panel, PanelContext, RefreshReason } from "./panels/types";
 import { createPanels } from "./panels/registry";
+import { MeridianPanel } from "./panels/meridian";
 
 export const VIEW_TYPE_MERIDIAN = "meridian-dashboard";
 
@@ -135,6 +136,19 @@ export class MeridianView extends ItemView {
 			cls: "mrd-error-note",
 			text: "This subsystem could not be brought online. The condition has been logged. The rest of the facility is unaffected.",
 		});
+	}
+
+	/** Force-rotate the mounted MERIDIAN panel, if present. Returns true if it
+	 * was mounted and rotated (§1.1 `new-meridian-line`). */
+	rotateMeridian(): boolean {
+		let rotated = false;
+		for (const m of this.mounted) {
+			if (m.panel instanceof MeridianPanel) {
+				void m.panel.rotate();
+				rotated = true;
+			}
+		}
+		return rotated;
 	}
 
 	async refreshPanels(reason: RefreshReason): Promise<void> {

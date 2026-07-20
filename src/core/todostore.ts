@@ -31,6 +31,15 @@ export interface Recurrence {
 	n?: number;
 }
 
+/** A single sub-task under a directive (§1.2). For non-recurring parents `done`
+ * is the flat, global state; for recurring parents per-occurrence state lives in
+ * `TodoItem.subCompletions` and `done` is ignored — resolve via `subItemDone`. */
+export interface SubItem {
+	id: string;
+	text: string;
+	done: boolean;
+}
+
 export interface TodoItem {
 	id: string;
 	text: string;
@@ -48,6 +57,15 @@ export interface TodoItem {
 	// --- recurring per-date state ---
 	completions?: string[];
 	skips?: string[];
+	// --- sub-items + note (§1.2) ---
+	/** Optional single muted note line under the directive text. */
+	note?: string;
+	/** Collapsible checklist of sub-tasks. */
+	subItems?: SubItem[];
+	/** Per-occurrence sub-item completion for recurring parents, keyed by date —
+	 * mirrors how `completions`/`skips` key by date so Monday's checked sub-items
+	 * don't show checked again next Monday. Non-recurring items use `SubItem.done`. */
+	subCompletions?: Record<string /*YYYY-MM-DD*/, string[] /*subItem ids done that day*/>;
 }
 
 export interface TodoInstance {
@@ -249,6 +267,21 @@ export class TodoStore {
 		return this.instancesFor(date).filter((i) => !i.done && !i.skipped).length;
 	}
 
+	/** The top pending instance for `date` in the same order the panel shows —
+	 * flagged (slipped) first, then by scheduled time, then stored order. Used by
+	 * the `complete-next-directive` command (§1.1). */
+	firstPending(date = todayStr()): TodoInstance | null {
+		const active = this.instancesFor(date).filter((i) => !i.done && !i.skipped);
+		active.sort((a, b) => {
+			if (a.flagged !== b.flagged) return a.flagged ? -1 : 1;
+			const at = a.item.scheduledTime ?? "99:99";
+			const bt = b.item.scheduledTime ?? "99:99";
+			if (at !== bt) return at.localeCompare(bt);
+			return a.item.order - b.item.order;
+		});
+		return active[0] ?? null;
+	}
+
 	// ----------------------------------------------------------- mutations
 
 	async add(partial: Partial<TodoItem> & { text: string }): Promise<void> {
@@ -282,6 +315,69 @@ export class TodoStore {
 	/** First-class removal (§7.4) — deletes the item and all its recurrence. */
 	async remove(id: string): Promise<void> {
 		this.setItems(this.getItems().filter((i) => i.id !== id));
+		await this.save();
+	}
+
+	// ------------------------------------------------- sub-items + note (§1.2)
+
+	/** Add a sub-task to a directive. */
+	async addSubItem(parentId: string, text: string): Promise<void> {
+		const trimmed = text.trim();
+		if (!trimmed) return;
+		const items = this.getItems();
+		const item = items.find((i) => i.id === parentId);
+		if (!item) return;
+		(item.subItems ?? (item.subItems = [])).push({ id: cryptoId(), text: trimmed, done: false });
+		this.setItems(items);
+		await this.save();
+	}
+
+	/** Remove a sub-task, and forget its per-occurrence completion state. */
+	async removeSubItem(parentId: string, subId: string): Promise<void> {
+		const items = this.getItems();
+		const item = items.find((i) => i.id === parentId);
+		if (!item) return;
+		item.subItems = (item.subItems ?? []).filter((s) => s.id !== subId);
+		if (item.subCompletions) {
+			for (const date of Object.keys(item.subCompletions)) {
+				item.subCompletions[date] = item.subCompletions[date].filter((id) => id !== subId);
+				if (item.subCompletions[date].length === 0) delete item.subCompletions[date];
+			}
+		}
+		this.setItems(items);
+		await this.save();
+	}
+
+	/** Toggle a sub-task's done state for `date`. Recurring parents key the state
+	 * by date; non-recurring parents use the flat `SubItem.done`. */
+	async toggleSubItem(parentId: string, subId: string, date = todayStr()): Promise<void> {
+		const items = this.getItems();
+		const item = items.find((i) => i.id === parentId);
+		if (!item) return;
+		const sub = (item.subItems ?? []).find((s) => s.id === subId);
+		if (!sub) return;
+		if (this.isRecurring(item)) {
+			const map = item.subCompletions ?? (item.subCompletions = {});
+			const set = new Set(map[date] ?? []);
+			if (set.has(subId)) set.delete(subId);
+			else set.add(subId);
+			if (set.size === 0) delete map[date];
+			else map[date] = [...set];
+		} else {
+			sub.done = !sub.done;
+		}
+		this.setItems(items);
+		await this.save();
+	}
+
+	/** Set (or clear) the directive's single note line. */
+	async setNote(id: string, text: string): Promise<void> {
+		const items = this.getItems();
+		const item = items.find((i) => i.id === id);
+		if (!item) return;
+		const trimmed = text.trim();
+		item.note = trimmed || undefined;
+		this.setItems(items);
 		await this.save();
 	}
 

@@ -1,5 +1,6 @@
 import { App, TFile, TFolder, normalizePath } from "obsidian";
 import { TodoItem } from "./todostore";
+import { buildMarkdown, parseTodos } from "./directivesserde";
 
 /**
  * Persistence for the Directives list as a **Markdown vault file**.
@@ -12,17 +13,11 @@ import { TodoItem } from "./todostore";
  * why the checklists still weren't crossing devices. Storing the list as JSON
  * inside a `.md` file removes that dependency entirely. We reload it live when
  * the other device's copy lands.
+ *
+ * The JSON serialization itself lives in `directivesserde.ts` (Obsidian-free,
+ * unit-tested).
  */
-interface DirectivesFile {
-	version: number;
-	todos: TodoItem[];
-}
-
 const DEFAULT_PATH = "MERIDIAN/Directives.md";
-
-const HEADER =
-	"%% MERIDIAN Dashboard — persistent directives. Managed automatically; " +
-	"edit these in the dashboard, not here. %%";
 
 export class DirectivesStore {
 	private items: TodoItem[] = [];
@@ -116,24 +111,5 @@ export class DirectivesStore {
 		if (!dir) return;
 		if (this.app.vault.getAbstractFileByPath(dir) instanceof TFolder) return;
 		await this.app.vault.createFolder(dir).catch(() => {});
-	}
-}
-
-/** JSON payload wrapped in a fenced block inside a Markdown file. */
-function buildMarkdown(items: TodoItem[]): string {
-	const json = JSON.stringify({ version: 1, todos: items } as DirectivesFile, null, 2);
-	return `${HEADER}\n\n\`\`\`json\n${json}\n\`\`\`\n`;
-}
-
-/** Extract the todo list from a directives file. Tolerates a fenced ```json
- * block (current format) and a raw-JSON body (legacy `.json`). */
-function parseTodos(raw: string): TodoItem[] {
-	const fenced = raw.match(/```json\s*([\s\S]*?)```/);
-	const candidate = fenced ? fenced[1] : raw;
-	try {
-		const parsed = JSON.parse(candidate) as DirectivesFile;
-		return Array.isArray(parsed?.todos) ? parsed.todos : [];
-	} catch {
-		return [];
 	}
 }

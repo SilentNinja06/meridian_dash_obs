@@ -261,6 +261,25 @@ export async function writeDailyField(app: App, spec: FieldSpec, body: string): 
 	await editDailyNote(app, (content) => replaceField(content, spec, body));
 }
 
+/** Append a line of text to a free-text field's body, preserving what's there
+ * (§1.1 log commands / URI). Goes through the same reconcile-safe writer as the
+ * Daily Log panel; a no-op (returns false) when the field's anchor is absent —
+ * we never invent headings. */
+export async function appendToDailyField(app: App, spec: FieldSpec, text: string): Promise<boolean> {
+	const clean = text.trim();
+	if (!clean) return false;
+	const file = getDailyNoteFile(app);
+	if (file) {
+		// If the section's anchor isn't present, there's nothing to append to.
+		const raw = await readDailyNoteRaw(app);
+		if (!raw.split("\n").some((l) => spec.anchor.test(l))) return false;
+	}
+	const current = await readDailyField(app, spec);
+	const next = current ? `${current}\n${clean}` : clean;
+	await writeDailyField(app, spec, next);
+	return true;
+}
+
 /** Read the current body of a free-text field from today's note — from the
  * live editor if open, else from disk. */
 export async function readDailyField(app: App, spec: FieldSpec): Promise<string> {

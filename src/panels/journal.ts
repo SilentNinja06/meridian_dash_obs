@@ -3,12 +3,12 @@ import { BasePanel, RefreshReason, placard } from "./types";
 import {
 	FieldSpec,
 	headingField,
-	labelField,
 	readDailyField,
 	readDailyNoteRaw,
 	readField,
 	writeDailyField,
 } from "../core/dailynote";
+import { LOG_FIELD_SPECS } from "../core/dailyfields";
 
 /**
  * Journal / free-text panel (§7.6). Four editable fields, each an editor for a
@@ -19,9 +19,6 @@ import {
  * separate store. On an external refresh we reload values unless the Operator
  * is mid-edit.
  */
-const SUPPLEMENTAL_STOP = /^\s*-\s+Supplemental\s*:?\s*$/i;
-const SPIRAL_MARKER = /%%\s*spiral-log\s*%%/i;
-
 interface FieldDef {
 	key: string;
 	label: string;
@@ -30,11 +27,13 @@ interface FieldDef {
 	stripPlaceholder?: boolean;
 }
 
+// Specs come from the shared source (src/core/dailyfields.ts) so the panel and
+// the log commands / URI actions target byte-identical note regions (§1.1).
 const FIELDS: FieldDef[] = [
-	{ key: "musings", label: "Musings / random thoughts", spec: headingField("Musings") },
-	{ key: "log-primary", label: "Daily log · Primary", spec: labelField("Primary", [SUPPLEMENTAL_STOP, SPIRAL_MARKER]) },
-	{ key: "log-supplemental", label: "Daily log · Supplemental", spec: labelField("Supplemental", [SPIRAL_MARKER]) },
-	{ key: "reconsider", label: "Reconsider tomorrow", spec: headingField("Reconsider tomorrow"), stripPlaceholder: true },
+	{ key: "musings", label: "Musings / random thoughts", spec: LOG_FIELD_SPECS.musing },
+	{ key: "log-primary", label: "Daily log · Primary", spec: LOG_FIELD_SPECS.primary },
+	{ key: "log-supplemental", label: "Daily log · Supplemental", spec: LOG_FIELD_SPECS.supplemental },
+	{ key: "reconsider", label: "Reconsider tomorrow", spec: LOG_FIELD_SPECS.reconsider, stripPlaceholder: true },
 ];
 
 export class JournalPanel extends BasePanel {

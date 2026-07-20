@@ -1,4 +1,4 @@
-import { Plugin, WorkspaceLeaf } from "obsidian";
+import { Notice, ObsidianProtocolData, Plugin, WorkspaceLeaf } from "obsidian";
 import {
 	DEFAULT_SETTINGS,
 	MeridianData,
@@ -10,8 +10,14 @@ import { Bridge } from "./core/bridge";
 import { TodoStore, seedTodos } from "./core/todostore";
 import { DirectivesStore } from "./core/directivesstore";
 import { LibraryStore } from "./core/library";
+import { appendToDailyField } from "./core/dailynote";
+import { LOG_FIELD_LABELS, LOG_FIELD_SPECS, LogField, isLogField } from "./core/dailyfields";
 import { MeridianRuntime, RefreshReason } from "./panels/types";
 import { MeridianView, VIEW_TYPE_MERIDIAN } from "./view";
+import { TodoEditModal } from "./panels/todomodal";
+import { PromptModal } from "./panels/promptmodal";
+import { WeekReviewModal } from "./panels/weekreview";
+import { anyCanonLine } from "./panels/meridian";
 
 export default class MeridianDashPlugin extends Plugin {
 	settings: MeridianSettings = DEFAULT_SETTINGS;
@@ -76,6 +82,8 @@ export default class MeridianDashPlugin extends Plugin {
 			name: "Open dashboard",
 			callback: () => void this.openDashboard(),
 		});
+		this.registerCommands();
+		this.registerProtocol();
 		this.addSettingTab(new MeridianSettingTab(this.app, this));
 
 		// Refresh bus source: vault/metadata changes, debounced ~300ms (§4).
@@ -113,6 +121,154 @@ export default class MeridianDashPlugin extends Plugin {
 
 	onunload(): void {
 		if (this.refreshTimer !== null) window.clearTimeout(this.refreshTimer);
+	}
+
+	// ----------------------------------------------- commands + URI (§1.1)
+
+	/** Everything the dashboard does, reachable from the command palette / a
+	 * mobile shortcut / a keybind — each works whether or not a leaf is open. */
+	private registerCommands(): void {
+		this.addCommand({
+			id: "complete-next-directive",
+			name: "Complete next directive",
+			callback: () => void this.completeNextDirective(),
+		});
+		this.addCommand({
+			id: "add-directive",
+			name: "Add a directive",
+			callback: () => new TodoEditModal(this.app, this.todos, undefined, () => this.refreshOpenViews("vault")).open(),
+		});
+		// id (Obsidian prefixes with `meridian-dash:`) → field
+		const logCommands: Array<{ id: string; field: LogField }> = [
+			{ id: "log-primary", field: "primary" },
+			{ id: "log-supplemental", field: "supplemental" },
+			{ id: "log-musing", field: "musing" },
+			{ id: "reconsider-tomorrow", field: "reconsider" },
+		];
+		for (const { id, field } of logCommands) {
+			this.addCommand({
+				id,
+				name: this.commandNameForField(field),
+				callback: () => this.promptLog(field),
+			});
+		}
+		this.addCommand({
+			id: "new-meridian-line",
+			name: "New MERIDIAN line",
+			callback: () => this.newMeridianLine(),
+		});
+		this.addCommand({
+			id: "weekly-review",
+			name: "Weekly review",
+			callback: () => new WeekReviewModal(this.app, this).open(),
+		});
+		this.addCommand({
+			id: "refresh",
+			name: "Refresh dashboard",
+			callback: () => this.refreshOpenViews("manual"),
+		});
+	}
+
+	private commandNameForField(field: LogField): string {
+		switch (field) {
+			case "primary":
+				return "Log to Daily log — Primary";
+			case "supplemental":
+				return "Log to Daily log — Supplemental";
+			case "musing":
+				return "Log a musing";
+			case "reconsider":
+				return "Log to Reconsider tomorrow";
+		}
+	}
+
+	private registerProtocol(): void {
+		this.registerObsidianProtocolHandler("meridian-dash", (params) => void this.handleUri(params));
+	}
+
+	/** Complete the top pending, non-skipped instance for today — the same code
+	 * path as tapping it, so it archives under `# Completed tasks`. */
+	private async completeNextDirective(): Promise<void> {
+		const inst = this.todos.firstPending();
+		if (!inst) {
+			new Notice("Nothing pending. The queue is already clear.");
+			return;
+		}
+		await this.todos.toggleComplete(inst.item.id);
+		this.refreshOpenViews("vault");
+		new Notice(`Directive completed: ${inst.item.text}. The record is updated.`);
+	}
+
+	private promptLog(field: LogField): void {
+		new PromptModal(
+			this.app,
+			{ title: LOG_FIELD_LABELS[field], placeholder: "What to record", cta: "Log", multiline: true },
+			(text) => void this.logToField(field, text)
+		).open();
+	}
+
+	/** Append `text` to a daily-note field, refresh, confirm in voice. */
+	private async logToField(field: LogField, text: string): Promise<void> {
+		try {
+			const wrote = await appendToDailyField(this.app, LOG_FIELD_SPECS[field], text);
+			if (wrote) {
+				this.refreshOpenViews("vault");
+				new Notice(`Recorded to ${LOG_FIELD_LABELS[field]}. The record is updated.`);
+			} else {
+				new Notice(`The ${LOG_FIELD_LABELS[field]} section is not present in today's note. Nothing was written.`);
+			}
+		} catch (e) {
+			console.error("MERIDIAN: log-to-field failed", e);
+			new Notice("The record could not be written. The condition has been logged.");
+		}
+	}
+
+	private newMeridianLine(): void {
+		let rotated = false;
+		for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_MERIDIAN)) {
+			const view = leaf.view;
+			if (view instanceof MeridianView && view.rotateMeridian()) rotated = true;
+		}
+		if (!rotated) new Notice(anyCanonLine());
+	}
+
+	/** URI action surface (§1.1). Headless with `text`; falls back to the modal
+	 * without it. Every write goes through the same daily-note writer / store. */
+	private async handleUri(params: ObsidianProtocolData): Promise<void> {
+		const action = (params.action ?? "").toLowerCase();
+		switch (action) {
+			case "":
+			case "open":
+				await this.openDashboard();
+				return;
+			case "complete-next":
+				await this.completeNextDirective();
+				return;
+			case "add-directive": {
+				const text = (params.text ?? "").trim();
+				if (text) {
+					await this.todos.add({ text });
+					this.refreshOpenViews("vault");
+					new Notice(`Directive filed: ${text}.`);
+				} else {
+					new TodoEditModal(this.app, this.todos, undefined, () => this.refreshOpenViews("vault")).open();
+				}
+				return;
+			}
+			case "log": {
+				const field = (params.field ?? "").toLowerCase();
+				if (!isLogField(field)) {
+					new Notice("That field is not on record. Nothing was written.");
+					return;
+				}
+				const text = (params.text ?? "").trim();
+				if (text) await this.logToField(field, text);
+				else this.promptLog(field);
+				return;
+			}
+			default:
+				new Notice("That instruction is not recognised. Nothing was done.");
+		}
 	}
 
 	// ------------------------------------------------------------- data

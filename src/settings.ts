@@ -6,6 +6,10 @@ import { PANEL_ORDER, PANEL_TITLES } from "./panels/registry";
 export interface CalendarLink {
 	label: string;
 	url: string;
+	/** Whether this calendar feeds the next-event / open-gap countdown (§1.3). It
+	 * still shows on the agenda regardless. Undefined (legacy settings) counts as
+	 * included, so nothing changes on upgrade. */
+	countdown?: boolean;
 }
 
 export interface PlaceLink {
@@ -230,25 +234,62 @@ export class MeridianSettingTab extends PluginSettingTab {
 				})
 			);
 		new Setting(containerEl)
-			.setName("Calendar share links")
-			.setDesc("Up to 10 public ICS (.ics) URLs, one per line, as `Label | https://…`. Today only — no month view.")
-			.addTextArea((t) => {
-				t.setValue(s.agendaUrls.map((c) => `${c.label} | ${c.url}`).join("\n"));
-				t.inputEl.rows = 6;
-				t.onChange(async (v) => {
-					s.agendaUrls = v
-						.split("\n")
-						.map((line) => line.trim())
-						.filter(Boolean)
-						.slice(0, 10)
-						.map((line) => {
-							const bar = line.indexOf("|");
-							if (bar === -1) return { label: "Calendar", url: line };
-							return { label: line.slice(0, bar).trim() || "Calendar", url: line.slice(bar + 1).trim() };
-						});
-					await this.save();
+			.setName("Calendars")
+			.setDesc(
+				"Up to 10 public Proton Calendar share links (.ics). Today only — no month view. Toggle a calendar out of the countdown to keep it on the agenda while excluding it from the NEXT / open-gap math (e.g. a birthdays or holidays feed)."
+			);
+		const calList = containerEl.createDiv({ cls: "mrd-settings-cal-list" });
+		const renderCals = () => {
+			calList.empty();
+			s.agendaUrls.forEach((cal, i) => {
+				const row = new Setting(calList).setName(`Calendar ${i + 1}`);
+				row.addText((t) =>
+					t.setPlaceholder("Label").setValue(cal.label).onChange(async (v) => {
+						cal.label = v.trim() || "Calendar";
+						await this.save();
+					})
+				);
+				row.addText((t) => {
+					t.setPlaceholder("https://…/basic.ics").setValue(cal.url).onChange(async (v) => {
+						cal.url = v.trim();
+						await this.save();
+					});
+					t.inputEl.classList.add("mrd-settings-cal-url");
 				});
+				row.addToggle((t) =>
+					t
+						.setTooltip("Count in the next-event countdown")
+						.setValue(cal.countdown !== false)
+						.onChange(async (v) => {
+							cal.countdown = v;
+							await this.save();
+						})
+				);
+				row.addExtraButton((b) =>
+					b
+						.setIcon("trash")
+						.setTooltip("Remove this calendar")
+						.onClick(async () => {
+							s.agendaUrls.splice(i, 1);
+							await this.save();
+							renderCals();
+						})
+				);
 			});
+			const addRow = new Setting(calList);
+			addRow.addButton((b) =>
+				b
+					.setButtonText("+ Add calendar")
+					.setDisabled(s.agendaUrls.length >= 10)
+					.onClick(async () => {
+						if (s.agendaUrls.length >= 10) return;
+						s.agendaUrls.push({ label: "Calendar", url: "", countdown: true });
+						await this.save();
+						renderCals();
+					})
+			);
+		};
+		renderCals();
 
 		// -------- calendar --------
 		new Setting(containerEl).setName("Calendar").setHeading();
