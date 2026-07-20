@@ -33,7 +33,7 @@ export class WeekPrintModal extends Modal {
 		this.modalEl.addClass("mrd-week-modal");
 		this.sources = this.urls.map((cal, i) => ({
 			label: cal.label,
-			color: calendarColor(i),
+			color: cal.color || calendarColor(i),
 			events: safeParse(this.cache[cal.url]?.text),
 		}));
 		this.render();
@@ -134,15 +134,37 @@ export class WeekPrintModal extends Modal {
 	}
 
 	private print(): void {
+		const sheet = this.contentEl.querySelector(".mrd-week-print") as HTMLElement | null;
+		if (!sheet) {
+			window.print();
+			return;
+		}
+		// Relocate the sheet to <body> for the print. Inside the modal it sits in a
+		// containing block that made `position: fixed` collapse to nothing on some
+		// setups — printing a blank page. As a direct child of <body> the fixed
+		// positioning is viewport-relative and the planner renders. Restored after.
+		const slot = document.createComment("mrd-week-print-slot");
+		sheet.before(slot);
+		document.body.appendChild(sheet);
 		document.body.addClass("mrd-printing");
-		const cleanup = () => {
+
+		let restored = false;
+		const restore = () => {
+			if (restored) return;
+			restored = true;
+			window.removeEventListener("afterprint", restore);
 			document.body.removeClass("mrd-printing");
-			window.removeEventListener("afterprint", cleanup);
+			slot.replaceWith(sheet);
 		};
-		window.addEventListener("afterprint", cleanup);
-		// Fallback in case afterprint doesn't fire (some platforms).
-		window.setTimeout(cleanup, 2000);
-		window.print();
+		window.addEventListener("afterprint", restore);
+		try {
+			// In Electron/Chromium window.print() blocks until the dialog closes, so
+			// the finally-restore runs after the snapshot is taken; afterprint is a
+			// redundant safety net for platforms where it returns early.
+			window.print();
+		} finally {
+			restore();
+		}
 	}
 
 	onClose(): void {
