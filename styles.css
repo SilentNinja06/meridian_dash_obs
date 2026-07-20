@@ -1499,31 +1499,34 @@
 	);
 }
 
+/* Off-screen frame the planner is rendered into for printing (§ week print).
+ * Printing an isolated iframe avoids the host app's print CSS entirely. */
+.mrd-week-print-frame {
+	position: fixed;
+	left: -10000px;
+	top: 0;
+	width: 900px;
+	height: 700px;
+	border: 0;
+}
+
+/* Full-page planner when printed (read by the iframe's CSS copy). The sheet
+ * fills one US-Letter-landscape page: header/goals/legend take their height and
+ * the 7-day + notes grid stretches to fill the rest as two equal rows, so the
+ * ruled writing space uses the whole sheet instead of clustering at the top. */
 @media print {
-	@page {
-		size: landscape;
-		margin: 10mm;
+	.mrd-week-print {
+		min-height: 7.5in; /* 8.5in page − 0.5in top/bottom margins */
+		display: flex;
+		flex-direction: column;
+		box-sizing: border-box;
 	}
-	body.mrd-printing * {
-		visibility: hidden !important;
-	}
-	body.mrd-printing .mrd-week-print,
-	body.mrd-printing .mrd-week-print * {
-		visibility: visible !important;
-	}
-	body.mrd-printing .mrd-week-print {
-		position: fixed;
-		inset: 0;
-		width: 100%;
-		margin: 0;
-		border-radius: 0;
-		padding: 0;
-	}
-	body.mrd-printing .mrd-week-noprint {
-		display: none !important;
+	.mrd-week-grid {
+		flex: 1 1 auto;
+		grid-auto-rows: minmax(2.6in, 1fr);
 	}
 	.mrd-week-cell {
-		min-height: 5.6cm;
+		min-height: 0;
 	}
 }
 
