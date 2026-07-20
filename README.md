@@ -7,7 +7,7 @@ Mobile-first, desktop-capable. One plugin, a layout shell hosting registered pan
 ## Panels
 
 - **Chronometer** — four-digit 24h clock + time since last access, and (once you have a run going) a read-only observation-streak record.
-- **MERIDIAN** — a contextual, weighted ambient line (288 canon lines across 12 pools).
+- **MERIDIAN** — a contextual, weighted ambient line (288 canon lines across 12 pools). A header button opens a read-only history of recently shown lines.
 - **Directives** — a persistent to-do engine: recurring items, future scheduling, per-occurrence dismiss, and roll-and-flag for slipped items. Does not reset overnight; completions are archived under `# Completed tasks`. Each directive can also hold a collapsible checklist of sub-tasks (per-occurrence for recurring items) and one muted note line. A **Weekly review** button opens a read-only 7-day observation summary compiled from the daily notes.
 - **Today's Agenda** — up to 10 Proton Calendar share links (public ICS), today only, with an offline cache and visible fetch failures. A **NEXT / NOW** placard shows what's next and how long you're free (ticking each minute), and each calendar can be toggled out of that countdown while still showing on the agenda. Dashboard-only **local events** (a **+ Event** button, tagged `LOCAL`) merge into today's agenda and feed the same countdown — useful for anything the read-only Proton feed will never carry. A **Print week** button opens a printable week-at-a-glance planner: each day's events colour-coded by their source calendar (with a legend), plus ruled space to write in.
 - **Calendar** — a month grid of daily notes; days with a note are marked, tapping a day opens it (creating it from the template if needed), plus a button to open the Logs base note.
@@ -19,7 +19,7 @@ Mobile-first, desktop-capable. One plugin, a layout shell hosting registered pan
 - **Second Brain** — manage the ongoing-project library: search it, archive notes into its Archive subfolder, create notes and categories, and assign notes to categories (writing both a `categories:` frontmatter entry and an alphabetized `[[wikilink]]` into the category note).
 - **Navigation** — user-editable destinations (notes, Bases, and plugin dashboards).
 
-Every panel is toggleable and reorderable in settings. A throwing panel renders a calm error card and never takes down the dashboard.
+Every panel is toggleable and reorderable in settings. On the desktop you can also place each panel in a column (1–3) with an optional span for a deliberate grid; leave everything at column 1 to keep the default packed layout, and a phone always stacks to one column in panel order. A throwing panel renders a calm error card and never takes down the dashboard.
 
 ## Remote control
 
@@ -34,6 +34,7 @@ Everything the dashboard does is reachable without a dashboard leaf open — fro
 - **Log a musing** — appends under `# Musings`.
 - **Log to Reconsider tomorrow** — appends under `# Reconsider tomorrow`.
 - **New MERIDIAN line** — force-rotates the ambient line (or, with no dashboard open, shows one as a notice).
+- **MERIDIAN line history** — opens the read-only log of recently shown lines.
 - **Add an event** — opens the local-event modal.
 - **Weekly review** — opens the 7-day observation summary.
 - **Refresh dashboard** — refreshes every open dashboard.

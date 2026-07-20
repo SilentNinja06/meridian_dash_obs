@@ -30,6 +30,11 @@ export interface MeridianSettings {
 	logsBaseNote: string;
 	panelOrder: string[];
 	enabledPanels: Record<string, boolean>;
+	/** Per-panel desktop grid column (1..3). Absent/1 = default. Below the mobile
+	 * breakpoint this is ignored and panels stack in `panelOrder` (§3.1). */
+	panelColumns: Record<string, number>;
+	/** Per-panel desktop column span (1..3). Absent/1 = single column (§3.1). */
+	panelSpans: Record<string, number>;
 	meridianRotationMinutes: number;
 	agendaRefreshMinutes: number;
 	agendaUrls: CalendarLink[];
@@ -90,6 +95,8 @@ export const DEFAULT_SETTINGS: MeridianSettings = {
 	logsBaseNote: "Logs Hub.base",
 	panelOrder: [...PANEL_ORDER],
 	enabledPanels: Object.fromEntries(PANEL_ORDER.map((id) => [id, true])),
+	panelColumns: {},
+	panelSpans: {},
 	meridianRotationMinutes: 5,
 	agendaRefreshMinutes: 30,
 	agendaUrls: [],
@@ -129,10 +136,23 @@ export function mergeSettings(loaded: Partial<MeridianSettings> | undefined): Me
 	for (const id of PANEL_ORDER) if (!order.includes(id)) order.push(id);
 	s.panelOrder = order;
 	s.enabledPanels = { ...DEFAULT_SETTINGS.enabledPanels, ...(loaded?.enabledPanels ?? {}) };
+	// Don't share the default object instances; keep only known panel ids.
+	s.panelColumns = pickKnown(loaded?.panelColumns);
+	s.panelSpans = pickKnown(loaded?.panelSpans);
 	// Don't share default array/object instances.
 	s.agendaUrls = (loaded?.agendaUrls ?? DEFAULT_SETTINGS.agendaUrls).map((c) => ({ ...c }));
 	s.places = (loaded?.places ?? DEFAULT_SETTINGS.places).map((p) => ({ ...p }));
 	return s;
+}
+
+/** Copy a saved panel→number map, dropping unknown panel ids. */
+function pickKnown(map: Record<string, number> | undefined): Record<string, number> {
+	const out: Record<string, number> = {};
+	for (const id of PANEL_ORDER) {
+		const v = map?.[id];
+		if (typeof v === "number" && Number.isFinite(v)) out[id] = v;
+	}
+	return out;
 }
 
 export class MeridianSettingTab extends PluginSettingTab {
@@ -180,10 +200,12 @@ export class MeridianSettingTab extends PluginSettingTab {
 				})
 			);
 
-		// -------- panels: enable + reorder --------
+		// -------- panels: enable + reorder + desktop grid --------
 		new Setting(containerEl)
 			.setName("Panels")
-			.setDesc("Toggle panels on or off, and reorder them. Everything is visible by default; the layout stacks to one column on a phone and spreads to a grid on the desktop.")
+			.setDesc(
+				"Toggle panels on or off and reorder them. On the desktop you can also place each panel in a column (1–3) and give it a span; leave everything at column 1 to keep the default packed layout. A phone always stacks to one column in this order."
+			)
 			.setHeading();
 
 		const list = containerEl.createDiv({ cls: "mrd-settings-panel-list" });
@@ -213,6 +235,20 @@ export class MeridianSettingTab extends PluginSettingTab {
 							renderList();
 						})
 				);
+				row.addDropdown((dd) => {
+					dd.addOptions({ "1": "Col 1", "2": "Col 2", "3": "Col 3" });
+					dd.setValue(String(s.panelColumns[id] ?? 1)).onChange(async (v) => {
+						s.panelColumns[id] = Number(v);
+						await this.saveLayout();
+					});
+				});
+				row.addDropdown((dd) => {
+					dd.addOptions({ "1": "Span 1", "2": "Span 2", "3": "Span 3" });
+					dd.setValue(String(s.panelSpans[id] ?? 1)).onChange(async (v) => {
+						s.panelSpans[id] = Number(v);
+						await this.saveLayout();
+					});
+				});
 				row.addToggle((t) =>
 					t.setValue(s.enabledPanels[id] !== false).onChange(async (v) => {
 						s.enabledPanels[id] = v;

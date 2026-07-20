@@ -21,6 +21,7 @@ import { TodoEditModal } from "./panels/todomodal";
 import { PromptModal } from "./panels/promptmodal";
 import { WeekReviewModal } from "./panels/weekreview";
 import { LocalEventModal } from "./panels/localeventmodal";
+import { LineHistoryModal } from "./panels/linehistory";
 import { anyCanonLine } from "./panels/meridian";
 
 export default class MeridianDashPlugin extends Plugin {
@@ -167,6 +168,11 @@ export default class MeridianDashPlugin extends Plugin {
 			id: "new-meridian-line",
 			name: "New MERIDIAN line",
 			callback: () => this.newMeridianLine(),
+		});
+		this.addCommand({
+			id: "line-history",
+			name: "MERIDIAN line history",
+			callback: () => new LineHistoryModal(this.app, this).open(),
 		});
 		this.addCommand({
 			id: "add-event",
@@ -388,6 +394,16 @@ export default class MeridianDashPlugin extends Plugin {
 
 	get lineHistory(): LineHistoryEntry[] {
 		return this.data.lineHistory;
+	}
+
+	/** Record a committed MERIDIAN line into the persisted history (§3.2). FIFO,
+	 * capped at 100. Read-only afterward — this only logs the closed pool's output. */
+	recordLine(line: string): void {
+		const hist = this.data.lineHistory;
+		if (hist.length && hist[hist.length - 1].line === line) return; // no immediate dupes
+		hist.push({ line, at: Date.now() });
+		while (hist.length > 100) hist.shift();
+		void this.saveData_();
 	}
 
 	// ------------------------------------------------------- local events (§2.1)

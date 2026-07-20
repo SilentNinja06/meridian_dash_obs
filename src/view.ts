@@ -2,6 +2,7 @@ import { ItemView, WorkspaceLeaf, setIcon } from "obsidian";
 import type MeridianDashPlugin from "./main";
 import { Panel, PanelContext, RefreshReason } from "./panels/types";
 import { createPanels } from "./panels/registry";
+import { computeLayout } from "./panels/layout";
 import { MeridianPanel } from "./panels/meridian";
 
 export const VIEW_TYPE_MERIDIAN = "meridian-dashboard";
@@ -93,9 +94,22 @@ export class MeridianView extends ItemView {
 		const panels = createPanels(s.panelOrder, s.enabledPanels);
 		const ctx = this.ctx();
 
+		// Deliberate desktop grid, if configured (§3.1). Unconfigured keeps the
+		// existing masonry; the mobile stack is unaffected either way.
+		const layout = computeLayout(s.panelOrder, s.enabledPanels, s.panelColumns, s.panelSpans);
+		const placeById = new Map(layout.placements.map((p) => [p.id, p]));
+		if (layout.configured) {
+			this.grid.addClass("mrd-grid-cols");
+			this.grid.style.setProperty("--mrd-cols", String(layout.columns));
+		}
+
 		for (const panel of panels) {
 			const host = this.grid.createDiv({ cls: "mrd-panel" });
 			host.dataset.panel = panel.id;
+			if (layout.configured) {
+				const p = placeById.get(panel.id);
+				if (p) host.style.gridColumn = `${p.column} / span ${p.span}`;
+			}
 			this.mounted.push({ panel, host });
 			await this.mountPanel(panel, host, ctx);
 		}

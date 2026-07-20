@@ -1,5 +1,6 @@
 import { moment } from "obsidian";
 import { BasePanel, RefreshReason, placard } from "./types";
+import { LineHistoryModal } from "./linehistory";
 // Canon: 288 lines across 12 pools. Bundled verbatim — never rewritten (§7.3, §12).
 import LINES from "../../meridian-lines.json";
 
@@ -64,6 +65,12 @@ export class MeridianPanel extends BasePanel {
 		if (!this.currentLine) this.currentLine = await this.pick();
 		const head = placard(this.el, "MERIDIAN");
 		head.createSpan({ cls: "mrd-placard-badge", text: "OBSERVING" });
+		const histBtn = head.createEl("button", {
+			cls: "mrd-icon-btn mrd-meridian-hist",
+			text: "❯",
+			attr: { "aria-label": "Recent lines", title: "Recent lines" },
+		});
+		histBtn.addEventListener("click", () => new LineHistoryModal(this.ctx.app, this.ctx.plugin).open());
 		const card = this.el.createDiv({ cls: "mrd-meridian" });
 		card.createDiv({ cls: "mrd-meridian-line", text: this.currentLine });
 	}
@@ -92,6 +99,8 @@ export class MeridianPanel extends BasePanel {
 
 		ring.push(line);
 		while (ring.length > 24) ring.shift();
+		// Persist to the read-only history log (§3.2) — the same commit point.
+		this.ctx.plugin.recordLine(line);
 		return line;
 	}
 

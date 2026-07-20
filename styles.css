@@ -147,6 +147,25 @@
 	}
 }
 
+/* Deliberate column grid (§3.1) — only when configured in settings. Above the
+ * mobile breakpoint it becomes a real CSS grid; below it, the class carries no
+ * grid rules, so the single-column masonry stack stays byte-for-byte unchanged
+ * (inline grid-column on panels is inert in a multi-column container). */
+@media (min-width: 700px) {
+	.mrd-grid.mrd-grid-cols {
+		display: grid;
+		grid-template-columns: repeat(var(--mrd-cols, 1), minmax(0, 1fr));
+		grid-auto-flow: row dense;
+		align-items: start;
+		gap: var(--mrd-gap);
+	}
+	.mrd-grid.mrd-grid-cols .mrd-panel {
+		margin-bottom: 0;
+		break-inside: auto;
+		-webkit-column-break-inside: auto;
+	}
+}
+
 /* --------------------------------------------------------------- panels */
 
 .mrd-panel {
@@ -459,6 +478,36 @@
 	color: var(--mrd-bone);
 	border-left: 2px solid var(--mrd-teal);
 	padding-left: 12px;
+}
+.mrd-meridian-hist {
+	min-width: 28px;
+	min-height: 28px;
+	font-size: 0.8rem;
+}
+
+/* MERIDIAN speaks — line history modal (§3.2) */
+.mrd-linehist {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	max-height: 60vh;
+	overflow-y: auto;
+}
+.mrd-linehist-row {
+	border-left: 2px solid var(--mrd-teal);
+	padding: 4px 0 4px 12px;
+}
+.mrd-linehist-line {
+	font-size: 0.92rem;
+	color: var(--mrd-bone);
+	line-height: 1.5;
+}
+.mrd-linehist-when {
+	font-family: var(--mrd-font-mono);
+	font-size: 0.66rem;
+	letter-spacing: 0.06em;
+	color: var(--mrd-bone-faint);
+	margin-top: 2px;
 }
 
 /* --------------------------------------------------------------- todo */
