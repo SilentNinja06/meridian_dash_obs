@@ -854,8 +854,8 @@
 .mrd-agenda-row-edit:hover {
 	background: #1f1c15;
 }
-.mrd-agenda-add {
-	flex: none;
+.mrd-agenda-actions {
+	margin-bottom: 2px;
 }
 .mrd-agenda-alert {
 	border: 1px solid var(--mrd-amber);
@@ -1287,10 +1287,6 @@
 	color: var(--mrd-bone-faint);
 	font-style: italic;
 	margin-top: 8px;
-}
-
-.mrd-agenda-print {
-	margin-left: auto;
 }
 
 /* --------------------------------------------------- week-at-a-glance print */

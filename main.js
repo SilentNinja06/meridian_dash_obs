@@ -32,6 +32,45 @@ var import_obsidian27 = require("obsidian");
 // src/settings.ts
 var import_obsidian21 = require("obsidian");
 
+// src/core/tokens.ts
+var PALETTE = {
+  /** Warm Black — background */
+  warmBlack: "#16140F",
+  /** Institutional Bone — primary text / surface */
+  bone: "#D8CFB8",
+  /** Burnt Amber — primary accent */
+  amber: "#B5541A",
+  /** Containment Red — alert / destructive */
+  red: "#8C1F1F",
+  /** Slate Teal — the deliberate cold note */
+  teal: "#3E5650",
+  /** Hazard Yellow — stripes, warnings, focus rings (sparing) */
+  hazard: "#D9A441",
+  /** Ash Grey — muted UI chrome */
+  ash: "#2A2722"
+};
+var CALENDAR_COLORS = [
+  PALETTE.amber,
+  PALETTE.teal,
+  PALETTE.hazard,
+  PALETTE.bone,
+  "#7A8B6F",
+  // moss — a cool secondary derived from teal/bone
+  "#C97B4A",
+  // warm sand — a lighter amber
+  "#5B6E86",
+  // dusk blue — a colder companion to teal
+  "#A88C6A",
+  // taupe — muted bone
+  "#8E6F4E",
+  // umber
+  "#6F8079"
+  // pale teal
+];
+function calendarColor(index) {
+  return CALENDAR_COLORS[index % CALENDAR_COLORS.length];
+}
+
 // src/panels/clock.ts
 var import_obsidian = require("obsidian");
 
@@ -2194,45 +2233,6 @@ function localEventToAgendaItem(ev) {
   };
 }
 
-// src/core/tokens.ts
-var PALETTE = {
-  /** Warm Black — background */
-  warmBlack: "#16140F",
-  /** Institutional Bone — primary text / surface */
-  bone: "#D8CFB8",
-  /** Burnt Amber — primary accent */
-  amber: "#B5541A",
-  /** Containment Red — alert / destructive */
-  red: "#8C1F1F",
-  /** Slate Teal — the deliberate cold note */
-  teal: "#3E5650",
-  /** Hazard Yellow — stripes, warnings, focus rings (sparing) */
-  hazard: "#D9A441",
-  /** Ash Grey — muted UI chrome */
-  ash: "#2A2722"
-};
-var CALENDAR_COLORS = [
-  PALETTE.amber,
-  PALETTE.teal,
-  PALETTE.hazard,
-  PALETTE.bone,
-  "#7A8B6F",
-  // moss — a cool secondary derived from teal/bone
-  "#C97B4A",
-  // warm sand — a lighter amber
-  "#5B6E86",
-  // dusk blue — a colder companion to teal
-  "#A88C6A",
-  // taupe — muted bone
-  "#8E6F4E",
-  // umber
-  "#6F8079"
-  // pale teal
-];
-function calendarColor(index) {
-  return CALENDAR_COLORS[index % CALENDAR_COLORS.length];
-}
-
 // src/panels/weekprint.ts
 var import_obsidian11 = require("obsidian");
 var WeekPrintModal = class extends import_obsidian11.Modal {
@@ -2249,7 +2249,7 @@ var WeekPrintModal = class extends import_obsidian11.Modal {
       var _a;
       return {
         label: cal.label,
-        color: calendarColor(i),
+        color: cal.color || calendarColor(i),
         events: safeParse((_a = this.cache[cal.url]) == null ? void 0 : _a.text)
       };
     });
@@ -2334,14 +2334,29 @@ var WeekPrintModal = class extends import_obsidian11.Modal {
     b.addEventListener("click", onClick);
   }
   print() {
+    const sheet = this.contentEl.querySelector(".mrd-week-print");
+    if (!sheet) {
+      window.print();
+      return;
+    }
+    const slot = document.createComment("mrd-week-print-slot");
+    sheet.before(slot);
+    document.body.appendChild(sheet);
     document.body.addClass("mrd-printing");
-    const cleanup = () => {
+    let restored = false;
+    const restore = () => {
+      if (restored) return;
+      restored = true;
+      window.removeEventListener("afterprint", restore);
       document.body.removeClass("mrd-printing");
-      window.removeEventListener("afterprint", cleanup);
+      slot.replaceWith(sheet);
     };
-    window.addEventListener("afterprint", cleanup);
-    window.setTimeout(cleanup, 2e3);
-    window.print();
+    window.addEventListener("afterprint", restore);
+    try {
+      window.print();
+    } finally {
+      restore();
+    }
   }
   onClose() {
     this.contentEl.empty();
@@ -2459,12 +2474,13 @@ var AgendaPanel = class extends BasePanel {
     const s = this.ctx.settings();
     const head = placard(this.el, "Today's Agenda");
     head.createSpan({ cls: "mrd-placard-badge", text: (0, import_obsidian13.moment)().format("YYYY-MM-DD") });
-    const addBtn = head.createEl("button", { cls: "mrd-btn mrd-btn-sm mrd-agenda-add", text: "+ Event" });
+    const actions = this.el.createDiv({ cls: "mrd-btn-row mrd-agenda-actions" });
+    const addBtn = actions.createEl("button", { cls: "mrd-btn mrd-btn-sm", text: "+ Event" });
     addBtn.addEventListener(
       "click",
       () => new LocalEventModal(this.ctx.app, this.ctx.plugin, void 0, () => this.rerender()).open()
     );
-    const printBtn = head.createEl("button", { cls: "mrd-btn mrd-btn-sm mrd-agenda-print", text: "Print week" });
+    const printBtn = actions.createEl("button", { cls: "mrd-btn mrd-btn-sm", text: "Print week" });
     printBtn.addEventListener("click", () => {
       void this.fetchAll();
       new WeekPrintModal(this.ctx.app, s.agendaUrls, this.ctx.plugin.agendaCache).open();
@@ -2482,7 +2498,7 @@ var AgendaPanel = class extends BasePanel {
     let anyCache = false;
     let oldest = Infinity;
     s.agendaUrls.forEach((cal, i) => {
-      const color = calendarColor(i);
+      const color = cal.color || calendarColor(i);
       const countdown = cal.countdown !== false;
       const cache = this.ctx.plugin.agendaCache[cal.url];
       if (cache) {
@@ -3942,7 +3958,7 @@ var MeridianSettingTab = class extends import_obsidian21.PluginSettingTab {
       })
     );
     new import_obsidian21.Setting(containerEl).setName("Calendars").setDesc(
-      "Up to 10 public Proton Calendar share links (.ics). Today only \u2014 no month view. Toggle a calendar out of the countdown to keep it on the agenda while excluding it from the NEXT / open-gap math (e.g. a birthdays or holidays feed)."
+      "Up to 10 public Proton Calendar share links (.ics). Today only \u2014 no month view. Each has a swatch colour, a countdown toggle (keep it on the agenda while excluding it from the NEXT / open-gap math \u2014 e.g. a birthdays feed), and a remove button."
     );
     const calList = containerEl.createDiv({ cls: "mrd-settings-cal-list" });
     const renderCals = () => {
@@ -3962,6 +3978,19 @@ var MeridianSettingTab = class extends import_obsidian21.PluginSettingTab {
           });
           t.inputEl.classList.add("mrd-settings-cal-url");
         });
+        row.addColorPicker(
+          (c) => c.setValue(cal.color || calendarColor(i)).onChange(async (v) => {
+            cal.color = v;
+            await this.save();
+          })
+        );
+        row.addExtraButton(
+          (b) => b.setIcon("rotate-ccw").setTooltip("Reset colour to the default palette").onClick(async () => {
+            cal.color = void 0;
+            await this.save();
+            renderCals();
+          })
+        );
         row.addToggle(
           (t) => t.setTooltip("Count in the next-event countdown").setValue(cal.countdown !== false).onChange(async (v) => {
             cal.countdown = v;
