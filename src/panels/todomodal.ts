@@ -26,22 +26,27 @@ export class TodoEditModal extends Modal {
 	private everyN: number;
 	private scheduledDate: string;
 	private scheduledTime: string;
+	private dueDate: string;
+	private showOnWeekPrint: boolean;
 
 	constructor(
 		app: App,
 		private store: TodoStore,
 		private existing: TodoItem | undefined,
-		private onDone: () => void
+		private onDone: () => void,
+		private defaults?: Partial<TodoItem>
 	) {
 		super(app);
 		const e = existing;
-		this.text = e?.text ?? "";
+		this.text = e?.text ?? defaults?.text ?? "";
 		this.recType = e?.recurrence.type ?? "none";
 		this.weeklyDays = new Set(e?.recurrence.days ?? [moment().day()]);
 		this.monthlyDate = e?.recurrence.date ?? moment().date();
 		this.everyN = e?.recurrence.n ?? 2;
 		this.scheduledDate = e?.scheduledDate ?? "";
 		this.scheduledTime = e?.scheduledTime ?? "";
+		this.dueDate = e?.dueDate ?? defaults?.dueDate ?? "";
+		this.showOnWeekPrint = e?.showOnWeekPrint ?? defaults?.showOnWeekPrint ?? false;
 	}
 
 	onOpen(): void {
@@ -91,6 +96,19 @@ export class TodoEditModal extends Modal {
 				t.inputEl.type = "time";
 				t.setValue(this.scheduledTime).onChange((v) => (this.scheduledTime = v));
 			});
+
+		new Setting(contentEl)
+			.setName("Due")
+			.setDesc("Optional soft deadline. Shown as a chip; past-due reads “overdue”.")
+			.addText((t) => {
+				t.inputEl.type = "date";
+				t.setValue(this.dueDate).onChange((v) => (this.dueDate = v));
+			});
+
+		new Setting(contentEl)
+			.setName("Show on printed week planner")
+			.setDesc("Draw this directive on the week-at-a-glance print on its scheduled, due, or recurrence days.")
+			.addToggle((t) => t.setValue(this.showOnWeekPrint).onChange((v) => (this.showOnWeekPrint = v)));
 
 		new Setting(contentEl)
 			.addButton((b) => b.setButtonText("Cancel").onClick(() => this.close()))
@@ -150,6 +168,8 @@ export class TodoEditModal extends Modal {
 			recurrence: this.buildRecurrence(),
 			scheduledDate: this.scheduledDate || undefined,
 			scheduledTime: this.scheduledTime || undefined,
+			dueDate: this.dueDate || undefined,
+			showOnWeekPrint: this.showOnWeekPrint,
 		};
 		if (this.existing) await this.store.update(this.existing.id, patch);
 		else await this.store.add(patch);

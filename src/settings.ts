@@ -86,11 +86,18 @@ export interface MeridianData {
 	streak: StreakData;
 	/** Recently shown MERIDIAN lines with timestamps, newest last (§3.2). */
 	lineHistory: LineHistoryEntry[];
+	/** Weekly goals, keyed by the week-start date (YYYY-MM-DD). */
+	weeklyGoals: Record<string, WeeklyGoal[]>;
 }
 
 export interface LineHistoryEntry {
 	line: string;
 	at: number;
+}
+
+export interface WeeklyGoal {
+	id: string;
+	text: string;
 }
 
 export const DEFAULT_SETTINGS: MeridianSettings = {

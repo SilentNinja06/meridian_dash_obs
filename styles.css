@@ -1289,6 +1289,37 @@
 	margin-top: 8px;
 }
 
+/* ----------------------------------------------------------- weekly goals */
+
+.mrd-goals-list {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	margin-bottom: 10px;
+}
+.mrd-goals-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 6px 8px;
+	border: 1px solid var(--mrd-line);
+	border-radius: 6px;
+	background: #191712;
+}
+.mrd-goals-text {
+	flex: 1;
+	min-width: 0;
+	font-size: 0.9rem;
+	color: var(--mrd-bone);
+	word-break: break-word;
+}
+.mrd-goals-actions {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	flex: none;
+}
+
 /* --------------------------------------------------- week-at-a-glance print */
 
 .mrd-week-modal {
@@ -1412,6 +1443,48 @@
 	padding-left: 5px;
 	font-size: 0.68rem;
 	line-height: 1.25;
+	color: #16140f;
+}
+.mrd-week-directives {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	margin-bottom: 4px;
+}
+.mrd-week-directive {
+	display: flex;
+	align-items: baseline;
+	gap: 4px;
+	font-size: 0.68rem;
+	line-height: 1.25;
+	color: #16140f;
+}
+.mrd-week-goal-box {
+	font-size: 0.72rem;
+	line-height: 1;
+	color: #444;
+}
+.mrd-week-goals {
+	border: 1px solid #999;
+	border-radius: 4px;
+	padding: 6px 8px;
+	margin-bottom: 10px;
+}
+.mrd-week-goals-head {
+	font-weight: 700;
+	font-size: 0.78rem;
+	margin-bottom: 4px;
+}
+.mrd-week-goals-list {
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+}
+.mrd-week-goal {
+	display: flex;
+	align-items: baseline;
+	gap: 6px;
+	font-size: 0.74rem;
 	color: #16140f;
 }
 .mrd-week-lines {

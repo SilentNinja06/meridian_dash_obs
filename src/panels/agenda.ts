@@ -6,6 +6,7 @@ import { LocalEvent, localEventToAgendaItem } from "../core/localevents";
 import { calendarColor } from "../core/tokens";
 import { WeekPrintModal } from "./weekprint";
 import { LocalEventModal } from "./localeventmodal";
+import { WeeklyGoalsModal, currentWeekKey } from "./weeklygoals";
 
 /**
  * Today's agenda (§7.5). Today only — no month view. Fetches each Proton share
@@ -44,11 +45,15 @@ export class AgendaPanel extends BasePanel {
 		addBtn.addEventListener("click", () =>
 			new LocalEventModal(this.ctx.app, this.ctx.plugin, undefined, () => this.rerender()).open()
 		);
+		const goalsBtn = actions.createEl("button", { cls: "mrd-btn mrd-btn-sm", text: "Weekly goals" });
+		goalsBtn.addEventListener("click", () =>
+			new WeeklyGoalsModal(this.ctx.app, this.ctx.plugin, currentWeekKey(), () => this.rerender()).open()
+		);
 		const printBtn = actions.createEl("button", { cls: "mrd-btn mrd-btn-sm", text: "Print week" });
 		printBtn.addEventListener("click", () => {
 			// Best-effort freshen, then open the planner from cache.
 			void this.fetchAll();
-			new WeekPrintModal(this.ctx.app, s.agendaUrls, this.ctx.plugin.agendaCache).open();
+			new WeekPrintModal(this.ctx.app, this.ctx.plugin).open();
 		});
 
 		const today = moment().format("YYYY-MM-DD");

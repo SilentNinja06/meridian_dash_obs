@@ -1,7 +1,8 @@
 import { App, Modal, moment } from "obsidian";
+import type MeridianDashPlugin from "../main";
 import { AgendaItem, eventsOnDate, parseICS } from "../core/ics";
 import { calendarColor } from "../core/tokens";
-import { CalendarLink } from "../settings";
+import { WeeklyGoalsModal, weekKeyOf, weekLabel } from "./weeklygoals";
 
 interface CalendarSource {
 	label: string;
@@ -16,25 +17,26 @@ interface WeekEvent {
 }
 
 /**
- * A printable "week at a glance" planner. Each day lists that week's events,
- * colour-coded by the calendar they came from (with a legend), and leaves ruled
- * blank space to write in. Rendered light-on-white for paper; a Print button
- * hides the rest of the app and prints just the planner.
+ * A printable "week at a glance" planner. Each day lists that week's calendar
+ * events (colour-coded, with a legend) and any directives opted into the planner,
+ * and leaves ruled blank space to write in. The week's goals are printed at the
+ * top. Rendered light-on-white for paper; a Print button prints just the planner.
  */
 export class WeekPrintModal extends Modal {
 	private weekStart = moment().startOf("week");
 	private sources: CalendarSource[] = [];
 
-	constructor(app: App, private urls: CalendarLink[], private cache: Record<string, { text: string; fetchedAt: number }>) {
+	constructor(app: App, private plugin: MeridianDashPlugin) {
 		super(app);
 	}
 
 	onOpen(): void {
 		this.modalEl.addClass("mrd-week-modal");
-		this.sources = this.urls.map((cal, i) => ({
+		const cache = this.plugin.agendaCache;
+		this.sources = this.plugin.settings.agendaUrls.map((cal, i) => ({
 			label: cal.label,
 			color: cal.color || calendarColor(i),
-			events: safeParse(this.cache[cal.url]?.text),
+			events: safeParse(cache[cal.url]?.text),
 		}));
 		this.render();
 	}
@@ -62,6 +64,9 @@ export class WeekPrintModal extends Modal {
 			this.weekStart = moment().startOf("week");
 			this.render();
 		});
+		this.ctrlBtn(nav, "Set goals", () => {
+			new WeeklyGoalsModal(this.app, this.plugin, weekKeyOf(this.weekStart), () => this.render()).open();
+		});
 		const printBtn = controls.createEl("button", { cls: "mrd-btn mrd-btn-primary", text: "Print" });
 		printBtn.addEventListener("click", () => this.print());
 
@@ -70,6 +75,8 @@ export class WeekPrintModal extends Modal {
 		const header = sheet.createDiv({ cls: "mrd-week-header" });
 		header.createDiv({ cls: "mrd-week-title", text: "Week at a Glance" });
 		header.createDiv({ cls: "mrd-week-dates", text: range });
+
+		this.renderGoals(sheet);
 
 		if (this.sources.length > 0) {
 			const legend = sheet.createDiv({ cls: "mrd-week-legend" });
@@ -91,9 +98,24 @@ export class WeekPrintModal extends Modal {
 		notes.createDiv({ cls: "mrd-week-lines" });
 	}
 
+	/** The week's goals, printed at the top as checkbox lines to work against. */
+	private renderGoals(sheet: HTMLElement): void {
+		const goals = this.plugin.weeklyGoalsFor(weekKeyOf(this.weekStart));
+		if (goals.length === 0) return;
+		const block = sheet.createDiv({ cls: "mrd-week-goals" });
+		block.createDiv({ cls: "mrd-week-goals-head", text: "Goals for the week" });
+		const list = block.createDiv({ cls: "mrd-week-goals-list" });
+		for (const goal of goals) {
+			const row = list.createDiv({ cls: "mrd-week-goal" });
+			row.createSpan({ cls: "mrd-week-goal-box", text: "☐" });
+			row.createSpan({ cls: "mrd-week-goal-text", text: goal.text });
+		}
+	}
+
 	private renderDay(grid: HTMLElement, day: moment.Moment): void {
 		const dateStr = day.format("YYYY-MM-DD");
 		const events = this.eventsForDay(dateStr);
+		const directives = this.plugin.todos.itemsForWeekPrint(dateStr);
 
 		const cell = grid.createDiv({ cls: "mrd-week-cell" });
 		const head = cell.createDiv({ cls: "mrd-week-cell-head" });
@@ -107,6 +129,15 @@ export class WeekPrintModal extends Modal {
 				row.style.borderLeftColor = ev.color;
 				const time = ev.item.allDay ? "" : ev.item.timeLabel + " ";
 				row.createSpan({ cls: "mrd-week-ev-text", text: `${time}${ev.item.summary}` });
+			}
+		}
+		if (directives.length > 0) {
+			const list = cell.createDiv({ cls: "mrd-week-directives" });
+			for (const item of directives) {
+				const row = list.createDiv({ cls: "mrd-week-directive" });
+				row.createSpan({ cls: "mrd-week-goal-box", text: "☐" });
+				const time = item.scheduledTime ? item.scheduledTime + " " : "";
+				row.createSpan({ cls: "mrd-week-directive-text", text: `${time}${item.text}` });
 			}
 		}
 		// Ruled space to write in — grows to fill the cell.
