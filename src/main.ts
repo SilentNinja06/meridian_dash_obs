@@ -1,6 +1,7 @@
-import { Plugin, WorkspaceLeaf } from "obsidian";
+import { Notice, ObsidianProtocolData, Plugin, WorkspaceLeaf, moment } from "obsidian";
 import {
 	DEFAULT_SETTINGS,
+	LineHistoryEntry,
 	MeridianData,
 	MeridianSettings,
 	MeridianSettingTab,
@@ -10,8 +11,18 @@ import { Bridge } from "./core/bridge";
 import { TodoStore, seedTodos } from "./core/todostore";
 import { DirectivesStore } from "./core/directivesstore";
 import { LibraryStore } from "./core/library";
+import { appendToDailyField, getDailyNoteFile, headingField, readDailyNoteRaw, readField, readMarkerLogLines } from "./core/dailynote";
+import { LOG_FIELD_LABELS, LOG_FIELD_SPECS, LOG_FIELDS, LogField, isLogField } from "./core/dailyfields";
+import { LocalEvent } from "./core/localevents";
+import { DEFAULT_STREAK, StreakData, advanceStreak } from "./core/streak";
 import { MeridianRuntime, RefreshReason } from "./panels/types";
 import { MeridianView, VIEW_TYPE_MERIDIAN } from "./view";
+import { TodoEditModal } from "./panels/todomodal";
+import { PromptModal } from "./panels/promptmodal";
+import { WeekReviewModal } from "./panels/weekreview";
+import { LocalEventModal } from "./panels/localeventmodal";
+import { LineHistoryModal } from "./panels/linehistory";
+import { anyCanonLine } from "./panels/meridian";
 
 export default class MeridianDashPlugin extends Plugin {
 	settings: MeridianSettings = DEFAULT_SETTINGS;
@@ -26,10 +37,12 @@ export default class MeridianDashPlugin extends Plugin {
 		recentLines: [],
 		foodFocusUntil: 0,
 		typingUntil: 0,
+		streakRecordDate: "",
 	};
 
 	private data!: MeridianData;
 	private refreshTimer: number | null = null;
+	private midnightTimer: number | null = null;
 
 	async onload(): Promise<void> {
 		// Register the view synchronously, *before any await*, so a dashboard leaf
@@ -76,6 +89,8 @@ export default class MeridianDashPlugin extends Plugin {
 			name: "Open dashboard",
 			callback: () => void this.openDashboard(),
 		});
+		this.registerCommands();
+		this.registerProtocol();
 		this.addSettingTab(new MeridianSettingTab(this.app, this));
 
 		// Refresh bus source: vault/metadata changes, debounced ~300ms (§4).
@@ -88,7 +103,11 @@ export default class MeridianDashPlugin extends Plugin {
 		// Everything that reads or writes the vault (loading/creating the
 		// directives file) or touches the workspace waits until it is ready.
 		this.app.workspace.onLayoutReady(() => {
-			void this.loadDirectives().then(() => this.refreshOpenViews("vault"));
+			void this.loadDirectives().then(() => {
+				void this.updateStreak();
+				this.refreshOpenViews("vault");
+			});
+			this.scheduleMidnight();
 			// Turn empty New Tab pages into the dashboard when that's enabled.
 			this.registerEvent(
 				this.app.workspace.on("active-leaf-change", (leaf) => this.maybeReplaceEmptyLeaf(leaf))
@@ -113,6 +132,177 @@ export default class MeridianDashPlugin extends Plugin {
 
 	onunload(): void {
 		if (this.refreshTimer !== null) window.clearTimeout(this.refreshTimer);
+		if (this.midnightTimer !== null) window.clearTimeout(this.midnightTimer);
+	}
+
+	// ----------------------------------------------- commands + URI (§1.1)
+
+	/** Everything the dashboard does, reachable from the command palette / a
+	 * mobile shortcut / a keybind — each works whether or not a leaf is open. */
+	private registerCommands(): void {
+		this.addCommand({
+			id: "complete-next-directive",
+			name: "Complete next directive",
+			callback: () => void this.completeNextDirective(),
+		});
+		this.addCommand({
+			id: "add-directive",
+			name: "Add a directive",
+			callback: () => new TodoEditModal(this.app, this.todos, undefined, () => this.refreshOpenViews("vault")).open(),
+		});
+		// id (Obsidian prefixes with `meridian-dash:`) → field
+		const logCommands: Array<{ id: string; field: LogField }> = [
+			{ id: "log-primary", field: "primary" },
+			{ id: "log-supplemental", field: "supplemental" },
+			{ id: "log-musing", field: "musing" },
+			{ id: "reconsider-tomorrow", field: "reconsider" },
+		];
+		for (const { id, field } of logCommands) {
+			this.addCommand({
+				id,
+				name: this.commandNameForField(field),
+				callback: () => this.promptLog(field),
+			});
+		}
+		this.addCommand({
+			id: "new-meridian-line",
+			name: "New MERIDIAN line",
+			callback: () => this.newMeridianLine(),
+		});
+		this.addCommand({
+			id: "line-history",
+			name: "MERIDIAN line history",
+			callback: () => new LineHistoryModal(this.app, this).open(),
+		});
+		this.addCommand({
+			id: "add-event",
+			name: "Add an event",
+			callback: () => new LocalEventModal(this.app, this, undefined, () => this.refreshOpenViews("vault")).open(),
+		});
+		this.addCommand({
+			id: "weekly-review",
+			name: "Weekly review",
+			callback: () => new WeekReviewModal(this.app, this).open(),
+		});
+		this.addCommand({
+			id: "refresh",
+			name: "Refresh dashboard",
+			callback: () => this.refreshOpenViews("manual"),
+		});
+	}
+
+	private commandNameForField(field: LogField): string {
+		switch (field) {
+			case "primary":
+				return "Log to Daily log — Primary";
+			case "supplemental":
+				return "Log to Daily log — Supplemental";
+			case "musing":
+				return "Log a musing";
+			case "reconsider":
+				return "Log to Reconsider tomorrow";
+		}
+	}
+
+	private registerProtocol(): void {
+		this.registerObsidianProtocolHandler("meridian-dash", (params) => void this.handleUri(params));
+	}
+
+	/** Complete the top pending, non-skipped instance for today — the same code
+	 * path as tapping it, so it archives under `# Completed tasks`. */
+	private async completeNextDirective(): Promise<void> {
+		const inst = this.todos.firstPending();
+		if (!inst) {
+			new Notice("Nothing pending. The queue is already clear.");
+			return;
+		}
+		await this.todos.toggleComplete(inst.item.id);
+		this.refreshOpenViews("vault");
+		new Notice(`Directive completed: ${inst.item.text}. The record is updated.`);
+	}
+
+	private promptLog(field: LogField): void {
+		new PromptModal(
+			this.app,
+			{ title: LOG_FIELD_LABELS[field], placeholder: "What to record", cta: "Log", multiline: true },
+			(text) => void this.logToField(field, text)
+		).open();
+	}
+
+	/** Append `text` to a daily-note field, refresh, confirm in voice. */
+	private async logToField(field: LogField, text: string): Promise<void> {
+		try {
+			const wrote = await appendToDailyField(this.app, LOG_FIELD_SPECS[field], text);
+			if (wrote) {
+				this.refreshOpenViews("vault");
+				new Notice(`Recorded to ${LOG_FIELD_LABELS[field]}. The record is updated.`);
+			} else {
+				new Notice(`The ${LOG_FIELD_LABELS[field]} section is not present in today's note. Nothing was written.`);
+			}
+		} catch (e) {
+			console.error("MERIDIAN: log-to-field failed", e);
+			new Notice("The record could not be written. The condition has been logged.");
+		}
+	}
+
+	private newMeridianLine(): void {
+		let rotated = false;
+		for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_MERIDIAN)) {
+			const view = leaf.view;
+			if (view instanceof MeridianView && view.rotateMeridian()) rotated = true;
+		}
+		if (!rotated) new Notice(anyCanonLine());
+	}
+
+	/** URI action surface (§1.1). Headless with `text`; falls back to the modal
+	 * without it. Every write goes through the same daily-note writer / store. */
+	private async handleUri(params: ObsidianProtocolData): Promise<void> {
+		const action = (params.action ?? "").toLowerCase();
+		switch (action) {
+			case "":
+			case "open":
+				await this.openDashboard();
+				return;
+			case "complete-next":
+				await this.completeNextDirective();
+				return;
+			case "add-directive": {
+				const text = (params.text ?? "").trim();
+				if (text) {
+					await this.todos.add({ text });
+					this.refreshOpenViews("vault");
+					new Notice(`Directive filed: ${text}.`);
+				} else {
+					new TodoEditModal(this.app, this.todos, undefined, () => this.refreshOpenViews("vault")).open();
+				}
+				return;
+			}
+			case "log": {
+				const field = (params.field ?? "").toLowerCase();
+				if (!isLogField(field)) {
+					new Notice("That field is not on record. Nothing was written.");
+					return;
+				}
+				const text = (params.text ?? "").trim();
+				if (text) await this.logToField(field, text);
+				else this.promptLog(field);
+				return;
+			}
+			case "add-event": {
+				const summary = (params.summary ?? params.text ?? "").trim();
+				if (summary) {
+					const date = /^\d{4}-\d{2}-\d{2}$/.test(params.date ?? "") ? params.date : moment().format("YYYY-MM-DD");
+					const start = params.start || undefined;
+					await this.addLocalEvent({ summary, date, start, end: start && params.end ? params.end : undefined });
+					new Notice(`Event filed: ${summary}.`);
+				} else {
+					new LocalEventModal(this.app, this, undefined, () => this.refreshOpenViews("vault")).open();
+				}
+				return;
+			}
+			default:
+				new Notice("That instruction is not recognised. Nothing was done.");
+		}
 	}
 
 	// ------------------------------------------------------------- data
@@ -135,6 +325,11 @@ export default class MeridianDashPlugin extends Plugin {
 			seeded: raw?.seeded ?? false,
 			agendaCache: raw?.agendaCache ?? {},
 			milestoneShownDate: raw?.milestoneShownDate ?? "",
+			// New in 1.9.0/1.10.0 — every field optional with a safe default so a
+			// pre-1.7.0 data.json loads without throwing (§ cross-cutting migration).
+			localEvents: raw?.localEvents ?? [],
+			streak: raw?.streak ?? { ...DEFAULT_STREAK },
+			lineHistory: raw?.lineHistory ?? [],
 		};
 		this.runtime.previousAccess = this.data.lastAccess;
 		await this.saveData_();
@@ -191,6 +386,101 @@ export default class MeridianDashPlugin extends Plugin {
 
 	set milestoneShownDate(date: string) {
 		this.data.milestoneShownDate = date;
+	}
+
+	get streak(): StreakData {
+		return this.data.streak;
+	}
+
+	get lineHistory(): LineHistoryEntry[] {
+		return this.data.lineHistory;
+	}
+
+	/** Record a committed MERIDIAN line into the persisted history (§3.2). FIFO,
+	 * capped at 100. Read-only afterward — this only logs the closed pool's output. */
+	recordLine(line: string): void {
+		const hist = this.data.lineHistory;
+		if (hist.length && hist[hist.length - 1].line === line) return; // no immediate dupes
+		hist.push({ line, at: Date.now() });
+		while (hist.length > 100) hist.shift();
+		void this.saveData_();
+	}
+
+	// ------------------------------------------------------- local events (§2.1)
+
+	get localEvents(): LocalEvent[] {
+		return this.data.localEvents;
+	}
+
+	async addLocalEvent(ev: Omit<LocalEvent, "id">): Promise<void> {
+		this.data.localEvents.push({ id: localId(), ...ev });
+		await this.saveData_();
+		this.refreshOpenViews("vault");
+	}
+
+	async updateLocalEvent(id: string, patch: Partial<Omit<LocalEvent, "id">>): Promise<void> {
+		const ev = this.data.localEvents.find((e) => e.id === id);
+		if (!ev) return;
+		Object.assign(ev, patch);
+		await this.saveData_();
+		this.refreshOpenViews("vault");
+	}
+
+	async removeLocalEvent(id: string): Promise<void> {
+		this.data.localEvents = this.data.localEvents.filter((e) => e.id !== id);
+		await this.saveData_();
+		this.refreshOpenViews("vault");
+	}
+
+	// ------------------------------------------------------------- streak (§2.2)
+
+	/** Whether a day "counts": its note exists and holds a completed task, a
+	 * journal write, or any marker-log line. Existence alone is too weak — the
+	 * template auto-creates empty notes. */
+	private async dayCounts(date: string): Promise<boolean> {
+		if (!getDailyNoteFile(this.app, date)) return false;
+		const raw = await readDailyNoteRaw(this.app, date);
+		// A completed-tasks entry.
+		const completed = readField(raw, headingField(this.settings.completedTasksHeading));
+		if (completed.split("\n").some((l) => /^\s*-\s+\S/.test(l))) return true;
+		// A journal write in any of the free-text sections.
+		for (const field of LOG_FIELDS) {
+			const body = readField(raw, LOG_FIELD_SPECS[field]);
+			if (body.split("\n").some((l) => l.trim() && !/^\s*-\s*(\[[ xX]?\]\s*)?$/.test(l))) return true;
+		}
+		// Any marker-log line (nourishment, regulation, contacts).
+		for (const marker of ["%% arfid-log %%", "%% spiral-log %%", "%% crm-log %%"]) {
+			if (readMarkerLogLines(raw, marker).length > 0) return true;
+		}
+		return false;
+	}
+
+	/** Recompute the streak for today. Idempotent per day; a broken streak is
+	 * silent. Records a new-record day in runtime as a milestone trigger. */
+	async updateStreak(): Promise<void> {
+		const today = moment().format("YYYY-MM-DD");
+		if (this.data.streak.lastDayCounted === today) return; // already counted
+		const counts = await this.dayCounts(today);
+		if (!counts) return;
+		const yesterday = moment().subtract(1, "day").format("YYYY-MM-DD");
+		const { streak, newRecord } = advanceStreak(this.data.streak, counts, today, yesterday);
+		this.data.streak = streak;
+		if (newRecord) this.runtime.streakRecordDate = today;
+		await this.saveData_();
+		this.refreshOpenViews("vault");
+	}
+
+	/** Reschedule a one-shot timer to just after the next local midnight; on fire
+	 * it recomputes the streak (day rollover) and re-arms. */
+	private scheduleMidnight(): void {
+		if (this.midnightTimer !== null) window.clearTimeout(this.midnightTimer);
+		const msToMidnight = moment().endOf("day").valueOf() - Date.now() + 2000;
+		this.midnightTimer = window.setTimeout(() => {
+			this.midnightTimer = null;
+			void this.updateStreak();
+			this.refreshOpenViews("vault");
+			this.scheduleMidnight();
+		}, Math.max(1000, msToMidnight));
 	}
 
 	/** Record this view-open as the latest access, returning the prior value. */
@@ -250,4 +540,10 @@ export default class MeridianDashPlugin extends Plugin {
 			this.refreshOpenViews("vault");
 		}, 300);
 	}
+}
+
+function localId(): string {
+	const c = (globalThis as unknown as { crypto?: Crypto }).crypto;
+	if (c?.randomUUID) return c.randomUUID();
+	return "le-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
 }

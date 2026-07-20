@@ -127,6 +127,11 @@ export class Bridge {
 		return parseLogLines(readMarkerLogLines(raw, "%% spiral-log %%", "Spiral log"));
 	}
 
+	/** Count of regulation entries for a date — counts only, never content (§1.4). */
+	async spiralEntriesForDate(date = today()): Promise<number> {
+		return (await this.spiralToday(date)).length;
+	}
+
 	/** Cheap "did a spiral/shutdown happen today" — drives aftercare weighting (§7.3). */
 	async spiralOccurredToday(date = today()): Promise<boolean> {
 		const api = this.api(SPIRAL_ID);

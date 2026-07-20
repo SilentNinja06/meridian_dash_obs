@@ -17,6 +17,10 @@ export interface AgendaItem {
 	allDay: boolean;
 	/** Epoch ms of the occurrence start (timed events only). */
 	startMs: number;
+	/** Epoch ms of the occurrence end (timed events with a DTEND only); undefined
+	 * for all-day events and events with no end. Drives the next-event / gap
+	 * math and the in-progress ("NOW") case (§1.3). */
+	endMs?: number;
 	/** "HH:mm"–"HH:mm" for timed events, "" for all-day. */
 	timeLabel: string;
 	/** For sorting within the day. All-day sorts first. */
@@ -389,18 +393,21 @@ function toAgendaItem(ev: VEvent, occ: DateVal): AgendaItem {
 	const startMs = toEpochMs(occ);
 	const startM = moment(startMs);
 	let timeLabel = startM.format("HH:mm");
+	let endMs: number | undefined;
 	if (ev.end && !ev.end.allDay) {
 		// End of this occurrence = start + original duration.
 		const origStart = toEpochMs(ev.start);
 		const origEnd = toEpochMs(ev.end);
 		const durMs = Math.max(0, origEnd - origStart);
-		timeLabel += `–${moment(startMs + durMs).format("HH:mm")}`;
+		endMs = startMs + durMs;
+		timeLabel += `–${moment(endMs).format("HH:mm")}`;
 	}
 	return {
 		summary: ev.summary || "(untitled)",
 		location: ev.location,
 		allDay: false,
 		startMs,
+		endMs,
 		timeLabel,
 		sortKey: startM.hour() * 60 + startM.minute(),
 	};

@@ -1,8 +1,11 @@
 import { moment } from "obsidian";
 import { BasePanel, placard } from "./types";
 import { AgendaItem, eventsOnDate, fetchICS, parseICS } from "../core/ics";
+import { agendaState, formatGap } from "../core/agendamath";
+import { LocalEvent, localEventToAgendaItem } from "../core/localevents";
 import { calendarColor } from "../core/tokens";
 import { WeekPrintModal } from "./weekprint";
+import { LocalEventModal } from "./localeventmodal";
 
 /**
  * Today's agenda (§7.5). Today only — no month view. Fetches each Proton share
@@ -16,10 +19,18 @@ export class AgendaPanel extends BasePanel {
 	title = "Today's Agenda";
 	private errors = new Map<string, string>();
 	private fetching = false;
+	/** Today's merged, sorted items — kept so the 1-minute countdown tick can
+	 * recompute from the cached parse without re-fetching (§1.3). */
+	private dayItems: AgendaItem[] = [];
+	private hadEvents = false;
+	private countdownEl?: HTMLElement;
 
 	protected async setup(): Promise<void> {
 		const minutes = Math.max(1, this.ctx.settings().agendaRefreshMinutes || 30);
 		this.setInterval(() => void this.fetchAll(), minutes * 60 * 1000);
+		// The countdown ticks on the clock's cadence — recompute from cache only,
+		// never a network fetch.
+		this.setInterval(() => this.tickCountdown(), 60 * 1000);
 		void this.fetchAll();
 	}
 
@@ -27,6 +38,10 @@ export class AgendaPanel extends BasePanel {
 		const s = this.ctx.settings();
 		const head = placard(this.el, "Today's Agenda");
 		head.createSpan({ cls: "mrd-placard-badge", text: moment().format("YYYY-MM-DD") });
+		const addBtn = head.createEl("button", { cls: "mrd-btn mrd-btn-sm mrd-agenda-add", text: "+ Event" });
+		addBtn.addEventListener("click", () =>
+			new LocalEventModal(this.ctx.app, this.ctx.plugin, undefined, () => this.rerender()).open()
+		);
 		const printBtn = head.createEl("button", { cls: "mrd-btn mrd-btn-sm mrd-agenda-print", text: "Print week" });
 		printBtn.addEventListener("click", () => {
 			// Best-effort freshen, then open the planner from cache.
@@ -34,34 +49,42 @@ export class AgendaPanel extends BasePanel {
 			new WeekPrintModal(this.ctx.app, s.agendaUrls, this.ctx.plugin.agendaCache).open();
 		});
 
-		if (s.agendaUrls.length === 0) {
+		const today = moment().format("YYYY-MM-DD");
+		const localToday = this.ctx.plugin.localEvents.filter((e) => e.date === today);
+
+		if (s.agendaUrls.length === 0 && localToday.length === 0) {
 			this.el.createDiv({
 				cls: "mrd-muted",
-				text: "No calendars are on file. Add Proton Calendar share links (public .ics URLs) in settings and today's schedule will appear here.",
+				text: "No calendars are on file. Add Proton Calendar share links (public .ics URLs) in settings, or add a local event with “+ Event”, and today's schedule will appear here.",
 			});
 			return;
 		}
 
-		const today = moment().format("YYYY-MM-DD");
-		const rows: Array<{ item: AgendaItem; color: string; label: string }> = [];
+		const rows: Array<{ item: AgendaItem; color: string; label: string; countdown: boolean; local?: LocalEvent }> = [];
 		let anyCache = false;
 		let oldest = Infinity;
 
 		s.agendaUrls.forEach((cal, i) => {
 			const color = calendarColor(i);
+			const countdown = cal.countdown !== false;
 			const cache = this.ctx.plugin.agendaCache[cal.url];
 			if (cache) {
 				anyCache = true;
 				oldest = Math.min(oldest, cache.fetchedAt);
 				try {
 					for (const item of eventsOnDate(parseICS(cache.text), today)) {
-						rows.push({ item, color, label: cal.label });
+						rows.push({ item, color, label: cal.label, countdown });
 					}
 				} catch {
 					this.errors.set(cal.url, "parse error");
 				}
 			}
 		});
+
+		// Local events feed the same sorted list + countdown math (§2.1).
+		for (const ev of localToday) {
+			rows.push({ item: localEventToAgendaItem(ev), color: "var(--mrd-cal-local)", label: "LOCAL", countdown: true, local: ev });
+		}
 
 		// Failure notices — always visible, in voice.
 		const failed = s.agendaUrls.filter((c) => this.errors.has(c.url));
@@ -77,19 +100,34 @@ export class AgendaPanel extends BasePanel {
 
 		rows.sort((a, b) => a.item.sortKey - b.item.sortKey || a.item.summary.localeCompare(b.item.summary));
 
+		// Next-event / open-gap placard, above the list (§1.3). Calendars toggled
+		// out of the countdown still render in the list but are excluded here.
+		this.dayItems = rows.filter((r) => r.countdown).map((r) => r.item);
+		this.hadEvents = rows.length > 0;
+		this.countdownEl = this.el.createDiv({ cls: "mrd-agenda-next" });
+		this.renderCountdown();
+
 		const list = this.el.createDiv({ cls: "mrd-agenda-list" });
-		if (rows.length === 0 && !failed.length) {
-			list.createDiv({ cls: "mrd-muted", text: "Nothing scheduled today. The day is unclaimed." });
-		}
+		// The empty/clear state is carried by the countdown placard above.
 		for (const r of rows) {
 			const row = list.createDiv({ cls: "mrd-agenda-row" });
 			row.createSpan({ cls: "mrd-agenda-swatch" }).style.background = r.color;
 			const time = row.createSpan({ cls: "mrd-agenda-time" });
 			time.setText(r.item.allDay ? "ALL DAY" : r.item.timeLabel);
 			const body = row.createDiv({ cls: "mrd-agenda-body" });
-			body.createDiv({ cls: "mrd-agenda-title", text: r.item.summary });
-			const sub = [r.label, r.item.location].filter(Boolean).join(" · ");
+			const title = body.createDiv({ cls: "mrd-agenda-title" });
+			title.createSpan({ text: r.item.summary });
+			if (r.local) title.createSpan({ cls: "mrd-chip mrd-chip-cold mrd-agenda-local-chip", text: "LOCAL" });
+			const sub = [r.local ? "" : r.label, r.item.location].filter(Boolean).join(" · ");
 			if (sub) body.createDiv({ cls: "mrd-agenda-sub", text: sub });
+			if (r.local) {
+				const ev = r.local;
+				row.addClass("mrd-agenda-row-edit");
+				row.setAttr("title", "Edit this local event");
+				row.addEventListener("click", () =>
+					new LocalEventModal(this.ctx.app, this.ctx.plugin, ev, () => this.rerender()).open()
+				);
+			}
 		}
 
 		// Staleness footer.
@@ -104,6 +142,57 @@ export class AgendaPanel extends BasePanel {
 		}
 	}
 
+	/** Draw the NEXT / NOW / clear placard from the cached day items. */
+	private renderCountdown(): void {
+		const el = this.countdownEl;
+		if (!el) return;
+		el.empty();
+		const state = agendaState(this.dayItems, Date.now());
+
+		if (state.kind === "clear") {
+			el.addClass("is-clear");
+			el.removeClass("is-now");
+			el.createDiv({
+				cls: "mrd-agenda-next-line",
+				text: this.hadEvents
+					? "Clear for the rest of the day. The remaining hours are unclaimed."
+					: "The day's agenda is clear. This is a reading, not an absence.",
+			});
+			return;
+		}
+
+		el.removeClass("is-clear");
+		el.toggleClass("is-now", state.kind === "now");
+		const label = state.kind === "now" ? "NOW" : "NEXT";
+		const line = el.createDiv({ cls: "mrd-agenda-next-line" });
+		line.createSpan({ cls: "mrd-agenda-next-label", text: label });
+		line.createSpan({ cls: "mrd-agenda-next-summary", text: state.summary ?? "" });
+		const until = formatGap(state.untilMs ?? 0);
+		line.createSpan({
+			cls: "mrd-agenda-next-when",
+			text: state.kind === "now" ? `ends in ${until}` : `in ${until}`,
+		});
+
+		// Open-gap sub-line.
+		if (state.kind === "now") {
+			el.createDiv({
+				cls: "mrd-agenda-gap",
+				text:
+					state.gapMs === undefined
+						? "Then clear for the rest of the day."
+						: `Then open for ${formatGap(state.gapMs)} before the next.`,
+			});
+		} else {
+			el.createDiv({ cls: "mrd-agenda-gap", text: `Open until then — ${until} free.` });
+		}
+	}
+
+	/** 1-minute tick: recompute the placard only, guarding against unmount. */
+	private tickCountdown(): void {
+		if (!this.el?.isConnected || !this.countdownEl?.isConnected) return;
+		this.renderCountdown();
+	}
+
 	private async fetchAll(): Promise<void> {
 		if (this.fetching) return;
 		const urls = this.ctx.settings().agendaUrls;
@@ -112,6 +201,7 @@ export class AgendaPanel extends BasePanel {
 		let changed = false;
 		try {
 			for (const cal of urls) {
+				if (!cal.url) continue; // a blank row in the editor — nothing to fetch
 				try {
 					const text = await fetchICS(cal.url);
 					this.ctx.plugin.agendaCache[cal.url] = { text, fetchedAt: Date.now() };

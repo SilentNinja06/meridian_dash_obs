@@ -13,6 +13,8 @@ interface Candidate {
 	file: TFile;
 	basename: string;
 	headings: string[];
+	mtime: number;
+	size: number;
 }
 
 interface Hit {
@@ -20,7 +22,12 @@ interface Hit {
 	title: string;
 	context: string;
 	score: number;
+	/** True for a body-text match — ranked below filename/heading hits (§2.3). */
+	body: boolean;
 }
+
+/** Skip scanning bodies larger than this (bytes) — the perf guard (§2.3). */
+const BODY_SCAN_CAP = 100_000;
 
 export class SearchPanel extends BasePanel {
 	id = "search";
@@ -30,9 +37,16 @@ export class SearchPanel extends BasePanel {
 	private hits: Hit[] = [];
 	private resultsEl?: HTMLElement;
 	private inputEl?: HTMLInputElement;
+	private debounce: number | null = null;
+	/** Bumped per query so a slow body scan from a stale query is discarded. */
+	private queryToken = 0;
+	private showingRecent = true;
 
 	protected async setup(): Promise<void> {
 		this.buildIndex();
+		this.onCleanup(() => {
+			if (this.debounce !== null) window.clearTimeout(this.debounce);
+		});
 	}
 
 	private buildIndex(): void {
@@ -42,7 +56,7 @@ export class SearchPanel extends BasePanel {
 			if (path && !file.path.startsWith(path)) continue;
 			const cache = this.ctx.app.metadataCache.getFileCache(file);
 			const headings = (cache?.headings ?? []).map((h) => h.heading);
-			this.index.push({ file, basename: file.basename, headings });
+			this.index.push({ file, basename: file.basename, headings, mtime: file.stat.mtime, size: file.stat.size });
 		}
 	}
 
@@ -67,11 +81,24 @@ export class SearchPanel extends BasePanel {
 		this.inputEl = input;
 		this.resultsEl = this.el.createDiv({ cls: "mrd-search-results" });
 
-		input.addEventListener("input", () => this.runQuery(input.value));
+		input.addEventListener("input", () => this.scheduleQuery(input.value));
 		input.addEventListener("keydown", (e) => this.onKey(e));
-		this.runQuery("");
+		void this.runQuery("");
 
 		this.renderCategories();
+	}
+
+	/** Debounce body-scanning input ~150ms; empty query resolves immediately. */
+	private scheduleQuery(query: string): void {
+		if (this.debounce !== null) window.clearTimeout(this.debounce);
+		if (!query.trim()) {
+			void this.runQuery(query);
+			return;
+		}
+		this.debounce = window.setTimeout(() => {
+			this.debounce = null;
+			void this.runQuery(query);
+		}, 150);
 	}
 
 	private renderCategories(): void {
@@ -110,28 +137,67 @@ export class SearchPanel extends BasePanel {
 		})();
 	}
 
-	private runQuery(query: string): void {
+	private async runQuery(query: string): Promise<void> {
 		const q = query.trim();
-		this.hits = [];
+		const token = ++this.queryToken;
 		this.selected = 0;
-		if (q) {
-			const search = prepareFuzzySearch(q);
-			for (const cand of this.index) {
-				let best = search(cand.basename);
-				let context = "";
-				let title = cand.basename;
-				for (const h of cand.headings) {
-					const r = search(h);
-					if (r && (!best || r.score > best.score)) {
-						best = r;
-						context = h;
-					}
-				}
-				if (best) this.hits.push({ file: cand.file, title, context, score: best.score });
-			}
-			this.hits.sort((a, b) => b.score - a.score);
-			this.hits = this.hits.slice(0, 20);
+
+		if (!q) {
+			// Empty query → the most-recently-modified notes in scope (§2.3).
+			this.showingRecent = true;
+			const n = Math.max(0, this.ctx.settings().kbRecentCount ?? 8);
+			this.hits = this.index
+				.slice()
+				.sort((a, b) => b.mtime - a.mtime)
+				.slice(0, n)
+				.map((c) => ({ file: c.file, title: c.basename, context: "", score: 0, body: false }));
+			this.renderResults();
+			return;
 		}
+
+		this.showingRecent = false;
+
+		// Primary signal: filename + heading fuzzy match.
+		const search = prepareFuzzySearch(q);
+		const nameHits: Hit[] = [];
+		for (const cand of this.index) {
+			let best = search(cand.basename);
+			let context = "";
+			for (const h of cand.headings) {
+				const r = search(h);
+				if (r && (!best || r.score > best.score)) {
+					best = r;
+					context = h;
+				}
+			}
+			if (best) nameHits.push({ file: cand.file, title: cand.basename, context, score: best.score, body: false });
+		}
+		nameHits.sort((a, b) => b.score - a.score);
+
+		// Show the fast name/heading hits right away.
+		this.hits = nameHits.slice(0, 20);
+		this.renderResults();
+
+		// Body-text pass behind the perf guard, ranked below name/heading hits.
+		if (!this.ctx.settings().kbSearchBody) return;
+		const already = new Set(nameHits.map((h) => h.file.path));
+		const needle = q.toLowerCase();
+		const bodyHits: Hit[] = [];
+		for (const cand of this.index) {
+			if (already.has(cand.file.path)) continue;
+			if (cand.size > BODY_SCAN_CAP) continue;
+			let content: string;
+			try {
+				content = await this.ctx.app.vault.cachedRead(cand.file);
+			} catch {
+				continue;
+			}
+			if (token !== this.queryToken) return; // a newer query superseded this scan
+			const snippet = firstMatchingLine(content, needle);
+			if (snippet) bodyHits.push({ file: cand.file, title: cand.basename, context: snippet, score: 0, body: true });
+		}
+		if (token !== this.queryToken) return;
+		this.hits = [...nameHits, ...bodyHits].slice(0, 30);
 		this.renderResults();
 	}
 
@@ -139,19 +205,26 @@ export class SearchPanel extends BasePanel {
 		const el = this.resultsEl;
 		if (!el) return;
 		el.empty();
-		if (!this.inputEl?.value.trim()) {
-			el.createDiv({ cls: "mrd-muted", text: `${this.index.length} notes indexed. Begin typing to search.` });
-			return;
-		}
-		if (this.hits.length === 0) {
+
+		if (this.showingRecent) {
+			if (this.hits.length === 0) {
+				el.createDiv({ cls: "mrd-muted", text: "No notes in the knowledge-base scope yet." });
+				return;
+			}
+			el.createDiv({ cls: "mrd-subhead", text: `Recently modified · ${this.hits.length}` });
+		} else if (this.hits.length === 0) {
 			el.createDiv({ cls: "mrd-muted", text: "No matches in the knowledge base." });
 			return;
 		}
+
 		this.hits.forEach((hit, i) => {
 			const row = el.createDiv({ cls: "mrd-search-row" });
 			if (i === this.selected) row.addClass("is-selected");
 			row.createDiv({ cls: "mrd-search-title", text: hit.title });
-			if (hit.context && hit.context !== hit.title) row.createDiv({ cls: "mrd-search-context", text: hit.context });
+			if (hit.context && hit.context !== hit.title) {
+				const ctx = row.createDiv({ cls: "mrd-search-context", text: hit.context });
+				if (hit.body) ctx.addClass("is-body");
+			}
 			row.addEventListener("click", () => this.open(hit.file));
 		});
 	}
@@ -181,4 +254,17 @@ function normalizeFolder(path: string): string {
 	const p = path.trim().replace(/^\/+/, "");
 	if (!p) return "";
 	return p.endsWith("/") ? p : p + "/";
+}
+
+/** The first non-heading, non-blank line containing `needle` (lower-cased), for
+ * the muted body-match snippet. Truncated so a long line stays one line. */
+function firstMatchingLine(content: string, needle: string): string {
+	for (const raw of content.split("\n")) {
+		const line = raw.trim();
+		if (!line || line.startsWith("#")) continue;
+		if (line.toLowerCase().includes(needle)) {
+			return line.length > 120 ? line.slice(0, 117) + "…" : line;
+		}
+	}
+	return "";
 }

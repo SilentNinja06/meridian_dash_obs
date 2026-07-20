@@ -27,6 +27,14 @@ export class ClockPanel extends BasePanel {
 		this.secEl = main.createSpan({ cls: "mrd-clock-sec" });
 		this.dateEl = wrap.createDiv({ cls: "mrd-clock-date" });
 		this.sinceEl = wrap.createDiv({ cls: "mrd-clock-since" });
+		// Streak record — read-only, positive framing only; silent at zero (§2.2).
+		const streak = this.ctx.plugin.streak;
+		if (streak.current > 0) {
+			wrap.createDiv({
+				cls: "mrd-clock-record",
+				text: `RECORD — ${streak.current} consecutive ${streak.current === 1 ? "day" : "days"} observed.`,
+			});
+		}
 		this.tick();
 	}
 

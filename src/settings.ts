@@ -1,11 +1,17 @@
 import { App, PluginSettingTab, Setting } from "obsidian";
 import type MeridianDashPlugin from "./main";
 import { TodoItem } from "./core/todostore";
+import { LocalEvent } from "./core/localevents";
+import { StreakData } from "./core/streak";
 import { PANEL_ORDER, PANEL_TITLES } from "./panels/registry";
 
 export interface CalendarLink {
 	label: string;
 	url: string;
+	/** Whether this calendar feeds the next-event / open-gap countdown (§1.3). It
+	 * still shows on the agenda regardless. Undefined (legacy settings) counts as
+	 * included, so nothing changes on upgrade. */
+	countdown?: boolean;
 }
 
 export interface PlaceLink {
@@ -24,10 +30,19 @@ export interface MeridianSettings {
 	logsBaseNote: string;
 	panelOrder: string[];
 	enabledPanels: Record<string, boolean>;
+	/** Per-panel desktop grid column (1..3). Absent/1 = default. Below the mobile
+	 * breakpoint this is ignored and panels stack in `panelOrder` (§3.1). */
+	panelColumns: Record<string, number>;
+	/** Per-panel desktop column span (1..3). Absent/1 = single column (§3.1). */
+	panelSpans: Record<string, number>;
 	meridianRotationMinutes: number;
 	agendaRefreshMinutes: number;
 	agendaUrls: CalendarLink[];
 	kbSearchPath: string;
+	/** Number of most-recent notes shown when the KB search box is empty (§2.3). */
+	kbRecentCount: number;
+	/** Whether KB search also scans note bodies (§2.3). */
+	kbSearchBody: boolean;
 	/** Knowledge Base (information library) — root + subfolders + category list
 	 * heading, for category management on the KB card. */
 	kbRootPath: string;
@@ -61,6 +76,17 @@ export interface MeridianData {
 	agendaCache: Record<string, { text: string; fetchedAt: number }>;
 	/** Date a milestone line was last shown, so it never fires twice a day (§7.3). */
 	milestoneShownDate: string;
+	/** Dashboard-only events merged into today's agenda (§2.1). */
+	localEvents: LocalEvent[];
+	/** Observation streak + longest record (§2.2). */
+	streak: StreakData;
+	/** Recently shown MERIDIAN lines with timestamps, newest last (§3.2). */
+	lineHistory: LineHistoryEntry[];
+}
+
+export interface LineHistoryEntry {
+	line: string;
+	at: number;
 }
 
 export const DEFAULT_SETTINGS: MeridianSettings = {
@@ -69,10 +95,14 @@ export const DEFAULT_SETTINGS: MeridianSettings = {
 	logsBaseNote: "Logs Hub.base",
 	panelOrder: [...PANEL_ORDER],
 	enabledPanels: Object.fromEntries(PANEL_ORDER.map((id) => [id, true])),
+	panelColumns: {},
+	panelSpans: {},
 	meridianRotationMinutes: 5,
 	agendaRefreshMinutes: 30,
 	agendaUrls: [],
 	kbSearchPath: "Knowledge base/Notes/",
+	kbRecentCount: 8,
+	kbSearchBody: true,
 	kbRootPath: "Knowledge base",
 	kbNotesSubfolder: "Notes",
 	kbCategoriesSubfolder: "Categories",
@@ -106,10 +136,23 @@ export function mergeSettings(loaded: Partial<MeridianSettings> | undefined): Me
 	for (const id of PANEL_ORDER) if (!order.includes(id)) order.push(id);
 	s.panelOrder = order;
 	s.enabledPanels = { ...DEFAULT_SETTINGS.enabledPanels, ...(loaded?.enabledPanels ?? {}) };
+	// Don't share the default object instances; keep only known panel ids.
+	s.panelColumns = pickKnown(loaded?.panelColumns);
+	s.panelSpans = pickKnown(loaded?.panelSpans);
 	// Don't share default array/object instances.
 	s.agendaUrls = (loaded?.agendaUrls ?? DEFAULT_SETTINGS.agendaUrls).map((c) => ({ ...c }));
 	s.places = (loaded?.places ?? DEFAULT_SETTINGS.places).map((p) => ({ ...p }));
 	return s;
+}
+
+/** Copy a saved panel→number map, dropping unknown panel ids. */
+function pickKnown(map: Record<string, number> | undefined): Record<string, number> {
+	const out: Record<string, number> = {};
+	for (const id of PANEL_ORDER) {
+		const v = map?.[id];
+		if (typeof v === "number" && Number.isFinite(v)) out[id] = v;
+	}
+	return out;
 }
 
 export class MeridianSettingTab extends PluginSettingTab {
@@ -157,10 +200,12 @@ export class MeridianSettingTab extends PluginSettingTab {
 				})
 			);
 
-		// -------- panels: enable + reorder --------
+		// -------- panels: enable + reorder + desktop grid --------
 		new Setting(containerEl)
 			.setName("Panels")
-			.setDesc("Toggle panels on or off, and reorder them. Everything is visible by default; the layout stacks to one column on a phone and spreads to a grid on the desktop.")
+			.setDesc(
+				"Toggle panels on or off and reorder them. On the desktop you can also place each panel in a column (1–3) and give it a span; leave everything at column 1 to keep the default packed layout. A phone always stacks to one column in this order."
+			)
 			.setHeading();
 
 		const list = containerEl.createDiv({ cls: "mrd-settings-panel-list" });
@@ -190,6 +235,20 @@ export class MeridianSettingTab extends PluginSettingTab {
 							renderList();
 						})
 				);
+				row.addDropdown((dd) => {
+					dd.addOptions({ "1": "Col 1", "2": "Col 2", "3": "Col 3" });
+					dd.setValue(String(s.panelColumns[id] ?? 1)).onChange(async (v) => {
+						s.panelColumns[id] = Number(v);
+						await this.saveLayout();
+					});
+				});
+				row.addDropdown((dd) => {
+					dd.addOptions({ "1": "Span 1", "2": "Span 2", "3": "Span 3" });
+					dd.setValue(String(s.panelSpans[id] ?? 1)).onChange(async (v) => {
+						s.panelSpans[id] = Number(v);
+						await this.saveLayout();
+					});
+				});
 				row.addToggle((t) =>
 					t.setValue(s.enabledPanels[id] !== false).onChange(async (v) => {
 						s.enabledPanels[id] = v;
@@ -230,25 +289,62 @@ export class MeridianSettingTab extends PluginSettingTab {
 				})
 			);
 		new Setting(containerEl)
-			.setName("Calendar share links")
-			.setDesc("Up to 10 public ICS (.ics) URLs, one per line, as `Label | https://…`. Today only — no month view.")
-			.addTextArea((t) => {
-				t.setValue(s.agendaUrls.map((c) => `${c.label} | ${c.url}`).join("\n"));
-				t.inputEl.rows = 6;
-				t.onChange(async (v) => {
-					s.agendaUrls = v
-						.split("\n")
-						.map((line) => line.trim())
-						.filter(Boolean)
-						.slice(0, 10)
-						.map((line) => {
-							const bar = line.indexOf("|");
-							if (bar === -1) return { label: "Calendar", url: line };
-							return { label: line.slice(0, bar).trim() || "Calendar", url: line.slice(bar + 1).trim() };
-						});
-					await this.save();
+			.setName("Calendars")
+			.setDesc(
+				"Up to 10 public Proton Calendar share links (.ics). Today only — no month view. Toggle a calendar out of the countdown to keep it on the agenda while excluding it from the NEXT / open-gap math (e.g. a birthdays or holidays feed)."
+			);
+		const calList = containerEl.createDiv({ cls: "mrd-settings-cal-list" });
+		const renderCals = () => {
+			calList.empty();
+			s.agendaUrls.forEach((cal, i) => {
+				const row = new Setting(calList).setName(`Calendar ${i + 1}`);
+				row.addText((t) =>
+					t.setPlaceholder("Label").setValue(cal.label).onChange(async (v) => {
+						cal.label = v.trim() || "Calendar";
+						await this.save();
+					})
+				);
+				row.addText((t) => {
+					t.setPlaceholder("https://…/basic.ics").setValue(cal.url).onChange(async (v) => {
+						cal.url = v.trim();
+						await this.save();
+					});
+					t.inputEl.classList.add("mrd-settings-cal-url");
 				});
+				row.addToggle((t) =>
+					t
+						.setTooltip("Count in the next-event countdown")
+						.setValue(cal.countdown !== false)
+						.onChange(async (v) => {
+							cal.countdown = v;
+							await this.save();
+						})
+				);
+				row.addExtraButton((b) =>
+					b
+						.setIcon("trash")
+						.setTooltip("Remove this calendar")
+						.onClick(async () => {
+							s.agendaUrls.splice(i, 1);
+							await this.save();
+							renderCals();
+						})
+				);
 			});
+			const addRow = new Setting(calList);
+			addRow.addButton((b) =>
+				b
+					.setButtonText("+ Add calendar")
+					.setDisabled(s.agendaUrls.length >= 10)
+					.onClick(async () => {
+						if (s.agendaUrls.length >= 10) return;
+						s.agendaUrls.push({ label: "Calendar", url: "", countdown: true });
+						await this.save();
+						renderCals();
+					})
+			);
+		};
+		renderCals();
 
 		// -------- calendar --------
 		new Setting(containerEl).setName("Calendar").setHeading();
@@ -269,6 +365,27 @@ export class MeridianSettingTab extends PluginSettingTab {
 			.addText((t) =>
 				t.setPlaceholder(DEFAULT_SETTINGS.kbSearchPath).setValue(s.kbSearchPath).onChange(async (v) => {
 					s.kbSearchPath = v.trim() || DEFAULT_SETTINGS.kbSearchPath;
+					await this.save();
+				})
+			);
+		new Setting(containerEl)
+			.setName("Recent notes shown")
+			.setDesc("How many recently-modified notes to list when the search box is empty.")
+			.addText((t) =>
+				t.setValue(String(s.kbRecentCount)).onChange(async (v) => {
+					const n = Number(v);
+					if (Number.isFinite(n) && n >= 0) {
+						s.kbRecentCount = Math.floor(n);
+						await this.save();
+					}
+				})
+			);
+		new Setting(containerEl)
+			.setName("Search note bodies")
+			.setDesc("Also match note contents, not just filenames and headings. Filename/heading hits still rank first. Turn off if a large vault feels slow.")
+			.addToggle((t) =>
+				t.setValue(s.kbSearchBody).onChange(async (v) => {
+					s.kbSearchBody = v;
 					await this.save();
 				})
 			);

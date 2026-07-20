@@ -1,13 +1,9 @@
-import { App, Modal, Notice, Setting, moment } from "obsidian";
+import { Notice, moment } from "obsidian";
 import { BasePanel, placard } from "./types";
-import {
-	Recurrence,
-	RecurrenceType,
-	TodoInstance,
-	TodoItem,
-	TodoStore,
-	describeRecurrence,
-} from "../core/todostore";
+import { TodoInstance, describeRecurrence } from "../core/todostore";
+import { allSubItemsDone, subItemDone, subItemsDoneCount } from "../core/subitems";
+import { TodoEditModal } from "./todomodal";
+import { WeekReviewModal } from "./weekreview";
 
 /**
  * Persistent to-do / "Directives" panel (§7.4). Replaces the daily note's
@@ -15,10 +11,17 @@ import {
  * complete, recurring items, future scheduling, per-occurrence dismiss, and
  * roll-and-flag for slipped items. Completing archives a line under
  * `# Completed tasks`.
+ *
+ * A directive can also hold a collapsible checklist of sub-tasks and one muted
+ * note line (§1.2). Sub-item completion is per-occurrence for recurring parents
+ * (resolved via `subItemDone`); completing all sub-tasks never auto-completes
+ * the parent.
  */
 export class TodoPanel extends BasePanel {
 	id = "todo";
 	title = "Directives";
+	/** Which rows are expanded to show sub-tasks / note — survives re-render. */
+	private expanded = new Set<string>();
 
 	protected renderBody(): void {
 		const store = this.ctx.todos;
@@ -31,6 +34,8 @@ export class TodoPanel extends BasePanel {
 		const overdue = active.filter((i) => i.flagged).length;
 		if (overdue > 0) head.createSpan({ cls: "mrd-chip mrd-chip-warn", text: `${overdue} slipped` });
 		head.createSpan({ cls: "mrd-chip", text: `${active.length} pending` });
+		const reviewBtn = head.createEl("button", { cls: "mrd-btn mrd-btn-sm mrd-todo-review", text: "Weekly review" });
+		reviewBtn.addEventListener("click", () => new WeekReviewModal(this.ctx.app, this.ctx.plugin).open());
 
 		const addBtn = this.el.createEl("button", { cls: "mrd-btn mrd-btn-primary mrd-todo-add", text: "+ New directive" });
 		addBtn.addEventListener("click", () =>
@@ -61,7 +66,9 @@ export class TodoPanel extends BasePanel {
 	private renderRow(parent: HTMLElement, inst: TodoInstance, idx: number, count: number): void {
 		const store = this.ctx.todos;
 		const item = inst.item;
-		const row = parent.createDiv({ cls: "mrd-todo-row" });
+		const today = moment().format("YYYY-MM-DD");
+		const wrap = parent.createDiv({ cls: "mrd-todo-item" });
+		const row = wrap.createDiv({ cls: "mrd-todo-row" });
 		if (inst.flagged) row.addClass("is-flagged");
 		if (inst.done || inst.skipped) row.addClass("is-done");
 
@@ -78,8 +85,23 @@ export class TodoPanel extends BasePanel {
 		if (item.recurrence.type !== "none") meta.createSpan({ cls: "mrd-chip mrd-chip-cold", text: describeRecurrence(item.recurrence) });
 		if (item.scheduledTime) meta.createSpan({ cls: "mrd-chip", text: item.scheduledTime });
 		if (inst.flagged) meta.createSpan({ cls: "mrd-chip mrd-chip-warn", text: inst.flagLabel });
+		const subs = item.subItems ?? [];
+		if (subs.length > 0) {
+			const doneN = subItemsDoneCount(item, today);
+			const chip = meta.createSpan({ cls: "mrd-chip mrd-chip-cold", text: `sub-tasks ${doneN}/${subs.length}` });
+			if (allSubItemsDone(item, today)) chip.addClass("mrd-chip-warn");
+		}
 
 		const actions = row.createDiv({ cls: "mrd-todo-actions" });
+		const hasDetail = subs.length > 0 || !!item.note;
+		const isOpen = this.expanded.has(item.id);
+		// The chevron always expands — collapsed rows show a caret so a fresh
+		// directive can still be given its first sub-task or note.
+		this.iconBtn(actions, isOpen ? "▾" : "▸", hasDetail ? "Sub-tasks & note" : "Add sub-tasks or a note", false, () => {
+			if (isOpen) this.expanded.delete(item.id);
+			else this.expanded.add(item.id);
+			this.rerender();
+		});
 		if (!inst.done && count > 1 && idx >= 0) {
 			this.iconBtn(actions, "↑", "Move up", idx === 0, async () => {
 				await this.move(idx, -1);
@@ -107,6 +129,78 @@ export class TodoPanel extends BasePanel {
 			await store.remove(item.id);
 			this.after();
 		});
+
+		if (isOpen) this.renderDetail(wrap, inst, today);
+	}
+
+	/** Expanded region: the note line (inline-editable) and the sub-task checklist. */
+	private renderDetail(wrap: HTMLElement, inst: TodoInstance, today: string): void {
+		const store = this.ctx.todos;
+		const item = inst.item;
+		const detail = wrap.createDiv({ cls: "mrd-todo-detail" });
+
+		// --- note ---
+		const noteInput = detail.createEl("input", {
+			cls: "mrd-todo-note-input",
+			attr: { type: "text", placeholder: "Add a note…", value: item.note ?? "" },
+		});
+		const saveNote = () => {
+			if ((item.note ?? "") === noteInput.value.trim()) return;
+			void store.setNote(item.id, noteInput.value).then(() => this.after());
+		};
+		noteInput.addEventListener("focus", () => (this.ctx.runtime.typingUntil = Date.now() + 2000));
+		noteInput.addEventListener("input", () => (this.ctx.runtime.typingUntil = Date.now() + 2000));
+		noteInput.addEventListener("blur", saveNote);
+		noteInput.addEventListener("keydown", (e) => {
+			if (e.key === "Enter") {
+				e.preventDefault();
+				noteInput.blur();
+			}
+		});
+
+		// --- sub-tasks ---
+		const subList = detail.createDiv({ cls: "mrd-subtask-list" });
+		for (const sub of item.subItems ?? []) {
+			const srow = subList.createDiv({ cls: "mrd-subtask-row" });
+			const done = subItemDone(item, sub.id, today);
+			if (done) srow.addClass("is-done");
+			const cb = srow.createEl("button", {
+				cls: "mrd-subtask-check",
+				attr: { "aria-label": done ? "Mark sub-task not done" : "Mark sub-task done" },
+			});
+			cb.setText(done ? "✓" : "");
+			cb.addEventListener("click", async () => {
+				await store.toggleSubItem(item.id, sub.id, today);
+				this.after();
+			});
+			srow.createSpan({ cls: "mrd-subtask-text", text: sub.text });
+			this.iconBtn(srow, "🗑", "Remove sub-task", false, async () => {
+				await store.removeSubItem(item.id, sub.id);
+				this.after();
+			});
+		}
+
+		// --- add a sub-task ---
+		const addRow = detail.createDiv({ cls: "mrd-subtask-add" });
+		const addInput = addRow.createEl("input", {
+			cls: "mrd-subtask-input",
+			attr: { type: "text", placeholder: "Add a sub-task…" },
+		});
+		const addSub = () => {
+			const text = addInput.value.trim();
+			if (!text) return;
+			void store.addSubItem(item.id, text).then(() => this.after());
+		};
+		addInput.addEventListener("focus", () => (this.ctx.runtime.typingUntil = Date.now() + 2000));
+		addInput.addEventListener("input", () => (this.ctx.runtime.typingUntil = Date.now() + 2000));
+		addInput.addEventListener("keydown", (e) => {
+			if (e.key === "Enter") {
+				e.preventDefault();
+				addSub();
+			}
+		});
+		const addBtn = addRow.createEl("button", { cls: "mrd-btn mrd-btn-sm", text: "Add" });
+		addBtn.addEventListener("click", addSub);
 	}
 
 	private iconBtn(parent: HTMLElement, glyph: string, label: string, disabled: boolean, onClick: () => void): void {
@@ -137,164 +231,4 @@ function activeSort(a: TodoInstance, b: TodoInstance): number {
 	const bt = b.item.scheduledTime ?? "99:99";
 	if (at !== bt) return at.localeCompare(bt);
 	return a.item.order - b.item.order;
-}
-
-// ------------------------------------------------------------- edit modal
-
-const WEEKDAYS: Array<{ v: number; label: string }> = [
-	{ v: 1, label: "Mon" },
-	{ v: 2, label: "Tue" },
-	{ v: 3, label: "Wed" },
-	{ v: 4, label: "Thu" },
-	{ v: 5, label: "Fri" },
-	{ v: 6, label: "Sat" },
-	{ v: 0, label: "Sun" },
-];
-
-class TodoEditModal extends Modal {
-	private text: string;
-	private recType: RecurrenceType;
-	private weeklyDays: Set<number>;
-	private monthlyDate: number;
-	private everyN: number;
-	private scheduledDate: string;
-	private scheduledTime: string;
-
-	constructor(
-		app: App,
-		private store: TodoStore,
-		private existing: TodoItem | undefined,
-		private onDone: () => void
-	) {
-		super(app);
-		const e = existing;
-		this.text = e?.text ?? "";
-		this.recType = e?.recurrence.type ?? "none";
-		this.weeklyDays = new Set(e?.recurrence.days ?? [moment().day()]);
-		this.monthlyDate = e?.recurrence.date ?? moment().date();
-		this.everyN = e?.recurrence.n ?? 2;
-		this.scheduledDate = e?.scheduledDate ?? "";
-		this.scheduledTime = e?.scheduledTime ?? "";
-	}
-
-	onOpen(): void {
-		this.titleEl.setText(this.existing ? "Edit directive" : "New directive");
-		const { contentEl } = this;
-
-		new Setting(contentEl).setName("Directive").addText((t) => {
-			t.setPlaceholder("What needs doing").setValue(this.text).onChange((v) => (this.text = v));
-			t.inputEl.classList.add("mrd-modal-wide");
-			t.inputEl.focus();
-			t.inputEl.addEventListener("keydown", (e) => {
-				if (e.key === "Enter") {
-					e.preventDefault();
-					this.submit();
-				}
-			});
-		});
-
-		const dynamic = contentEl.createDiv();
-		new Setting(contentEl)
-			.setName("Repeat")
-			.addDropdown((dd) => {
-				dd.addOptions({
-					none: "One-time",
-					daily: "Daily",
-					weekdays: "Weekdays (Mon–Fri)",
-					weekly: "Weekly",
-					monthly: "Monthly",
-					everyNDays: "Every N days",
-				});
-				dd.setValue(this.recType).onChange((v) => {
-					this.recType = v as RecurrenceType;
-					this.renderDynamic(dynamic);
-				});
-			});
-		contentEl.appendChild(dynamic);
-		this.renderDynamic(dynamic);
-
-		new Setting(contentEl)
-			.setName("Appear on")
-			.setDesc("Optional. Hidden until this date (and time). For repeats, the start date.")
-			.addText((t) => {
-				t.inputEl.type = "date";
-				t.setValue(this.scheduledDate).onChange((v) => (this.scheduledDate = v));
-			})
-			.addText((t) => {
-				t.inputEl.type = "time";
-				t.setValue(this.scheduledTime).onChange((v) => (this.scheduledTime = v));
-			});
-
-		new Setting(contentEl)
-			.addButton((b) => b.setButtonText("Cancel").onClick(() => this.close()))
-			.addButton((b) => b.setButtonText(this.existing ? "Save" : "Add").setCta().onClick(() => this.submit()));
-	}
-
-	private renderDynamic(host: HTMLElement): void {
-		host.empty();
-		if (this.recType === "weekly") {
-			const s = new Setting(host).setName("On days");
-			for (const d of WEEKDAYS) {
-				const btn = s.controlEl.createEl("button", { cls: "mrd-day-toggle", text: d.label });
-				if (this.weeklyDays.has(d.v)) btn.addClass("is-on");
-				btn.addEventListener("click", () => {
-					if (this.weeklyDays.has(d.v)) this.weeklyDays.delete(d.v);
-					else this.weeklyDays.add(d.v);
-					btn.toggleClass("is-on", this.weeklyDays.has(d.v));
-				});
-			}
-		} else if (this.recType === "monthly") {
-			new Setting(host).setName("Day of month").addText((t) => {
-				t.inputEl.type = "number";
-				t.inputEl.min = "1";
-				t.inputEl.max = "31";
-				t.setValue(String(this.monthlyDate)).onChange((v) => (this.monthlyDate = clamp(Number(v), 1, 31)));
-			});
-		} else if (this.recType === "everyNDays") {
-			new Setting(host).setName("Every").setDesc("days").addText((t) => {
-				t.inputEl.type = "number";
-				t.inputEl.min = "1";
-				t.setValue(String(this.everyN)).onChange((v) => (this.everyN = Math.max(1, Number(v) || 1)));
-			});
-		}
-	}
-
-	private buildRecurrence(): Recurrence {
-		switch (this.recType) {
-			case "weekly":
-				return { type: "weekly", days: [...this.weeklyDays].sort((a, b) => a - b) };
-			case "monthly":
-				return { type: "monthly", date: this.monthlyDate };
-			case "everyNDays":
-				return { type: "everyNDays", n: this.everyN };
-			default:
-				return { type: this.recType };
-		}
-	}
-
-	private async submit(): Promise<void> {
-		const text = this.text.trim();
-		if (!text) {
-			new Notice("A directive needs text.");
-			return;
-		}
-		const patch = {
-			text,
-			recurrence: this.buildRecurrence(),
-			scheduledDate: this.scheduledDate || undefined,
-			scheduledTime: this.scheduledTime || undefined,
-		};
-		if (this.existing) await this.store.update(this.existing.id, patch);
-		else await this.store.add(patch);
-		this.close();
-		this.onDone();
-	}
-
-	onClose(): void {
-		this.contentEl.empty();
-	}
-}
-
-function clamp(n: number, lo: number, hi: number): number {
-	return Math.max(lo, Math.min(hi, Number.isFinite(n) ? n : lo));
 }

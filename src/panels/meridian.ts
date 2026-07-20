@@ -1,5 +1,6 @@
 import { moment } from "obsidian";
 import { BasePanel, RefreshReason, placard } from "./types";
+import { LineHistoryModal } from "./linehistory";
 // Canon: 288 lines across 12 pools. Bundled verbatim — never rewritten (§7.3, §12).
 import LINES from "../../meridian-lines.json";
 
@@ -53,7 +54,9 @@ export class MeridianPanel extends BasePanel {
 		await this.renderBody();
 	}
 
-	private async rotate(): Promise<void> {
+	/** Force-rotate the ambient line (§1.1 `new-meridian-line`). Public so the
+	 * command can drive a mounted panel through the full weighted selection. */
+	async rotate(): Promise<void> {
 		this.currentLine = await this.pick();
 		if (this.el?.isConnected) await this.paint();
 	}
@@ -62,6 +65,12 @@ export class MeridianPanel extends BasePanel {
 		if (!this.currentLine) this.currentLine = await this.pick();
 		const head = placard(this.el, "MERIDIAN");
 		head.createSpan({ cls: "mrd-placard-badge", text: "OBSERVING" });
+		const histBtn = head.createEl("button", {
+			cls: "mrd-icon-btn mrd-meridian-hist",
+			text: "❯",
+			attr: { "aria-label": "Recent lines", title: "Recent lines" },
+		});
+		histBtn.addEventListener("click", () => new LineHistoryModal(this.ctx.app, this.ctx.plugin).open());
 		const card = this.el.createDiv({ cls: "mrd-meridian" });
 		card.createDiv({ cls: "mrd-meridian-line", text: this.currentLine });
 	}
@@ -90,6 +99,8 @@ export class MeridianPanel extends BasePanel {
 
 		ring.push(line);
 		while (ring.length > 24) ring.shift();
+		// Persist to the read-only history log (§3.2) — the same commit point.
+		this.ctx.plugin.recordLine(line);
 		return line;
 	}
 
@@ -143,12 +154,43 @@ export class MeridianPanel extends BasePanel {
 		return w;
 	}
 
-	/** A real, honest round-number trigger: today's completed directives just
-	 * crossed a multiple of five. */
+	/** Honest, real triggers — a union (§2.2). The milestone still fires at most
+	 * once per day (the `milestoneShownDate` guard in `pick()` enforces this):
+	 *  - today's completed directives crossed a multiple of five (the original), or
+	 *  - the observation streak just hit a multiple of seven, or
+	 *  - the streak set a new all-time record today. */
 	private milestoneTriggered(): boolean {
 		const doneToday = this.ctx.todos.instancesFor().filter((i) => i.done).length;
-		return doneToday > 0 && doneToday % 5 === 0;
+		const completionsMilestone = doneToday > 0 && doneToday % 5 === 0;
+		const streak = this.ctx.plugin.streak;
+		const streakSeven = streak.current > 0 && streak.current % 7 === 0;
+		const newRecord = this.ctx.runtime.streakRecordDate === moment().format("YYYY-MM-DD");
+		return completionsMilestone || streakSeven || newRecord;
 	}
+}
+
+/** A uniformly random line from the whole closed canon (all 288 lines across
+ * every pool). Used only for the headless `new-meridian-line` Notice when no
+ * dashboard leaf is mounted — still the closed pool, never generated. */
+export function anyCanonLine(): string {
+	const all: string[] = [
+		...POOLS.session,
+		...POOLS.standard,
+		...POOLS.time_of_day.morning,
+		...POOLS.time_of_day.afternoon,
+		...POOLS.time_of_day.evening,
+		...POOLS.time_of_day.late_night,
+		...POOLS.affirming,
+		...POOLS.identity,
+		...POOLS.care,
+		...POOLS.productivity,
+		...POOLS.overdue,
+		...POOLS.idle,
+		...POOLS.food,
+		...POOLS.aftercare,
+		...POOLS.milestone,
+	];
+	return all[Math.floor(Math.random() * all.length)] ?? "STABILITY THROUGH OBSERVATION.";
 }
 
 function timeSegment(): TimeSegment {

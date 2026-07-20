@@ -19,6 +19,9 @@ export interface MeridianRuntime {
 	/** While `Date.now() < typingUntil`, the Operator is typing in a free-text
 	 * field; the vault-refresh bus is deferred so the layout doesn't jump. */
 	typingUntil: number;
+	/** YYYY-MM-DD on which the streak set a new all-time record — a milestone
+	 * trigger for that day (§2.2). "" otherwise. */
+	streakRecordDate: string;
 }
 
 export interface PanelContext {
