@@ -23,6 +23,9 @@
 	--mrd-bone-faint: #6f6857;
 	--mrd-amber-soft: #d07a3f;
 	--mrd-teal-soft: #6f8079;
+	/* swatch for dashboard-only "local" events on the agenda (§2.1) — a
+	 * deliberately distinct violet-grey, off the per-calendar palette */
+	--mrd-cal-local: #7c7a9a;
 
 	/* ---- type ---- */
 	--mrd-font-display: "Oswald", "Big Shoulders Display", "Bebas Neue",
@@ -410,6 +413,13 @@
 	color: var(--mrd-bone-dim);
 	font-style: italic;
 }
+.mrd-clock-record {
+	font-family: var(--mrd-font-mono);
+	font-size: 0.68rem;
+	letter-spacing: 0.1em;
+	color: var(--mrd-hazard);
+	margin-top: 6px;
+}
 
 /* --------------------------------------------------------------- qotd */
 
@@ -575,6 +585,12 @@
 	color: var(--mrd-amber-soft);
 	padding-bottom: 8px;
 	border-bottom: 1px solid var(--mrd-line);
+}
+.mrd-review-streak {
+	font-family: var(--mrd-font-mono);
+	font-size: 0.72rem;
+	letter-spacing: 0.08em;
+	color: var(--mrd-hazard);
 }
 .mrd-review-block {
 	display: flex;
@@ -771,6 +787,26 @@
 .mrd-agenda-sub {
 	font-size: 0.72rem;
 	color: var(--mrd-bone-faint);
+}
+.mrd-agenda-title {
+	display: flex;
+	align-items: baseline;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+.mrd-agenda-local-chip {
+	font-size: 0.58rem;
+	letter-spacing: 0.1em;
+}
+.mrd-agenda-row-edit {
+	cursor: pointer;
+	border-radius: 4px;
+}
+.mrd-agenda-row-edit:hover {
+	background: #1f1c15;
+}
+.mrd-agenda-add {
+	flex: none;
 }
 .mrd-agenda-alert {
 	border: 1px solid var(--mrd-amber);
@@ -1085,6 +1121,12 @@
 .mrd-search-context {
 	font-size: 0.72rem;
 	color: var(--mrd-bone-faint);
+}
+.mrd-search-context.is-body {
+	font-style: italic;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
 }
 
 /* -------------------------------------------------------------- places */

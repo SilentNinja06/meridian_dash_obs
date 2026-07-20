@@ -54,6 +54,7 @@ export class MeridianView extends ItemView {
 
 	async onOpen(): Promise<void> {
 		this.plugin.touchAccess();
+		void this.plugin.updateStreak();
 		await this.build();
 	}
 

@@ -2,8 +2,10 @@ import { moment } from "obsidian";
 import { BasePanel, placard } from "./types";
 import { AgendaItem, eventsOnDate, fetchICS, parseICS } from "../core/ics";
 import { agendaState, formatGap } from "../core/agendamath";
+import { LocalEvent, localEventToAgendaItem } from "../core/localevents";
 import { calendarColor } from "../core/tokens";
 import { WeekPrintModal } from "./weekprint";
+import { LocalEventModal } from "./localeventmodal";
 
 /**
  * Today's agenda (§7.5). Today only — no month view. Fetches each Proton share
@@ -36,6 +38,10 @@ export class AgendaPanel extends BasePanel {
 		const s = this.ctx.settings();
 		const head = placard(this.el, "Today's Agenda");
 		head.createSpan({ cls: "mrd-placard-badge", text: moment().format("YYYY-MM-DD") });
+		const addBtn = head.createEl("button", { cls: "mrd-btn mrd-btn-sm mrd-agenda-add", text: "+ Event" });
+		addBtn.addEventListener("click", () =>
+			new LocalEventModal(this.ctx.app, this.ctx.plugin, undefined, () => this.rerender()).open()
+		);
 		const printBtn = head.createEl("button", { cls: "mrd-btn mrd-btn-sm mrd-agenda-print", text: "Print week" });
 		printBtn.addEventListener("click", () => {
 			// Best-effort freshen, then open the planner from cache.
@@ -43,16 +49,18 @@ export class AgendaPanel extends BasePanel {
 			new WeekPrintModal(this.ctx.app, s.agendaUrls, this.ctx.plugin.agendaCache).open();
 		});
 
-		if (s.agendaUrls.length === 0) {
+		const today = moment().format("YYYY-MM-DD");
+		const localToday = this.ctx.plugin.localEvents.filter((e) => e.date === today);
+
+		if (s.agendaUrls.length === 0 && localToday.length === 0) {
 			this.el.createDiv({
 				cls: "mrd-muted",
-				text: "No calendars are on file. Add Proton Calendar share links (public .ics URLs) in settings and today's schedule will appear here.",
+				text: "No calendars are on file. Add Proton Calendar share links (public .ics URLs) in settings, or add a local event with “+ Event”, and today's schedule will appear here.",
 			});
 			return;
 		}
 
-		const today = moment().format("YYYY-MM-DD");
-		const rows: Array<{ item: AgendaItem; color: string; label: string; countdown: boolean }> = [];
+		const rows: Array<{ item: AgendaItem; color: string; label: string; countdown: boolean; local?: LocalEvent }> = [];
 		let anyCache = false;
 		let oldest = Infinity;
 
@@ -72,6 +80,11 @@ export class AgendaPanel extends BasePanel {
 				}
 			}
 		});
+
+		// Local events feed the same sorted list + countdown math (§2.1).
+		for (const ev of localToday) {
+			rows.push({ item: localEventToAgendaItem(ev), color: "var(--mrd-cal-local)", label: "LOCAL", countdown: true, local: ev });
+		}
 
 		// Failure notices — always visible, in voice.
 		const failed = s.agendaUrls.filter((c) => this.errors.has(c.url));
@@ -102,9 +115,19 @@ export class AgendaPanel extends BasePanel {
 			const time = row.createSpan({ cls: "mrd-agenda-time" });
 			time.setText(r.item.allDay ? "ALL DAY" : r.item.timeLabel);
 			const body = row.createDiv({ cls: "mrd-agenda-body" });
-			body.createDiv({ cls: "mrd-agenda-title", text: r.item.summary });
-			const sub = [r.label, r.item.location].filter(Boolean).join(" · ");
+			const title = body.createDiv({ cls: "mrd-agenda-title" });
+			title.createSpan({ text: r.item.summary });
+			if (r.local) title.createSpan({ cls: "mrd-chip mrd-chip-cold mrd-agenda-local-chip", text: "LOCAL" });
+			const sub = [r.local ? "" : r.label, r.item.location].filter(Boolean).join(" · ");
 			if (sub) body.createDiv({ cls: "mrd-agenda-sub", text: sub });
+			if (r.local) {
+				const ev = r.local;
+				row.addClass("mrd-agenda-row-edit");
+				row.setAttr("title", "Edit this local event");
+				row.addEventListener("click", () =>
+					new LocalEventModal(this.ctx.app, this.ctx.plugin, ev, () => this.rerender()).open()
+				);
+			}
 		}
 
 		// Staleness footer.

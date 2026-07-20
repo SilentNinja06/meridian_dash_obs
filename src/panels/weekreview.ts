@@ -96,6 +96,17 @@ export class WeekReviewModal extends Modal {
 		host.empty();
 		host.createDiv({ cls: "mrd-review-header", text: "OBSERVATION SUMMARY — 7-day window. The record is complete." });
 
+		// Streak record — positive framing only; silent when there's no run (§2.2).
+		const streak = this.plugin.streak;
+		if (streak.current > 0) {
+			host.createDiv({
+				cls: "mrd-review-streak",
+				text: `RECORD — ${streak.current} consecutive ${plural(streak.current, "day", "days")} observed${
+					streak.longest > streak.current ? ` · longest ${streak.longest}` : ""
+				}.`,
+			});
+		}
+
 		// Directives completed — total + per-day bars.
 		const dir = host.createDiv({ cls: "mrd-review-block" });
 		dir.createDiv({ cls: "mrd-review-stat-head", text: "Directives completed" });

@@ -1,6 +1,7 @@
-import { Notice, ObsidianProtocolData, Plugin, WorkspaceLeaf } from "obsidian";
+import { Notice, ObsidianProtocolData, Plugin, WorkspaceLeaf, moment } from "obsidian";
 import {
 	DEFAULT_SETTINGS,
+	LineHistoryEntry,
 	MeridianData,
 	MeridianSettings,
 	MeridianSettingTab,
@@ -10,13 +11,16 @@ import { Bridge } from "./core/bridge";
 import { TodoStore, seedTodos } from "./core/todostore";
 import { DirectivesStore } from "./core/directivesstore";
 import { LibraryStore } from "./core/library";
-import { appendToDailyField } from "./core/dailynote";
-import { LOG_FIELD_LABELS, LOG_FIELD_SPECS, LogField, isLogField } from "./core/dailyfields";
+import { appendToDailyField, getDailyNoteFile, headingField, readDailyNoteRaw, readField, readMarkerLogLines } from "./core/dailynote";
+import { LOG_FIELD_LABELS, LOG_FIELD_SPECS, LOG_FIELDS, LogField, isLogField } from "./core/dailyfields";
+import { LocalEvent } from "./core/localevents";
+import { DEFAULT_STREAK, StreakData, advanceStreak } from "./core/streak";
 import { MeridianRuntime, RefreshReason } from "./panels/types";
 import { MeridianView, VIEW_TYPE_MERIDIAN } from "./view";
 import { TodoEditModal } from "./panels/todomodal";
 import { PromptModal } from "./panels/promptmodal";
 import { WeekReviewModal } from "./panels/weekreview";
+import { LocalEventModal } from "./panels/localeventmodal";
 import { anyCanonLine } from "./panels/meridian";
 
 export default class MeridianDashPlugin extends Plugin {
@@ -32,10 +36,12 @@ export default class MeridianDashPlugin extends Plugin {
 		recentLines: [],
 		foodFocusUntil: 0,
 		typingUntil: 0,
+		streakRecordDate: "",
 	};
 
 	private data!: MeridianData;
 	private refreshTimer: number | null = null;
+	private midnightTimer: number | null = null;
 
 	async onload(): Promise<void> {
 		// Register the view synchronously, *before any await*, so a dashboard leaf
@@ -96,7 +102,11 @@ export default class MeridianDashPlugin extends Plugin {
 		// Everything that reads or writes the vault (loading/creating the
 		// directives file) or touches the workspace waits until it is ready.
 		this.app.workspace.onLayoutReady(() => {
-			void this.loadDirectives().then(() => this.refreshOpenViews("vault"));
+			void this.loadDirectives().then(() => {
+				void this.updateStreak();
+				this.refreshOpenViews("vault");
+			});
+			this.scheduleMidnight();
 			// Turn empty New Tab pages into the dashboard when that's enabled.
 			this.registerEvent(
 				this.app.workspace.on("active-leaf-change", (leaf) => this.maybeReplaceEmptyLeaf(leaf))
@@ -121,6 +131,7 @@ export default class MeridianDashPlugin extends Plugin {
 
 	onunload(): void {
 		if (this.refreshTimer !== null) window.clearTimeout(this.refreshTimer);
+		if (this.midnightTimer !== null) window.clearTimeout(this.midnightTimer);
 	}
 
 	// ----------------------------------------------- commands + URI (§1.1)
@@ -156,6 +167,11 @@ export default class MeridianDashPlugin extends Plugin {
 			id: "new-meridian-line",
 			name: "New MERIDIAN line",
 			callback: () => this.newMeridianLine(),
+		});
+		this.addCommand({
+			id: "add-event",
+			name: "Add an event",
+			callback: () => new LocalEventModal(this.app, this, undefined, () => this.refreshOpenViews("vault")).open(),
 		});
 		this.addCommand({
 			id: "weekly-review",
@@ -266,6 +282,18 @@ export default class MeridianDashPlugin extends Plugin {
 				else this.promptLog(field);
 				return;
 			}
+			case "add-event": {
+				const summary = (params.summary ?? params.text ?? "").trim();
+				if (summary) {
+					const date = /^\d{4}-\d{2}-\d{2}$/.test(params.date ?? "") ? params.date : moment().format("YYYY-MM-DD");
+					const start = params.start || undefined;
+					await this.addLocalEvent({ summary, date, start, end: start && params.end ? params.end : undefined });
+					new Notice(`Event filed: ${summary}.`);
+				} else {
+					new LocalEventModal(this.app, this, undefined, () => this.refreshOpenViews("vault")).open();
+				}
+				return;
+			}
 			default:
 				new Notice("That instruction is not recognised. Nothing was done.");
 		}
@@ -291,6 +319,11 @@ export default class MeridianDashPlugin extends Plugin {
 			seeded: raw?.seeded ?? false,
 			agendaCache: raw?.agendaCache ?? {},
 			milestoneShownDate: raw?.milestoneShownDate ?? "",
+			// New in 1.9.0/1.10.0 — every field optional with a safe default so a
+			// pre-1.7.0 data.json loads without throwing (§ cross-cutting migration).
+			localEvents: raw?.localEvents ?? [],
+			streak: raw?.streak ?? { ...DEFAULT_STREAK },
+			lineHistory: raw?.lineHistory ?? [],
 		};
 		this.runtime.previousAccess = this.data.lastAccess;
 		await this.saveData_();
@@ -347,6 +380,91 @@ export default class MeridianDashPlugin extends Plugin {
 
 	set milestoneShownDate(date: string) {
 		this.data.milestoneShownDate = date;
+	}
+
+	get streak(): StreakData {
+		return this.data.streak;
+	}
+
+	get lineHistory(): LineHistoryEntry[] {
+		return this.data.lineHistory;
+	}
+
+	// ------------------------------------------------------- local events (§2.1)
+
+	get localEvents(): LocalEvent[] {
+		return this.data.localEvents;
+	}
+
+	async addLocalEvent(ev: Omit<LocalEvent, "id">): Promise<void> {
+		this.data.localEvents.push({ id: localId(), ...ev });
+		await this.saveData_();
+		this.refreshOpenViews("vault");
+	}
+
+	async updateLocalEvent(id: string, patch: Partial<Omit<LocalEvent, "id">>): Promise<void> {
+		const ev = this.data.localEvents.find((e) => e.id === id);
+		if (!ev) return;
+		Object.assign(ev, patch);
+		await this.saveData_();
+		this.refreshOpenViews("vault");
+	}
+
+	async removeLocalEvent(id: string): Promise<void> {
+		this.data.localEvents = this.data.localEvents.filter((e) => e.id !== id);
+		await this.saveData_();
+		this.refreshOpenViews("vault");
+	}
+
+	// ------------------------------------------------------------- streak (§2.2)
+
+	/** Whether a day "counts": its note exists and holds a completed task, a
+	 * journal write, or any marker-log line. Existence alone is too weak — the
+	 * template auto-creates empty notes. */
+	private async dayCounts(date: string): Promise<boolean> {
+		if (!getDailyNoteFile(this.app, date)) return false;
+		const raw = await readDailyNoteRaw(this.app, date);
+		// A completed-tasks entry.
+		const completed = readField(raw, headingField(this.settings.completedTasksHeading));
+		if (completed.split("\n").some((l) => /^\s*-\s+\S/.test(l))) return true;
+		// A journal write in any of the free-text sections.
+		for (const field of LOG_FIELDS) {
+			const body = readField(raw, LOG_FIELD_SPECS[field]);
+			if (body.split("\n").some((l) => l.trim() && !/^\s*-\s*(\[[ xX]?\]\s*)?$/.test(l))) return true;
+		}
+		// Any marker-log line (nourishment, regulation, contacts).
+		for (const marker of ["%% arfid-log %%", "%% spiral-log %%", "%% crm-log %%"]) {
+			if (readMarkerLogLines(raw, marker).length > 0) return true;
+		}
+		return false;
+	}
+
+	/** Recompute the streak for today. Idempotent per day; a broken streak is
+	 * silent. Records a new-record day in runtime as a milestone trigger. */
+	async updateStreak(): Promise<void> {
+		const today = moment().format("YYYY-MM-DD");
+		if (this.data.streak.lastDayCounted === today) return; // already counted
+		const counts = await this.dayCounts(today);
+		if (!counts) return;
+		const yesterday = moment().subtract(1, "day").format("YYYY-MM-DD");
+		const { streak, newRecord } = advanceStreak(this.data.streak, counts, today, yesterday);
+		this.data.streak = streak;
+		if (newRecord) this.runtime.streakRecordDate = today;
+		await this.saveData_();
+		this.refreshOpenViews("vault");
+	}
+
+	/** Reschedule a one-shot timer to just after the next local midnight; on fire
+	 * it recomputes the streak (day rollover) and re-arms. */
+	private scheduleMidnight(): void {
+		if (this.midnightTimer !== null) window.clearTimeout(this.midnightTimer);
+		const msToMidnight = moment().endOf("day").valueOf() - Date.now() + 2000;
+		this.midnightTimer = window.setTimeout(() => {
+			this.midnightTimer = null;
+			void this.updateStreak();
+			this.refreshOpenViews("vault");
+			this.scheduleMidnight();
+		}, Math.max(1000, msToMidnight));
 	}
 
 	/** Record this view-open as the latest access, returning the prior value. */
@@ -406,4 +524,10 @@ export default class MeridianDashPlugin extends Plugin {
 			this.refreshOpenViews("vault");
 		}, 300);
 	}
+}
+
+function localId(): string {
+	const c = (globalThis as unknown as { crypto?: Crypto }).crypto;
+	if (c?.randomUUID) return c.randomUUID();
+	return "le-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
 }

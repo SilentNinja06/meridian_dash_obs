@@ -1,6 +1,8 @@
 import { App, PluginSettingTab, Setting } from "obsidian";
 import type MeridianDashPlugin from "./main";
 import { TodoItem } from "./core/todostore";
+import { LocalEvent } from "./core/localevents";
+import { StreakData } from "./core/streak";
 import { PANEL_ORDER, PANEL_TITLES } from "./panels/registry";
 
 export interface CalendarLink {
@@ -32,6 +34,10 @@ export interface MeridianSettings {
 	agendaRefreshMinutes: number;
 	agendaUrls: CalendarLink[];
 	kbSearchPath: string;
+	/** Number of most-recent notes shown when the KB search box is empty (§2.3). */
+	kbRecentCount: number;
+	/** Whether KB search also scans note bodies (§2.3). */
+	kbSearchBody: boolean;
 	/** Knowledge Base (information library) — root + subfolders + category list
 	 * heading, for category management on the KB card. */
 	kbRootPath: string;
@@ -65,6 +71,17 @@ export interface MeridianData {
 	agendaCache: Record<string, { text: string; fetchedAt: number }>;
 	/** Date a milestone line was last shown, so it never fires twice a day (§7.3). */
 	milestoneShownDate: string;
+	/** Dashboard-only events merged into today's agenda (§2.1). */
+	localEvents: LocalEvent[];
+	/** Observation streak + longest record (§2.2). */
+	streak: StreakData;
+	/** Recently shown MERIDIAN lines with timestamps, newest last (§3.2). */
+	lineHistory: LineHistoryEntry[];
+}
+
+export interface LineHistoryEntry {
+	line: string;
+	at: number;
 }
 
 export const DEFAULT_SETTINGS: MeridianSettings = {
@@ -77,6 +94,8 @@ export const DEFAULT_SETTINGS: MeridianSettings = {
 	agendaRefreshMinutes: 30,
 	agendaUrls: [],
 	kbSearchPath: "Knowledge base/Notes/",
+	kbRecentCount: 8,
+	kbSearchBody: true,
 	kbRootPath: "Knowledge base",
 	kbNotesSubfolder: "Notes",
 	kbCategoriesSubfolder: "Categories",
@@ -310,6 +329,27 @@ export class MeridianSettingTab extends PluginSettingTab {
 			.addText((t) =>
 				t.setPlaceholder(DEFAULT_SETTINGS.kbSearchPath).setValue(s.kbSearchPath).onChange(async (v) => {
 					s.kbSearchPath = v.trim() || DEFAULT_SETTINGS.kbSearchPath;
+					await this.save();
+				})
+			);
+		new Setting(containerEl)
+			.setName("Recent notes shown")
+			.setDesc("How many recently-modified notes to list when the search box is empty.")
+			.addText((t) =>
+				t.setValue(String(s.kbRecentCount)).onChange(async (v) => {
+					const n = Number(v);
+					if (Number.isFinite(n) && n >= 0) {
+						s.kbRecentCount = Math.floor(n);
+						await this.save();
+					}
+				})
+			);
+		new Setting(containerEl)
+			.setName("Search note bodies")
+			.setDesc("Also match note contents, not just filenames and headings. Filename/heading hits still rank first. Turn off if a large vault feels slow.")
+			.addToggle((t) =>
+				t.setValue(s.kbSearchBody).onChange(async (v) => {
+					s.kbSearchBody = v;
 					await this.save();
 				})
 			);

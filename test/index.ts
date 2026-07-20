@@ -2,6 +2,7 @@
 import "./subitems.test";
 import "./directives.test";
 import "./agenda.test";
+import "./streak.test";
 import { report } from "./_harness";
 
 report();

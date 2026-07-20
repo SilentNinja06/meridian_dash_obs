@@ -145,11 +145,18 @@ export class MeridianPanel extends BasePanel {
 		return w;
 	}
 
-	/** A real, honest round-number trigger: today's completed directives just
-	 * crossed a multiple of five. */
+	/** Honest, real triggers — a union (§2.2). The milestone still fires at most
+	 * once per day (the `milestoneShownDate` guard in `pick()` enforces this):
+	 *  - today's completed directives crossed a multiple of five (the original), or
+	 *  - the observation streak just hit a multiple of seven, or
+	 *  - the streak set a new all-time record today. */
 	private milestoneTriggered(): boolean {
 		const doneToday = this.ctx.todos.instancesFor().filter((i) => i.done).length;
-		return doneToday > 0 && doneToday % 5 === 0;
+		const completionsMilestone = doneToday > 0 && doneToday % 5 === 0;
+		const streak = this.ctx.plugin.streak;
+		const streakSeven = streak.current > 0 && streak.current % 7 === 0;
+		const newRecord = this.ctx.runtime.streakRecordDate === moment().format("YYYY-MM-DD");
+		return completionsMilestone || streakSeven || newRecord;
 	}
 }
 
