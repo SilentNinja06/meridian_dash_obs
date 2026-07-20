@@ -5,6 +5,7 @@ import {
 	MeridianData,
 	MeridianSettings,
 	MeridianSettingTab,
+	WeeklyGoal,
 	mergeSettings,
 } from "./settings";
 import { Bridge } from "./core/bridge";
@@ -22,6 +23,7 @@ import { PromptModal } from "./panels/promptmodal";
 import { WeekReviewModal } from "./panels/weekreview";
 import { LocalEventModal } from "./panels/localeventmodal";
 import { LineHistoryModal } from "./panels/linehistory";
+import { WeeklyGoalsModal, currentWeekKey } from "./panels/weeklygoals";
 import { anyCanonLine } from "./panels/meridian";
 
 export default class MeridianDashPlugin extends Plugin {
@@ -185,6 +187,11 @@ export default class MeridianDashPlugin extends Plugin {
 			callback: () => new WeekReviewModal(this.app, this).open(),
 		});
 		this.addCommand({
+			id: "weekly-goals",
+			name: "Set weekly goals",
+			callback: () => new WeeklyGoalsModal(this.app, this, currentWeekKey(), () => this.refreshOpenViews("vault")).open(),
+		});
+		this.addCommand({
 			id: "refresh",
 			name: "Refresh dashboard",
 			callback: () => this.refreshOpenViews("manual"),
@@ -330,6 +337,7 @@ export default class MeridianDashPlugin extends Plugin {
 			localEvents: raw?.localEvents ?? [],
 			streak: raw?.streak ?? { ...DEFAULT_STREAK },
 			lineHistory: raw?.lineHistory ?? [],
+			weeklyGoals: raw?.weeklyGoals ?? {},
 		};
 		this.runtime.previousAccess = this.data.lastAccess;
 		await this.saveData_();
@@ -430,6 +438,29 @@ export default class MeridianDashPlugin extends Plugin {
 		this.data.localEvents = this.data.localEvents.filter((e) => e.id !== id);
 		await this.saveData_();
 		this.refreshOpenViews("vault");
+	}
+
+	// ------------------------------------------------------- weekly goals
+
+	/** Goals for the week starting `weekKey` (YYYY-MM-DD). */
+	weeklyGoalsFor(weekKey: string): WeeklyGoal[] {
+		return this.data.weeklyGoals[weekKey] ?? [];
+	}
+
+	async addWeeklyGoal(weekKey: string, text: string): Promise<void> {
+		const trimmed = text.trim();
+		if (!trimmed) return;
+		const list = this.data.weeklyGoals[weekKey] ?? (this.data.weeklyGoals[weekKey] = []);
+		list.push({ id: localId(), text: trimmed });
+		await this.saveData_();
+	}
+
+	async removeWeeklyGoal(weekKey: string, id: string): Promise<void> {
+		const list = this.data.weeklyGoals[weekKey];
+		if (!list) return;
+		this.data.weeklyGoals[weekKey] = list.filter((g) => g.id !== id);
+		if (this.data.weeklyGoals[weekKey].length === 0) delete this.data.weeklyGoals[weekKey];
+		await this.saveData_();
 	}
 
 	// ------------------------------------------------------------- streak (§2.2)

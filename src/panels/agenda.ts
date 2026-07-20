@@ -6,6 +6,7 @@ import { LocalEvent, localEventToAgendaItem } from "../core/localevents";
 import { calendarColor } from "../core/tokens";
 import { WeekPrintModal } from "./weekprint";
 import { LocalEventModal } from "./localeventmodal";
+import { WeeklyGoalsModal, currentWeekKey } from "./weeklygoals";
 
 /**
  * Today's agenda (§7.5). Today only — no month view. Fetches each Proton share
@@ -38,15 +39,21 @@ export class AgendaPanel extends BasePanel {
 		const s = this.ctx.settings();
 		const head = placard(this.el, "Today's Agenda");
 		head.createSpan({ cls: "mrd-placard-badge", text: moment().format("YYYY-MM-DD") });
-		const addBtn = head.createEl("button", { cls: "mrd-btn mrd-btn-sm mrd-agenda-add", text: "+ Event" });
+		// Actions sit on their own row below the placard so the header stays clean.
+		const actions = this.el.createDiv({ cls: "mrd-btn-row mrd-agenda-actions" });
+		const addBtn = actions.createEl("button", { cls: "mrd-btn mrd-btn-sm", text: "+ Event" });
 		addBtn.addEventListener("click", () =>
 			new LocalEventModal(this.ctx.app, this.ctx.plugin, undefined, () => this.rerender()).open()
 		);
-		const printBtn = head.createEl("button", { cls: "mrd-btn mrd-btn-sm mrd-agenda-print", text: "Print week" });
+		const goalsBtn = actions.createEl("button", { cls: "mrd-btn mrd-btn-sm", text: "Weekly goals" });
+		goalsBtn.addEventListener("click", () =>
+			new WeeklyGoalsModal(this.ctx.app, this.ctx.plugin, currentWeekKey(), () => this.rerender()).open()
+		);
+		const printBtn = actions.createEl("button", { cls: "mrd-btn mrd-btn-sm", text: "Print week" });
 		printBtn.addEventListener("click", () => {
 			// Best-effort freshen, then open the planner from cache.
 			void this.fetchAll();
-			new WeekPrintModal(this.ctx.app, s.agendaUrls, this.ctx.plugin.agendaCache).open();
+			new WeekPrintModal(this.ctx.app, this.ctx.plugin).open();
 		});
 
 		const today = moment().format("YYYY-MM-DD");
@@ -65,7 +72,7 @@ export class AgendaPanel extends BasePanel {
 		let oldest = Infinity;
 
 		s.agendaUrls.forEach((cal, i) => {
-			const color = calendarColor(i);
+			const color = cal.color || calendarColor(i);
 			const countdown = cal.countdown !== false;
 			const cache = this.ctx.plugin.agendaCache[cal.url];
 			if (cache) {

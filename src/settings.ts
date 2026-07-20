@@ -3,6 +3,7 @@ import type MeridianDashPlugin from "./main";
 import { TodoItem } from "./core/todostore";
 import { LocalEvent } from "./core/localevents";
 import { StreakData } from "./core/streak";
+import { calendarColor } from "./core/tokens";
 import { PANEL_ORDER, PANEL_TITLES } from "./panels/registry";
 
 export interface CalendarLink {
@@ -12,6 +13,9 @@ export interface CalendarLink {
 	 * still shows on the agenda regardless. Undefined (legacy settings) counts as
 	 * included, so nothing changes on upgrade. */
 	countdown?: boolean;
+	/** Optional swatch colour (hex). Undefined falls back to the palette slot for
+	 * this calendar's position. */
+	color?: string;
 }
 
 export interface PlaceLink {
@@ -82,11 +86,18 @@ export interface MeridianData {
 	streak: StreakData;
 	/** Recently shown MERIDIAN lines with timestamps, newest last (§3.2). */
 	lineHistory: LineHistoryEntry[];
+	/** Weekly goals, keyed by the week-start date (YYYY-MM-DD). */
+	weeklyGoals: Record<string, WeeklyGoal[]>;
 }
 
 export interface LineHistoryEntry {
 	line: string;
 	at: number;
+}
+
+export interface WeeklyGoal {
+	id: string;
+	text: string;
 }
 
 export const DEFAULT_SETTINGS: MeridianSettings = {
@@ -291,7 +302,7 @@ export class MeridianSettingTab extends PluginSettingTab {
 		new Setting(containerEl)
 			.setName("Calendars")
 			.setDesc(
-				"Up to 10 public Proton Calendar share links (.ics). Today only — no month view. Toggle a calendar out of the countdown to keep it on the agenda while excluding it from the NEXT / open-gap math (e.g. a birthdays or holidays feed)."
+				"Up to 10 public Proton Calendar share links (.ics). Today only — no month view. Each has a swatch colour, a countdown toggle (keep it on the agenda while excluding it from the NEXT / open-gap math — e.g. a birthdays feed), and a remove button."
 			);
 		const calList = containerEl.createDiv({ cls: "mrd-settings-cal-list" });
 		const renderCals = () => {
@@ -311,6 +322,22 @@ export class MeridianSettingTab extends PluginSettingTab {
 					});
 					t.inputEl.classList.add("mrd-settings-cal-url");
 				});
+				row.addColorPicker((c) =>
+					c.setValue(cal.color || calendarColor(i)).onChange(async (v) => {
+						cal.color = v;
+						await this.save();
+					})
+				);
+				row.addExtraButton((b) =>
+					b
+						.setIcon("rotate-ccw")
+						.setTooltip("Reset colour to the default palette")
+						.onClick(async () => {
+							cal.color = undefined;
+							await this.save();
+							renderCals();
+						})
+				);
 				row.addToggle((t) =>
 					t
 						.setTooltip("Count in the next-event countdown")

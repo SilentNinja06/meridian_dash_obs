@@ -51,6 +51,12 @@ export interface TodoItem {
 	scheduledDate?: string;
 	/** Optional time-of-day the item appears on its date (HH:mm). */
 	scheduledTime?: string;
+	/** Optional soft deadline (YYYY-MM-DD). Shown as a chip; past-due, undone
+	 * items read "overdue". Independent of `scheduledDate` (the appear-on date). */
+	dueDate?: string;
+	/** Whether this directive is drawn on the printed week-at-a-glance planner on
+	 * its occurrence / scheduled / due days. Opt-in (default off). */
+	showOnWeekPrint?: boolean;
 	// --- non-recurring completion ---
 	completed?: boolean;
 	completedDate?: string;
@@ -257,6 +263,23 @@ export class TodoStore {
 		return out;
 	}
 
+	/** Directives to draw on the printed week planner for `date`: opt-in items
+	 * that occur on that date (recurring), or whose scheduled/due date is that day
+	 * (one-time). Ignores time-of-day hiding and completion — the planner is a
+	 * blank-space paper artifact, not the live list. */
+	itemsForWeekPrint(date: string): TodoItem[] {
+		const out: TodoItem[] = [];
+		for (const item of this.all()) {
+			if (!item.showOnWeekPrint) continue;
+			if (this.isRecurring(item)) {
+				if (this.isOccurrence(item, date)) out.push(item);
+			} else if (item.scheduledDate === date || item.dueDate === date) {
+				out.push(item);
+			}
+		}
+		return out;
+	}
+
 	/** Count of slipped items for MERIDIAN's `overdue` pool weighting (§7.3). */
 	overdueCount(date = todayStr()): number {
 		return this.instancesFor(date).filter((i) => i.flagged && !i.done).length;
@@ -295,6 +318,8 @@ export class TodoStore {
 			order: maxOrder + 1,
 			scheduledDate: partial.scheduledDate,
 			scheduledTime: partial.scheduledTime,
+			dueDate: partial.dueDate,
+			showOnWeekPrint: partial.showOnWeekPrint,
 			completions: [],
 			skips: [],
 		};

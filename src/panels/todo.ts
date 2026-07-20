@@ -84,6 +84,11 @@ export class TodoPanel extends BasePanel {
 		const meta = main.createDiv({ cls: "mrd-todo-meta" });
 		if (item.recurrence.type !== "none") meta.createSpan({ cls: "mrd-chip mrd-chip-cold", text: describeRecurrence(item.recurrence) });
 		if (item.scheduledTime) meta.createSpan({ cls: "mrd-chip", text: item.scheduledTime });
+		if (item.dueDate) {
+			const overdue = !inst.done && item.dueDate < today;
+			meta.createSpan({ cls: overdue ? "mrd-chip mrd-chip-warn" : "mrd-chip", text: dueLabel(item.dueDate, today) });
+		}
+		if (item.showOnWeekPrint) meta.createSpan({ cls: "mrd-chip mrd-chip-cold", text: "on planner" });
 		if (inst.flagged) meta.createSpan({ cls: "mrd-chip mrd-chip-warn", text: inst.flagLabel });
 		const subs = item.subItems ?? [];
 		if (subs.length > 0) {
@@ -222,6 +227,12 @@ export class TodoPanel extends BasePanel {
 	private after(): void {
 		this.ctx.requestRefresh("manual");
 	}
+}
+
+function dueLabel(due: string, today: string): string {
+	if (due < today) return `overdue · ${moment(due, "YYYY-MM-DD").format("MMM D")}`;
+	if (due === today) return "due today";
+	return `due ${moment(due, "YYYY-MM-DD").format("MMM D")}`;
 }
 
 function activeSort(a: TodoInstance, b: TodoInstance): number {
