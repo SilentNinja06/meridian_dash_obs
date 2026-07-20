@@ -164,45 +164,103 @@ export class WeekPrintModal extends Modal {
 		b.addEventListener("click", onClick);
 	}
 
+	/**
+	 * Print the planner by rendering it into an isolated off-screen iframe and
+	 * printing *that* document. This sidesteps Obsidian's own print CSS and the
+	 * modal's containing block entirely — the earlier body-visibility approach
+	 * printed blank on some setups. The sheet's inline styles (swatch/event
+	 * colours) carry over in the serialized HTML; the class styles are copied from
+	 * the loaded stylesheet.
+	 */
 	private print(): void {
 		const sheet = this.contentEl.querySelector(".mrd-week-print") as HTMLElement | null;
 		if (!sheet) {
 			window.print();
 			return;
 		}
-		// Relocate the sheet to <body> for the print. Inside the modal it sits in a
-		// containing block that made `position: fixed` collapse to nothing on some
-		// setups — printing a blank page. As a direct child of <body> the fixed
-		// positioning is viewport-relative and the planner renders. Restored after.
-		const slot = document.createComment("mrd-week-print-slot");
-		sheet.before(slot);
-		document.body.appendChild(sheet);
-		document.body.addClass("mrd-printing");
-
-		let restored = false;
-		const restore = () => {
-			if (restored) return;
-			restored = true;
-			window.removeEventListener("afterprint", restore);
-			document.body.removeClass("mrd-printing");
-			slot.replaceWith(sheet);
-		};
-		window.addEventListener("afterprint", restore);
-		try {
-			// In Electron/Chromium window.print() blocks until the dialog closes, so
-			// the finally-restore runs after the snapshot is taken; afterprint is a
-			// redundant safety net for platforms where it returns early.
-			window.print();
-		} finally {
-			restore();
+		const iframe = document.body.createEl("iframe", { cls: "mrd-week-print-frame" });
+		iframe.setAttribute("aria-hidden", "true");
+		const doc = iframe.contentDocument;
+		const win = iframe.contentWindow;
+		if (!doc || !win) {
+			iframe.remove();
+			return;
 		}
+
+		const css = `@page { size: landscape; margin: 10mm; }\nhtml, body { margin: 0; padding: 0; background: #fff; }\n${collectWeekPrintCss()}`;
+		doc.open();
+		doc.write(
+			`<!doctype html><html><head><meta charset="utf-8"><title>Week at a Glance</title><style>${css}</style></head><body>${sheet.outerHTML}</body></html>`
+		);
+		doc.close();
+
+		let done = false;
+		const cleanup = () => {
+			if (done) return;
+			done = true;
+			iframe.remove();
+		};
+		win.addEventListener("afterprint", cleanup);
+		// Let layout settle, then print. A generous fallback removes the frame if
+		// afterprint never fires (some platforms).
+		window.setTimeout(() => {
+			try {
+				win.focus();
+				win.print();
+			} catch (e) {
+				console.error("MERIDIAN: week print failed", e);
+			}
+			window.setTimeout(cleanup, 60000);
+		}, 150);
 	}
 
 	onClose(): void {
 		this.contentEl.empty();
-		document.body.removeClass("mrd-printing");
 	}
 }
+
+/** Pull every `.mrd-week-*` rule out of the loaded stylesheet(s) so the print
+ * iframe renders identically without the whole app's CSS. Falls back to a
+ * minimal built-in sheet if the rules can't be read. */
+function collectWeekPrintCss(): string {
+	const parts: string[] = [];
+	for (const ss of Array.from(document.styleSheets)) {
+		let rules: CSSRuleList | null = null;
+		try {
+			rules = ss.cssRules;
+		} catch {
+			continue; // cross-origin sheet — skip
+		}
+		if (!rules) continue;
+		for (const rule of Array.from(rules)) {
+			if (rule.cssText.includes("mrd-week")) parts.push(rule.cssText);
+		}
+	}
+	return parts.length ? parts.join("\n") : WEEK_PRINT_FALLBACK_CSS;
+}
+
+/** Minimal self-contained planner CSS, used only if the stylesheet can't be read. */
+const WEEK_PRINT_FALLBACK_CSS = `
+.mrd-week-print { background:#fff; color:#16140f; padding:16px 18px; font-family:"Inter",system-ui,sans-serif; }
+.mrd-week-header { display:flex; justify-content:space-between; border-bottom:2px solid #16140f; padding-bottom:6px; margin-bottom:8px; }
+.mrd-week-title { font-weight:600; letter-spacing:0.14em; text-transform:uppercase; font-size:1.15rem; }
+.mrd-week-dates { font-size:0.85rem; color:#444; }
+.mrd-week-legend { display:flex; flex-wrap:wrap; gap:12px; margin-bottom:10px; font-size:0.72rem; color:#333; }
+.mrd-week-legend-item { display:inline-flex; align-items:center; gap:5px; }
+.mrd-week-swatch { width:11px; height:11px; border-radius:2px; display:inline-block; }
+.mrd-week-goals { border:1px solid #999; border-radius:4px; padding:6px 8px; margin-bottom:10px; }
+.mrd-week-goals-head { font-weight:700; font-size:0.78rem; margin-bottom:4px; }
+.mrd-week-goal, .mrd-week-directive { display:flex; align-items:baseline; gap:6px; font-size:0.72rem; color:#16140f; }
+.mrd-week-goal-box { color:#444; }
+.mrd-week-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; }
+.mrd-week-cell { border:1px solid #999; border-radius:4px; padding:5px 7px; min-height:5.6cm; display:flex; flex-direction:column; }
+.mrd-week-cell-head { display:flex; justify-content:space-between; border-bottom:1px solid #ccc; padding-bottom:3px; margin-bottom:4px; }
+.mrd-week-dow { font-weight:700; font-size:0.82rem; }
+.mrd-week-date { font-size:0.7rem; color:#666; }
+.mrd-week-event, .mrd-week-directive-text { font-size:0.68rem; color:#16140f; }
+.mrd-week-event { border-left:4px solid #999; padding-left:5px; }
+.mrd-week-lines { flex:1; min-height:1.6cm; background-image:repeating-linear-gradient(to bottom, transparent 0, transparent 0.56cm, #d8d8d8 0.56cm, #d8d8d8 calc(0.56cm + 1px)); }
+`;
 
 function safeParse(text: string | undefined): ReturnType<typeof parseICS> {
 	if (!text) return [];

@@ -1499,29 +1499,19 @@
 	);
 }
 
+/* Off-screen frame the planner is rendered into for printing (§ week print).
+ * Printing an isolated iframe avoids the host app's print CSS entirely. */
+.mrd-week-print-frame {
+	position: fixed;
+	left: -10000px;
+	top: 0;
+	width: 900px;
+	height: 700px;
+	border: 0;
+}
+
+/* Taller day cells when the planner is printed (read by the iframe's CSS copy). */
 @media print {
-	@page {
-		size: landscape;
-		margin: 10mm;
-	}
-	body.mrd-printing * {
-		visibility: hidden !important;
-	}
-	body.mrd-printing .mrd-week-print,
-	body.mrd-printing .mrd-week-print * {
-		visibility: visible !important;
-	}
-	body.mrd-printing .mrd-week-print {
-		position: fixed;
-		inset: 0;
-		width: 100%;
-		margin: 0;
-		border-radius: 0;
-		padding: 0;
-	}
-	body.mrd-printing .mrd-week-noprint {
-		display: none !important;
-	}
 	.mrd-week-cell {
 		min-height: 5.6cm;
 	}
