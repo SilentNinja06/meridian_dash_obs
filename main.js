@@ -2398,8 +2398,15 @@ var WeekPrintModal = class extends import_obsidian12.Modal {
     this.ctrlBtn(nav, "Set goals", () => {
       new WeeklyGoalsModal(this.app, this.plugin, weekKeyOf(this.weekStart), () => this.render()).open();
     });
-    const printBtn = controls.createEl("button", { cls: "mrd-btn mrd-btn-primary", text: "Print" });
-    printBtn.addEventListener("click", () => this.print());
+    const shareBtn = controls.createEl("button", {
+      cls: `mrd-btn ${import_obsidian12.Platform.isMobile ? "mrd-btn-primary" : ""}`.trim(),
+      text: "Share / Print"
+    });
+    shareBtn.addEventListener("click", () => void this.share());
+    if (!import_obsidian12.Platform.isMobile) {
+      const printBtn = controls.createEl("button", { cls: "mrd-btn mrd-btn-primary", text: "Print" });
+      printBtn.addEventListener("click", () => this.print());
+    }
     const sheet = contentEl.createDiv({ cls: "mrd-week-print" });
     const header = sheet.createDiv({ cls: "mrd-week-header" });
     header.createDiv({ cls: "mrd-week-title", text: "Week at a Glance" });
@@ -2502,13 +2509,8 @@ var WeekPrintModal = class extends import_obsidian12.Modal {
       iframe.remove();
       return;
     }
-    const css = `@page { size: 11in 8.5in; margin: 0.5in; }
-html, body { margin: 0; padding: 0; background: #fff; }
-${collectWeekPrintCss()}`;
     doc.open();
-    doc.write(
-      `<!doctype html><html><head><meta charset="utf-8"><title>Week at a Glance</title><style>${css}</style></head><body>${sheet.outerHTML}</body></html>`
-    );
+    doc.write(this.plannerDocument(sheet));
     doc.close();
     let done = false;
     const cleanup = () => {
@@ -2526,6 +2528,46 @@ ${collectWeekPrintCss()}`;
       }
       window.setTimeout(cleanup, 6e4);
     }, 150);
+  }
+  /** The complete, self-contained planner document — the same HTML the iframe
+   * prints, reused for the mobile share/export route. US Letter landscape. */
+  plannerDocument(sheet) {
+    const css = `@page { size: 11in 8.5in; margin: 0.5in; }
+html, body { margin: 0; padding: 0; background: #fff; }
+${collectWeekPrintCss()}`;
+    return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Week at a Glance</title><style>${css}</style></head><body>${sheet.outerHTML}</body></html>`;
+  }
+  /**
+   * Hand the planner to the OS. On mobile (and desktop Chrome) this opens the
+   * native share sheet with the planner as an HTML file — from there the
+   * operator taps Print / AirPrint, Save to Files, or opens it in a browser.
+   * Falls back to a plain file download where the Web Share API is unavailable.
+   */
+  async share() {
+    const sheet = this.contentEl.querySelector(".mrd-week-print");
+    if (!sheet) return;
+    const html = this.plannerDocument(sheet);
+    const name = `Week planner ${this.weekStart.format("YYYY-MM-DD")}.html`;
+    const nav = navigator;
+    try {
+      const file = new File([html], name, { type: "text/html" });
+      if (typeof nav.share === "function" && (typeof nav.canShare !== "function" || nav.canShare({ files: [file] }))) {
+        await nav.share({ files: [file], title: "Week at a Glance" });
+        return;
+      }
+    } catch (e) {
+      if ((e == null ? void 0 : e.name) === "AbortError") return;
+      console.error("MERIDIAN: share failed, falling back to download", e);
+    }
+    this.downloadHtml(name, html);
+  }
+  downloadHtml(name, html) {
+    const url = URL.createObjectURL(new Blob([html], { type: "text/html" }));
+    const a = document.body.createEl("a", { attr: { href: url, download: name } });
+    a.click();
+    a.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1e4);
+    new import_obsidian12.Notice(`Saved \u201C${name}\u201D. Open it in a browser to print.`);
   }
   onClose() {
     this.contentEl.empty();
