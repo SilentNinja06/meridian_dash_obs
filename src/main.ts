@@ -20,7 +20,7 @@ import { DEFAULT_STREAK, StreakData, currentStreakFromDays } from "dash-core";
 import { MeridianRuntime, RefreshReason } from "./panels/types";
 import { MeridianView, VIEW_TYPE_MERIDIAN } from "./view";
 import { TodoEditModal } from "./panels/todomodal";
-import { PromptModal } from "./panels/promptmodal";
+import { PromptModal } from "dash-core";
 import { WeekReviewModal } from "./panels/weekreview";
 import { LocalEventModal } from "./panels/localeventmodal";
 import { LineHistoryModal } from "./panels/linehistory";

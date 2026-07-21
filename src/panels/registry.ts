@@ -4,7 +4,7 @@ import { QotdPanel } from "./qotd";
 import { MeridianPanel } from "./meridian";
 import { TodoPanel } from "./todo";
 import { AgendaPanel } from "./agenda";
-import { CalendarPanel } from "./calendar";
+import { CalendarPanel } from "dash-core";
 import { JournalPanel } from "./journal";
 import { ArfidPanel } from "./arfid";
 import { SpiralPanel } from "./spiral";
