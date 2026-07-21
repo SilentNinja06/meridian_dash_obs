@@ -13,7 +13,7 @@ export class SpiralPanel extends BasePanel {
 	title = "Regulation Log";
 
 	protected async renderBody(): Promise<void> {
-		const { bridge } = this.ctx;
+		const { bridge, app } = this.ctx;
 		placard(this.el, "Regulation Log");
 
 		if (!bridge.spiralAvailable()) {
@@ -36,7 +36,7 @@ export class SpiralPanel extends BasePanel {
 		}
 
 		const actions = this.el.createDiv({ cls: "mrd-btn-row" });
-		commandButton(actions, bridge, "spiral-shutdown-logger:quick-capture", "Log an entry", { cls: "mrd-btn-cold" });
-		commandButton(actions, bridge, "spiral-shutdown-logger:thought-capture", "Jot a thought", {});
+		commandButton(actions, app, "spiral-shutdown-logger:quick-capture", "Log an entry", { cls: "mrd-btn-cold" });
+		commandButton(actions, app, "spiral-shutdown-logger:thought-capture", "Jot a thought", {});
 	}
 }

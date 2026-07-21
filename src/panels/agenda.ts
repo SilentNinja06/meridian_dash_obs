@@ -5,7 +5,8 @@ import { agendaState, formatGap } from "dash-core";
 import { LocalEvent, localEventToAgendaItem } from "dash-core";
 import { calendarColor } from "../core/tokens";
 import { WeekPrintModal } from "./weekprint";
-import { LocalEventModal } from "./localeventmodal";
+import { LocalEventModal } from "dash-core";
+import { meridianLocalEvents } from "../localevents";
 import { WeeklyGoalsModal, currentWeekKey } from "./weeklygoals";
 
 /**
@@ -43,7 +44,7 @@ export class AgendaPanel extends BasePanel {
 		const actions = this.el.createDiv({ cls: "mrd-btn-row mrd-agenda-actions" });
 		const addBtn = actions.createEl("button", { cls: "mrd-btn mrd-btn-sm", text: "+ Event" });
 		addBtn.addEventListener("click", () =>
-			new LocalEventModal(this.ctx.app, this.ctx.plugin, undefined, () => this.rerender()).open()
+			new LocalEventModal(this.ctx.app, meridianLocalEvents(this.ctx.plugin), undefined, () => this.rerender()).open()
 		);
 		const goalsBtn = actions.createEl("button", { cls: "mrd-btn mrd-btn-sm", text: "Weekly goals" });
 		goalsBtn.addEventListener("click", () =>
@@ -132,7 +133,7 @@ export class AgendaPanel extends BasePanel {
 				row.addClass("mrd-agenda-row-edit");
 				row.setAttr("title", "Edit this local event");
 				row.addEventListener("click", () =>
-					new LocalEventModal(this.ctx.app, this.ctx.plugin, ev, () => this.rerender()).open()
+					new LocalEventModal(this.ctx.app, meridianLocalEvents(this.ctx.plugin), ev, () => this.rerender()).open()
 				);
 			}
 		}

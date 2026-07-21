@@ -2000,7 +2000,156 @@ function humanize(totalSecs) {
   return parts.slice(0, 2).join(" ");
 }
 
+// node_modules/dash-core/src/panels/util.ts
+function commandExists(app, fullId) {
+  var _a, _b;
+  const commands = (_b = (_a = app.commands) == null ? void 0 : _a.commands) != null ? _b : {};
+  return !!commands[fullId];
+}
+function runCommand(app, fullId) {
+  var _a, _b;
+  (_b = (_a = app.commands) == null ? void 0 : _a.executeCommandById) == null ? void 0 : _b.call(_a, fullId);
+}
+function commandButton(parent, app, fullId, label, opts = {}) {
+  var _a;
+  const btn = parent.createEl("button", { cls: `mrd-btn ${(_a = opts.cls) != null ? _a : ""}`.trim(), text: label });
+  if (!commandExists(app, fullId)) {
+    btn.setAttr("disabled", "true");
+    btn.addClass("is-unavailable");
+    if (opts.offlineText) btn.setAttr("title", opts.offlineText);
+    return btn;
+  }
+  btn.addEventListener("click", () => {
+    var _a2;
+    runCommand(app, fullId);
+    (_a2 = opts.onRun) == null ? void 0 : _a2.call(opts);
+  });
+  return btn;
+}
+
+// node_modules/dash-core/src/panels/places.ts
+var PlacesPanel = class extends BasePanel {
+  constructor(copy) {
+    super();
+    this.copy = copy;
+    __publicField(this, "id", "places");
+    __publicField(this, "title");
+    this.title = copy.title;
+  }
+  renderBody() {
+    placard(this.el, this.copy.title);
+    const grid = this.el.createDiv({ cls: "mrd-places" });
+    const places = this.ctx.settings().places;
+    if (places.length === 0) {
+      grid.createDiv({ cls: "mrd-muted", text: this.copy.empty });
+      return;
+    }
+    for (const place of places) {
+      if (place.type === "command") {
+        commandButton(grid, this.ctx.app, place.target, place.label, {
+          cls: "mrd-place-btn",
+          offlineText: this.copy.commandOffline
+        });
+      } else {
+        const btn = grid.createEl("button", { cls: "mrd-btn mrd-place-btn", text: place.label });
+        btn.addEventListener("click", () => {
+          void this.ctx.app.workspace.openLinkText(place.target, "", false);
+        });
+      }
+    }
+  }
+};
+
+// node_modules/dash-core/src/panels/localeventmodal.ts
+var import_obsidian11 = require("obsidian");
+var LocalEventModal = class extends import_obsidian11.Modal {
+  constructor(app, store, existing, onDone) {
+    var _a, _b, _c, _d;
+    super(app);
+    this.store = store;
+    this.existing = existing;
+    this.onDone = onDone;
+    __publicField(this, "summary");
+    __publicField(this, "date");
+    __publicField(this, "start");
+    __publicField(this, "end");
+    const e = existing;
+    this.summary = (_a = e == null ? void 0 : e.summary) != null ? _a : "";
+    this.date = (_b = e == null ? void 0 : e.date) != null ? _b : (0, import_obsidian11.moment)().format("YYYY-MM-DD");
+    this.start = (_c = e == null ? void 0 : e.start) != null ? _c : "";
+    this.end = (_d = e == null ? void 0 : e.end) != null ? _d : "";
+  }
+  onOpen() {
+    this.titleEl.setText(this.existing ? "Edit event" : "New event");
+    const { contentEl } = this;
+    new import_obsidian11.Setting(contentEl).setName("Event").addText((t) => {
+      t.setPlaceholder("What's on").setValue(this.summary).onChange((v) => this.summary = v);
+      t.inputEl.classList.add("mrd-modal-wide");
+      t.inputEl.focus();
+      t.inputEl.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          void this.submit();
+        }
+      });
+    });
+    new import_obsidian11.Setting(contentEl).setName("Date").addText((t) => {
+      t.inputEl.type = "date";
+      t.setValue(this.date).onChange((v) => this.date = v);
+    });
+    new import_obsidian11.Setting(contentEl).setName("Time").setDesc("Optional. Leave the start empty for an all-day event.").addText((t) => {
+      t.inputEl.type = "time";
+      t.setValue(this.start).onChange((v) => this.start = v);
+    }).addText((t) => {
+      t.inputEl.type = "time";
+      t.setValue(this.end).onChange((v) => this.end = v);
+    });
+    const buttons = new import_obsidian11.Setting(contentEl);
+    if (this.existing) {
+      buttons.addButton(
+        (b) => b.setButtonText("Delete").setWarning().onClick(async () => {
+          await this.store.remove(this.existing.id);
+          this.close();
+          this.onDone();
+        })
+      );
+    }
+    buttons.addButton((b) => b.setButtonText("Cancel").onClick(() => this.close()));
+    buttons.addButton((b) => b.setButtonText(this.existing ? "Save" : "Add").setCta().onClick(() => void this.submit()));
+  }
+  async submit() {
+    const summary = this.summary.trim();
+    if (!summary) {
+      new import_obsidian11.Notice("An event needs a description.");
+      return;
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(this.date)) {
+      new import_obsidian11.Notice("An event needs a valid date.");
+      return;
+    }
+    const patch = {
+      summary,
+      date: this.date,
+      start: this.start || void 0,
+      end: this.start && this.end ? this.end : void 0
+    };
+    if (this.existing) await this.store.update(this.existing.id, patch);
+    else await this.store.add(patch);
+    this.close();
+    this.onDone();
+  }
+  onClose() {
+    this.contentEl.empty();
+  }
+};
+
 // src/copy.ts
+var MERIDIAN_COMMAND_OFFLINE = "This subsystem is offline. Its plugin is not currently enabled.";
+var MERIDIAN_PLACES_COPY = {
+  title: "Navigation",
+  empty: "No destinations configured. Add some in settings.",
+  commandOffline: MERIDIAN_COMMAND_OFFLINE
+};
 var MERIDIAN_CLOCK_COPY = {
   title: "Chronometer",
   firstAccess: "Session opened. This access is the first on record.",
@@ -2025,7 +2174,7 @@ var MERIDIAN_COPY = {
 };
 
 // src/panels/qotd.ts
-var import_obsidian11 = require("obsidian");
+var import_obsidian12 = require("obsidian");
 
 // src/panels/types.ts
 var BasePanel2 = class extends BasePanel {
@@ -2058,7 +2207,7 @@ var QotdPanel = class extends BasePanel2 {
       card.createDiv({ cls: "mrd-muted", text: "The quotation archive is present but empty." });
       return;
     }
-    const m = (0, import_obsidian11.moment)((0, import_obsidian11.moment)().format("YYYY-MM-DD"), "YYYY-MM-DD");
+    const m = (0, import_obsidian12.moment)((0, import_obsidian12.moment)().format("YYYY-MM-DD"), "YYYY-MM-DD");
     const dayNumber = Math.floor(m.valueOf() / 864e5);
     const idx = (dayNumber % n + n) % n;
     const q = quotes[idx];
@@ -2100,11 +2249,11 @@ function parseQuotes(raw) {
 }
 
 // src/panels/meridian.ts
-var import_obsidian13 = require("obsidian");
+var import_obsidian14 = require("obsidian");
 
 // src/panels/linehistory.ts
-var import_obsidian12 = require("obsidian");
-var LineHistoryModal = class extends import_obsidian12.Modal {
+var import_obsidian13 = require("obsidian");
+var LineHistoryModal = class extends import_obsidian13.Modal {
   constructor(app, plugin) {
     super(app);
     this.plugin = plugin;
@@ -2122,7 +2271,7 @@ var LineHistoryModal = class extends import_obsidian12.Modal {
       const entry = history[i];
       const row = list.createDiv({ cls: "mrd-linehist-row" });
       row.createDiv({ cls: "mrd-linehist-line", text: entry.line });
-      row.createDiv({ cls: "mrd-linehist-when", text: (0, import_obsidian12.moment)(entry.at).fromNow() });
+      row.createDiv({ cls: "mrd-linehist-when", text: (0, import_obsidian13.moment)(entry.at).fromNow() });
     }
   }
   onClose() {
@@ -2530,7 +2679,7 @@ var MeridianPanel = class extends BasePanel2 {
     const bag = fresh.length ? fresh : candidates;
     const line = bag[Math.floor(Math.random() * bag.length)];
     if (pool === "milestone") {
-      this.ctx.plugin.milestoneShownDate = (0, import_obsidian13.moment)().format("YYYY-MM-DD");
+      this.ctx.plugin.milestoneShownDate = (0, import_obsidian14.moment)().format("YYYY-MM-DD");
       void this.ctx.plugin.saveData_();
     }
     ring.push(line);
@@ -2545,7 +2694,7 @@ var MeridianPanel = class extends BasePanel2 {
   }
   async weights() {
     const { todos, bridge, runtime, plugin } = this.ctx;
-    const todayStr2 = (0, import_obsidian13.moment)().format("YYYY-MM-DD");
+    const todayStr2 = (0, import_obsidian14.moment)().format("YYYY-MM-DD");
     const pending = todos.pendingCount();
     const overdueTodos = todos.overdueCount();
     const crm = safe(() => bridge.crmContacts(), []);
@@ -2584,7 +2733,7 @@ var MeridianPanel = class extends BasePanel2 {
     const completionsMilestone = doneToday > 0 && doneToday % 5 === 0;
     const streak = this.ctx.plugin.streak;
     const streakSeven = streak.current > 0 && streak.current % 7 === 0;
-    const newRecord = this.ctx.runtime.streakRecordDate === (0, import_obsidian13.moment)().format("YYYY-MM-DD");
+    const newRecord = this.ctx.runtime.streakRecordDate === (0, import_obsidian14.moment)().format("YYYY-MM-DD");
     return completionsMilestone || streakSeven || newRecord;
   }
 };
@@ -2642,11 +2791,11 @@ async function safeAsync(fn, fallback) {
 }
 
 // src/panels/todo.ts
-var import_obsidian15 = require("obsidian");
+var import_obsidian16 = require("obsidian");
 
 // src/panels/weekreview.ts
-var import_obsidian14 = require("obsidian");
-var WeekReviewModal = class extends import_obsidian14.Modal {
+var import_obsidian15 = require("obsidian");
+var WeekReviewModal = class extends import_obsidian15.Modal {
   constructor(app, plugin) {
     super(app);
     this.plugin = plugin;
@@ -2665,7 +2814,7 @@ var WeekReviewModal = class extends import_obsidian14.Modal {
     const s = this.plugin.settings;
     const bridge = this.plugin.bridge;
     const days = [];
-    for (let i = 6; i >= 0; i--) days.push((0, import_obsidian14.moment)().subtract(i, "days").format("YYYY-MM-DD"));
+    for (let i = 6; i >= 0; i--) days.push((0, import_obsidian15.moment)().subtract(i, "days").format("YYYY-MM-DD"));
     const dayStats = [];
     let totalCompleted = 0;
     let contactLines = 0;
@@ -2719,7 +2868,7 @@ var WeekReviewModal = class extends import_obsidian14.Modal {
       const fill = track.createDiv({ cls: "mrd-review-bar-fill" });
       fill.style.height = `${Math.round(d.completed / max * 100)}%`;
       if (d.completed === 0) fill.addClass("is-empty");
-      cell.createDiv({ cls: "mrd-review-bar-day", text: (0, import_obsidian14.moment)(d.date, "YYYY-MM-DD").format("dd")[0] });
+      cell.createDiv({ cls: "mrd-review-bar-day", text: (0, import_obsidian15.moment)(d.date, "YYYY-MM-DD").format("dd")[0] });
       cell.createDiv({ cls: "mrd-review-bar-count", text: String(d.completed) });
     }
     const crm = host.createDiv({ cls: "mrd-review-block" });
@@ -2809,7 +2958,7 @@ var TodoPanel = class extends BasePanel2 {
     var _a;
     const store = this.ctx.todos;
     const item = inst.item;
-    const today2 = (0, import_obsidian15.moment)().format("YYYY-MM-DD");
+    const today2 = (0, import_obsidian16.moment)().format("YYYY-MM-DD");
     const wrap = parent.createDiv({ cls: "mrd-todo-item" });
     const row = wrap.createDiv({ cls: "mrd-todo-row" });
     if (inst.flagged) row.addClass("is-flagged");
@@ -2864,7 +3013,7 @@ var TodoPanel = class extends BasePanel2 {
     } else if (inst.recurring && !inst.done) {
       this.iconBtn(actions, "\u293C", "Postpone for today", false, async () => {
         await store.skipInstance(item.id);
-        new import_obsidian15.Notice("Postponed for today. It returns on the next occurrence.");
+        new import_obsidian16.Notice("Postponed for today. It returns on the next occurrence.");
         this.after();
       });
     }
@@ -2958,9 +3107,9 @@ var TodoPanel = class extends BasePanel2 {
   }
 };
 function dueLabel(due, today2) {
-  if (due < today2) return `overdue \xB7 ${(0, import_obsidian15.moment)(due, "YYYY-MM-DD").format("MMM D")}`;
+  if (due < today2) return `overdue \xB7 ${(0, import_obsidian16.moment)(due, "YYYY-MM-DD").format("MMM D")}`;
   if (due === today2) return "due today";
-  return `due ${(0, import_obsidian15.moment)(due, "YYYY-MM-DD").format("MMM D")}`;
+  return `due ${(0, import_obsidian16.moment)(due, "YYYY-MM-DD").format("MMM D")}`;
 }
 function activeSort(a, b) {
   var _a, _b;
@@ -2975,21 +3124,21 @@ function activeSort(a, b) {
 var import_obsidian19 = require("obsidian");
 
 // src/panels/weekprint.ts
-var import_obsidian17 = require("obsidian");
+var import_obsidian18 = require("obsidian");
 
 // src/panels/weeklygoals.ts
-var import_obsidian16 = require("obsidian");
+var import_obsidian17 = require("obsidian");
 function weekKeyOf(weekStart) {
   return weekStart.clone().startOf("week").format("YYYY-MM-DD");
 }
 function currentWeekKey() {
-  return weekKeyOf((0, import_obsidian16.moment)());
+  return weekKeyOf((0, import_obsidian17.moment)());
 }
 function weekLabel(weekKey) {
-  const start = (0, import_obsidian16.moment)(weekKey, "YYYY-MM-DD");
+  const start = (0, import_obsidian17.moment)(weekKey, "YYYY-MM-DD");
   return `${start.format("MMM D")} \u2013 ${start.clone().add(6, "days").format("MMM D")}`;
 }
-var WeeklyGoalsModal = class extends import_obsidian16.Modal {
+var WeeklyGoalsModal = class extends import_obsidian17.Modal {
   constructor(app, plugin, weekKey, onDone) {
     super(app);
     this.plugin = plugin;
@@ -3022,7 +3171,7 @@ var WeeklyGoalsModal = class extends import_obsidian16.Modal {
         this.render();
       });
     }
-    const addRow = new import_obsidian16.Setting(contentEl).setName("Add a goal");
+    const addRow = new import_obsidian17.Setting(contentEl).setName("Add a goal");
     addRow.addText((t) => {
       t.setPlaceholder("A goal for the week").setValue(this.draft).onChange((v) => this.draft = v);
       t.inputEl.classList.add("mrd-modal-wide");
@@ -3035,7 +3184,7 @@ var WeeklyGoalsModal = class extends import_obsidian16.Modal {
       });
     });
     addRow.addButton((b) => b.setButtonText("Add").setCta().onClick(() => void this.add()));
-    new import_obsidian16.Setting(contentEl).addButton((b) => b.setButtonText("Done").onClick(() => this.close()));
+    new import_obsidian17.Setting(contentEl).addButton((b) => b.setButtonText("Done").onClick(() => this.close()));
   }
   async add() {
     const text = this.draft.trim();
@@ -3047,9 +3196,9 @@ var WeeklyGoalsModal = class extends import_obsidian16.Modal {
   }
   /** Send a goal to the Directives list as a one-time item due at week's end. */
   async toDirective(text) {
-    const due = (0, import_obsidian16.moment)(this.weekKey, "YYYY-MM-DD").add(6, "days").format("YYYY-MM-DD");
+    const due = (0, import_obsidian17.moment)(this.weekKey, "YYYY-MM-DD").add(6, "days").format("YYYY-MM-DD");
     await this.plugin.todos.add({ text, dueDate: due });
-    new import_obsidian16.Notice("Added to Directives.");
+    new import_obsidian17.Notice("Added to Directives.");
     this.onDone();
   }
   onClose() {
@@ -3058,11 +3207,11 @@ var WeeklyGoalsModal = class extends import_obsidian16.Modal {
 };
 
 // src/panels/weekprint.ts
-var WeekPrintModal = class extends import_obsidian17.Modal {
+var WeekPrintModal = class extends import_obsidian18.Modal {
   constructor(app, plugin) {
     super(app);
     this.plugin = plugin;
-    this.weekStart = (0, import_obsidian17.moment)().startOf("week");
+    this.weekStart = (0, import_obsidian18.moment)().startOf("week");
     this.sources = [];
   }
   onOpen() {
@@ -3095,18 +3244,18 @@ var WeekPrintModal = class extends import_obsidian17.Modal {
       this.render();
     });
     this.ctrlBtn(nav, "This week", () => {
-      this.weekStart = (0, import_obsidian17.moment)().startOf("week");
+      this.weekStart = (0, import_obsidian18.moment)().startOf("week");
       this.render();
     });
     this.ctrlBtn(nav, "Set goals", () => {
       new WeeklyGoalsModal(this.app, this.plugin, weekKeyOf(this.weekStart), () => this.render()).open();
     });
     const shareBtn = controls.createEl("button", {
-      cls: `mrd-btn ${import_obsidian17.Platform.isMobile ? "mrd-btn-primary" : ""}`.trim(),
+      cls: `mrd-btn ${import_obsidian18.Platform.isMobile ? "mrd-btn-primary" : ""}`.trim(),
       text: "Share / Print"
     });
     shareBtn.addEventListener("click", () => void this.share());
-    if (!import_obsidian17.Platform.isMobile) {
+    if (!import_obsidian18.Platform.isMobile) {
       const printBtn = controls.createEl("button", { cls: "mrd-btn mrd-btn-primary", text: "Print" });
       printBtn.addEventListener("click", () => this.print());
     }
@@ -3270,7 +3419,7 @@ ${collectWeekPrintCss()}`;
     a.click();
     a.remove();
     window.setTimeout(() => URL.revokeObjectURL(url), 1e4);
-    new import_obsidian17.Notice(`Saved \u201C${name}\u201D. Open it in a browser to print.`);
+    new import_obsidian18.Notice(`Saved \u201C${name}\u201D. Open it in a browser to print.`);
   }
   onClose() {
     this.contentEl.empty();
@@ -3322,84 +3471,14 @@ function safeParse(text) {
   }
 }
 
-// src/panels/localeventmodal.ts
-var import_obsidian18 = require("obsidian");
-var LocalEventModal = class extends import_obsidian18.Modal {
-  constructor(app, plugin, existing, onDone) {
-    var _a, _b, _c, _d;
-    super(app);
-    this.plugin = plugin;
-    this.existing = existing;
-    this.onDone = onDone;
-    const e = existing;
-    this.summary = (_a = e == null ? void 0 : e.summary) != null ? _a : "";
-    this.date = (_b = e == null ? void 0 : e.date) != null ? _b : (0, import_obsidian18.moment)().format("YYYY-MM-DD");
-    this.start = (_c = e == null ? void 0 : e.start) != null ? _c : "";
-    this.end = (_d = e == null ? void 0 : e.end) != null ? _d : "";
-  }
-  onOpen() {
-    this.titleEl.setText(this.existing ? "Edit event" : "New event");
-    const { contentEl } = this;
-    new import_obsidian18.Setting(contentEl).setName("Event").addText((t) => {
-      t.setPlaceholder("What's on").setValue(this.summary).onChange((v) => this.summary = v);
-      t.inputEl.classList.add("mrd-modal-wide");
-      t.inputEl.focus();
-      t.inputEl.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          void this.submit();
-        }
-      });
-    });
-    new import_obsidian18.Setting(contentEl).setName("Date").addText((t) => {
-      t.inputEl.type = "date";
-      t.setValue(this.date).onChange((v) => this.date = v);
-    });
-    new import_obsidian18.Setting(contentEl).setName("Time").setDesc("Optional. Leave the start empty for an all-day event.").addText((t) => {
-      t.inputEl.type = "time";
-      t.setValue(this.start).onChange((v) => this.start = v);
-    }).addText((t) => {
-      t.inputEl.type = "time";
-      t.setValue(this.end).onChange((v) => this.end = v);
-    });
-    const buttons = new import_obsidian18.Setting(contentEl);
-    if (this.existing) {
-      buttons.addButton(
-        (b) => b.setButtonText("Delete").setWarning().onClick(async () => {
-          await this.plugin.removeLocalEvent(this.existing.id);
-          this.close();
-          this.onDone();
-        })
-      );
-    }
-    buttons.addButton((b) => b.setButtonText("Cancel").onClick(() => this.close()));
-    buttons.addButton((b) => b.setButtonText(this.existing ? "Save" : "Add").setCta().onClick(() => void this.submit()));
-  }
-  async submit() {
-    const summary = this.summary.trim();
-    if (!summary) {
-      new import_obsidian18.Notice("An event needs a description.");
-      return;
-    }
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(this.date)) {
-      new import_obsidian18.Notice("An event needs a valid date.");
-      return;
-    }
-    const patch = {
-      summary,
-      date: this.date,
-      start: this.start || void 0,
-      end: this.start && this.end ? this.end : void 0
-    };
-    if (this.existing) await this.plugin.updateLocalEvent(this.existing.id, patch);
-    else await this.plugin.addLocalEvent(patch);
-    this.close();
-    this.onDone();
-  }
-  onClose() {
-    this.contentEl.empty();
-  }
-};
+// src/localevents.ts
+function meridianLocalEvents(plugin) {
+  return {
+    add: (patch) => plugin.addLocalEvent(patch),
+    update: (id, patch) => plugin.updateLocalEvent(id, patch),
+    remove: (id) => plugin.removeLocalEvent(id)
+  };
+}
 
 // src/panels/agenda.ts
 var AgendaPanel = class extends BasePanel2 {
@@ -3428,7 +3507,7 @@ var AgendaPanel = class extends BasePanel2 {
     const addBtn = actions.createEl("button", { cls: "mrd-btn mrd-btn-sm", text: "+ Event" });
     addBtn.addEventListener(
       "click",
-      () => new LocalEventModal(this.ctx.app, this.ctx.plugin, void 0, () => this.rerender()).open()
+      () => new LocalEventModal(this.ctx.app, meridianLocalEvents(this.ctx.plugin), void 0, () => this.rerender()).open()
     );
     const goalsBtn = actions.createEl("button", { cls: "mrd-btn mrd-btn-sm", text: "Weekly goals" });
     goalsBtn.addEventListener(
@@ -3504,7 +3583,7 @@ var AgendaPanel = class extends BasePanel2 {
         row.setAttr("title", "Edit this local event");
         row.addEventListener(
           "click",
-          () => new LocalEventModal(this.ctx.app, this.ctx.plugin, ev, () => this.rerender()).open()
+          () => new LocalEventModal(this.ctx.app, meridianLocalEvents(this.ctx.plugin), ev, () => this.rerender()).open()
         );
       }
     }
@@ -3704,21 +3783,8 @@ function tidy(text) {
 }
 
 // src/panels/util.ts
-function commandButton(parent, bridge, fullId, label, opts = {}) {
-  var _a;
-  const btn = parent.createEl("button", { cls: `mrd-btn ${(_a = opts.cls) != null ? _a : ""}`.trim(), text: label });
-  if (!bridge.commandExists(fullId)) {
-    btn.setAttr("disabled", "true");
-    btn.addClass("is-unavailable");
-    btn.setAttr("title", "This subsystem is offline. Its plugin is not currently enabled.");
-    return btn;
-  }
-  btn.addEventListener("click", () => {
-    var _a2;
-    bridge.runCommand(fullId);
-    (_a2 = opts.onRun) == null ? void 0 : _a2.call(opts);
-  });
-  return btn;
+function commandButton2(parent, app, fullId, label, opts = {}) {
+  return commandButton(parent, app, fullId, label, { ...opts, offlineText: MERIDIAN_COMMAND_OFFLINE });
 }
 
 // src/panels/arfid.ts
@@ -3729,7 +3795,7 @@ var ArfidPanel = class extends BasePanel2 {
     this.title = "Nourishment Log";
   }
   async renderBody() {
-    const { bridge } = this.ctx;
+    const { bridge, app } = this.ctx;
     placard(this.el, "Nourishment Log");
     if (!bridge.arfidAvailable()) {
       this.el.createDiv({ cls: "mrd-muted", text: "The nourishment subsystem is offline. Enable ARFID Tracker to bring it online." });
@@ -3748,10 +3814,10 @@ var ArfidPanel = class extends BasePanel2 {
     }
     const actions = this.el.createDiv({ cls: "mrd-btn-row" });
     const nudge = () => this.ctx.markFoodFocus();
-    commandButton(actions, bridge, "arfid-tracker:quick-log", "Log a food", { cls: "mrd-btn-primary", onRun: nudge });
-    commandButton(actions, bridge, "arfid-tracker:struggling", "I'm struggling", { cls: "mrd-btn-cold", onRun: nudge });
-    commandButton(actions, bridge, "arfid-tracker:log-exposure", "Exposure", { onRun: nudge });
-    commandButton(actions, bridge, "arfid-tracker:log-symptoms", "Symptoms", { onRun: nudge });
+    commandButton2(actions, app, "arfid-tracker:quick-log", "Log a food", { cls: "mrd-btn-primary", onRun: nudge });
+    commandButton2(actions, app, "arfid-tracker:struggling", "I'm struggling", { cls: "mrd-btn-cold", onRun: nudge });
+    commandButton2(actions, app, "arfid-tracker:log-exposure", "Exposure", { onRun: nudge });
+    commandButton2(actions, app, "arfid-tracker:log-symptoms", "Symptoms", { onRun: nudge });
   }
 };
 
@@ -3763,7 +3829,7 @@ var SpiralPanel = class extends BasePanel2 {
     this.title = "Regulation Log";
   }
   async renderBody() {
-    const { bridge } = this.ctx;
+    const { bridge, app } = this.ctx;
     placard(this.el, "Regulation Log");
     if (!bridge.spiralAvailable()) {
       this.el.createDiv({ cls: "mrd-muted", text: "The regulation subsystem is offline. Enable the Spiral & Shutdown Logger to bring it online." });
@@ -3783,8 +3849,8 @@ var SpiralPanel = class extends BasePanel2 {
       }
     }
     const actions = this.el.createDiv({ cls: "mrd-btn-row" });
-    commandButton(actions, bridge, "spiral-shutdown-logger:quick-capture", "Log an entry", { cls: "mrd-btn-cold" });
-    commandButton(actions, bridge, "spiral-shutdown-logger:thought-capture", "Jot a thought", {});
+    commandButton2(actions, app, "spiral-shutdown-logger:quick-capture", "Log an entry", { cls: "mrd-btn-cold" });
+    commandButton2(actions, app, "spiral-shutdown-logger:thought-capture", "Jot a thought", {});
   }
 };
 
@@ -3803,7 +3869,7 @@ var CrmPanel = class extends BasePanel2 {
     await this.reconcile();
   }
   renderBody() {
-    const { bridge } = this.ctx;
+    const { bridge, app } = this.ctx;
     placard(this.el, "Contacts");
     if (!bridge.crmAvailable()) {
       this.el.createDiv({ cls: "mrd-muted", text: "The contacts subsystem is offline. Enable Simple Contact Manager to bring it online." });
@@ -3812,8 +3878,8 @@ var CrmPanel = class extends BasePanel2 {
     const contacts = bridge.crmContacts();
     const triage = contacts.filter((c) => c.overdue || c.dueToday);
     const actions = this.el.createDiv({ cls: "mrd-btn-row" });
-    commandButton(actions, bridge, "simple-contact-manager:log-interaction", "Log interaction", { cls: "mrd-btn-primary" });
-    commandButton(actions, bridge, "simple-contact-manager:new-contact", "New contact", {});
+    commandButton2(actions, app, "simple-contact-manager:log-interaction", "Log interaction", { cls: "mrd-btn-primary" });
+    commandButton2(actions, app, "simple-contact-manager:new-contact", "New contact", {});
     const list = this.el.createDiv({ cls: "mrd-crm-list" });
     if (triage.length === 0) {
       list.createDiv({ cls: "mrd-muted", text: "No one is due or overdue. The lines you keep are current." });
@@ -3915,7 +3981,7 @@ var MealsPanel = class extends BasePanel2 {
     this.title = "Meals & Provisioning";
   }
   async renderBody() {
-    const { bridge } = this.ctx;
+    const { bridge, app } = this.ctx;
     placard(this.el, "Meals & Provisioning");
     if (!bridge.recipesAvailable()) {
       this.el.createDiv({ cls: "mrd-muted", text: "The provisioning subsystem is offline. Enable Recipe Manager to bring it online." });
@@ -3964,11 +4030,11 @@ var MealsPanel = class extends BasePanel2 {
     }
     const actions = this.el.createDiv({ cls: "mrd-btn-row" });
     const nudge = () => this.ctx.markFoodFocus();
-    commandButton(actions, bridge, "recipe-manager:meal-plan", "Plan a meal", { cls: "mrd-btn-primary", onRun: nudge });
-    commandButton(actions, bridge, "recipe-manager:grocery-list", "Build grocery list", { onRun: nudge });
-    commandButton(actions, bridge, "recipe-manager:open-recipe", "Open recipe", { onRun: nudge });
-    commandButton(actions, bridge, "recipe-manager:new-recipe", "New recipe", { onRun: nudge });
-    commandButton(actions, bridge, "recipe-manager:recipe-index", "Recipe index", { onRun: nudge });
+    commandButton2(actions, app, "recipe-manager:meal-plan", "Plan a meal", { cls: "mrd-btn-primary", onRun: nudge });
+    commandButton2(actions, app, "recipe-manager:grocery-list", "Build grocery list", { onRun: nudge });
+    commandButton2(actions, app, "recipe-manager:open-recipe", "Open recipe", { onRun: nudge });
+    commandButton2(actions, app, "recipe-manager:new-recipe", "New recipe", { onRun: nudge });
+    commandButton2(actions, app, "recipe-manager:recipe-index", "Recipe index", { onRun: nudge });
   }
 };
 
@@ -4031,19 +4097,19 @@ var ActionsPanel = class extends BasePanel2 {
     this.title = "Quick Actions";
   }
   renderBody() {
-    const { bridge } = this.ctx;
+    const { bridge, app } = this.ctx;
     placard(this.el, "Quick Actions");
     const nudge = () => this.ctx.markFoodFocus();
     const primary = this.el.createDiv({ cls: "mrd-btn-row mrd-actions-primary" });
-    commandButton(primary, bridge, "arfid-tracker:quick-log", "Log a food", { cls: "mrd-btn-primary mrd-btn-lg", onRun: nudge });
-    commandButton(primary, bridge, "spiral-shutdown-logger:quick-capture", "Log an entry", { cls: "mrd-btn-cold mrd-btn-lg" });
-    commandButton(primary, bridge, "arfid-tracker:struggling", "I'm struggling", { cls: "mrd-btn-lg mrd-btn-warn", onRun: nudge });
+    commandButton2(primary, app, "arfid-tracker:quick-log", "Log a food", { cls: "mrd-btn-primary mrd-btn-lg", onRun: nudge });
+    commandButton2(primary, app, "spiral-shutdown-logger:quick-capture", "Log an entry", { cls: "mrd-btn-cold mrd-btn-lg" });
+    commandButton2(primary, app, "arfid-tracker:struggling", "I'm struggling", { cls: "mrd-btn-lg mrd-btn-warn", onRun: nudge });
     for (const group of GROUPS) {
       const block = this.el.createDiv({ cls: "mrd-actions-group" });
       block.createDiv({ cls: "mrd-subhead", text: group.title });
       const row = block.createDiv({ cls: "mrd-btn-row" });
       for (const [id, label] of group.commands) {
-        commandButton(row, bridge, id, label, { cls: "mrd-btn-sm", onRun: group.foodNudge ? nudge : void 0 });
+        commandButton2(row, app, id, label, { cls: "mrd-btn-sm", onRun: group.foodNudge ? nudge : void 0 });
       }
     }
   }
@@ -4421,34 +4487,6 @@ var ConfirmModal = class extends import_obsidian24.Modal {
   }
 };
 
-// src/panels/places.ts
-var PlacesPanel = class extends BasePanel2 {
-  constructor() {
-    super(...arguments);
-    this.id = "places";
-    this.title = "Navigation";
-  }
-  renderBody() {
-    placard(this.el, "Navigation");
-    const grid = this.el.createDiv({ cls: "mrd-places" });
-    const places = this.ctx.settings().places;
-    if (places.length === 0) {
-      grid.createDiv({ cls: "mrd-muted", text: "No destinations configured. Add some in settings." });
-      return;
-    }
-    for (const place of places) {
-      if (place.type === "command") {
-        commandButton(grid, this.ctx.bridge, place.target, place.label, { cls: "mrd-place-btn" });
-      } else {
-        const btn = grid.createEl("button", { cls: "mrd-btn mrd-place-btn", text: place.label });
-        btn.addEventListener("click", () => {
-          void this.ctx.app.workspace.openLinkText(place.target, "", false);
-        });
-      }
-    }
-  }
-};
-
 // src/panels/registry.ts
 var PANEL_ORDER = [
   "clock",
@@ -4499,7 +4537,7 @@ var FACTORIES = {
   crm: () => new CrmPanel(),
   search: () => new SearchPanel(),
   secondbrain: () => new SecondBrainPanel(),
-  places: () => new PlacesPanel()
+  places: () => new PlacesPanel(MERIDIAN_PLACES_COPY)
 };
 function createPanels(order, enabled) {
   const seen = /* @__PURE__ */ new Set();
@@ -5537,7 +5575,7 @@ var MeridianDashPlugin = class extends import_obsidian28.Plugin {
     this.addCommand({
       id: "add-event",
       name: "Add an event",
-      callback: () => new LocalEventModal(this.app, this, void 0, () => this.refreshOpenViews("vault")).open()
+      callback: () => new LocalEventModal(this.app, meridianLocalEvents(this), void 0, () => this.refreshOpenViews("vault")).open()
     });
     this.addCommand({
       id: "weekly-review",
@@ -5655,7 +5693,7 @@ var MeridianDashPlugin = class extends import_obsidian28.Plugin {
           await this.addLocalEvent({ summary, date, start, end: start && params.end ? params.end : void 0 });
           new import_obsidian28.Notice(`Event filed: ${summary}.`);
         } else {
-          new LocalEventModal(this.app, this, void 0, () => this.refreshOpenViews("vault")).open();
+          new LocalEventModal(this.app, meridianLocalEvents(this), void 0, () => this.refreshOpenViews("vault")).open();
         }
         return;
       }

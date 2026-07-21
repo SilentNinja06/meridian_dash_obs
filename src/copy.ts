@@ -2,6 +2,16 @@ import type { DashCopy, TodoModalCopy, ClockCopy } from "dash-core";
 
 /** MERIDIAN's clock register — the exact voice the dashboard has always shown.
  * Friendly injects its own warm, plain equivalents. */
+/** MERIDIAN's disabled-command tooltip (a companion plugin isn't enabled). */
+export const MERIDIAN_COMMAND_OFFLINE = "This subsystem is offline. Its plugin is not currently enabled.";
+
+/** MERIDIAN's copy for the places / navigation panel. */
+export const MERIDIAN_PLACES_COPY = {
+	title: "Navigation",
+	empty: "No destinations configured. Add some in settings.",
+	commandOffline: MERIDIAN_COMMAND_OFFLINE,
+};
+
 export const MERIDIAN_CLOCK_COPY: ClockCopy = {
 	title: "Chronometer",
 	firstAccess: "Session opened. This access is the first on record.",

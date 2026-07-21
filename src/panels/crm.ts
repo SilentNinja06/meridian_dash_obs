@@ -23,7 +23,7 @@ export class CrmPanel extends BasePanel {
 	}
 
 	protected renderBody(): void {
-		const { bridge } = this.ctx;
+		const { bridge, app } = this.ctx;
 		placard(this.el, "Contacts");
 
 		if (!bridge.crmAvailable()) {
@@ -35,8 +35,8 @@ export class CrmPanel extends BasePanel {
 		const triage = contacts.filter((c) => c.overdue || c.dueToday);
 
 		const actions = this.el.createDiv({ cls: "mrd-btn-row" });
-		commandButton(actions, bridge, "simple-contact-manager:log-interaction", "Log interaction", { cls: "mrd-btn-primary" });
-		commandButton(actions, bridge, "simple-contact-manager:new-contact", "New contact", {});
+		commandButton(actions, app, "simple-contact-manager:log-interaction", "Log interaction", { cls: "mrd-btn-primary" });
+		commandButton(actions, app, "simple-contact-manager:new-contact", "New contact", {});
 
 		const list = this.el.createDiv({ cls: "mrd-crm-list" });
 		if (triage.length === 0) {

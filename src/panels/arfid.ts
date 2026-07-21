@@ -12,7 +12,7 @@ export class ArfidPanel extends BasePanel {
 	title = "Nourishment Log";
 
 	protected async renderBody(): Promise<void> {
-		const { bridge } = this.ctx;
+		const { bridge, app } = this.ctx;
 		placard(this.el, "Nourishment Log");
 
 		if (!bridge.arfidAvailable()) {
@@ -34,9 +34,9 @@ export class ArfidPanel extends BasePanel {
 
 		const actions = this.el.createDiv({ cls: "mrd-btn-row" });
 		const nudge = () => this.ctx.markFoodFocus();
-		commandButton(actions, bridge, "arfid-tracker:quick-log", "Log a food", { cls: "mrd-btn-primary", onRun: nudge });
-		commandButton(actions, bridge, "arfid-tracker:struggling", "I'm struggling", { cls: "mrd-btn-cold", onRun: nudge });
-		commandButton(actions, bridge, "arfid-tracker:log-exposure", "Exposure", { onRun: nudge });
-		commandButton(actions, bridge, "arfid-tracker:log-symptoms", "Symptoms", { onRun: nudge });
+		commandButton(actions, app, "arfid-tracker:quick-log", "Log a food", { cls: "mrd-btn-primary", onRun: nudge });
+		commandButton(actions, app, "arfid-tracker:struggling", "I'm struggling", { cls: "mrd-btn-cold", onRun: nudge });
+		commandButton(actions, app, "arfid-tracker:log-exposure", "Exposure", { onRun: nudge });
+		commandButton(actions, app, "arfid-tracker:log-symptoms", "Symptoms", { onRun: nudge });
 	}
 }

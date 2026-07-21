@@ -14,7 +14,8 @@ import { MealsPanel } from "./meals";
 import { ActionsPanel } from "./actions";
 import { SearchPanel } from "./search";
 import { SecondBrainPanel } from "./secondbrain";
-import { PlacesPanel } from "./places";
+import { PlacesPanel } from "dash-core";
+import { MERIDIAN_PLACES_COPY } from "../copy";
 
 /** Registration order = default panel order (§4, §11.2). Everything ships
  * enabled; the layout is responsive (single column on mobile, grid on desktop),
@@ -72,7 +73,7 @@ const FACTORIES: Record<string, PanelFactory> = {
 	crm: () => new CrmPanel(),
 	search: () => new SearchPanel(),
 	secondbrain: () => new SecondBrainPanel(),
-	places: () => new PlacesPanel(),
+	places: () => new PlacesPanel(MERIDIAN_PLACES_COPY),
 };
 
 /** Build the enabled panels in the configured order. */

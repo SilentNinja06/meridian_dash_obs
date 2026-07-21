@@ -23,7 +23,8 @@ import { MeridianView, VIEW_TYPE_MERIDIAN } from "./view";
 import { TodoEditModal } from "dash-core";
 import { PromptModal } from "dash-core";
 import { WeekReviewModal } from "./panels/weekreview";
-import { LocalEventModal } from "./panels/localeventmodal";
+import { LocalEventModal } from "dash-core";
+import { meridianLocalEvents } from "./localevents";
 import { LineHistoryModal } from "./panels/linehistory";
 import { WeeklyGoalsModal, currentWeekKey } from "./panels/weeklygoals";
 import { anyCanonLine } from "./panels/meridian";
@@ -184,7 +185,7 @@ export default class MeridianDashPlugin extends Plugin {
 		this.addCommand({
 			id: "add-event",
 			name: "Add an event",
-			callback: () => new LocalEventModal(this.app, this, undefined, () => this.refreshOpenViews("vault")).open(),
+			callback: () => new LocalEventModal(this.app, meridianLocalEvents(this), undefined, () => this.refreshOpenViews("vault")).open(),
 		});
 		this.addCommand({
 			id: "weekly-review",
@@ -308,7 +309,7 @@ export default class MeridianDashPlugin extends Plugin {
 					await this.addLocalEvent({ summary, date, start, end: start && params.end ? params.end : undefined });
 					new Notice(`Event filed: ${summary}.`);
 				} else {
-					new LocalEventModal(this.app, this, undefined, () => this.refreshOpenViews("vault")).open();
+					new LocalEventModal(this.app, meridianLocalEvents(this), undefined, () => this.refreshOpenViews("vault")).open();
 				}
 				return;
 			}

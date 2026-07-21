@@ -13,7 +13,7 @@ export class MealsPanel extends BasePanel {
 	title = "Meals & Provisioning";
 
 	protected async renderBody(): Promise<void> {
-		const { bridge } = this.ctx;
+		const { bridge, app } = this.ctx;
 		placard(this.el, "Meals & Provisioning");
 
 		if (!bridge.recipesAvailable()) {
@@ -69,10 +69,10 @@ export class MealsPanel extends BasePanel {
 		// --- actions ---
 		const actions = this.el.createDiv({ cls: "mrd-btn-row" });
 		const nudge = () => this.ctx.markFoodFocus();
-		commandButton(actions, bridge, "recipe-manager:meal-plan", "Plan a meal", { cls: "mrd-btn-primary", onRun: nudge });
-		commandButton(actions, bridge, "recipe-manager:grocery-list", "Build grocery list", { onRun: nudge });
-		commandButton(actions, bridge, "recipe-manager:open-recipe", "Open recipe", { onRun: nudge });
-		commandButton(actions, bridge, "recipe-manager:new-recipe", "New recipe", { onRun: nudge });
-		commandButton(actions, bridge, "recipe-manager:recipe-index", "Recipe index", { onRun: nudge });
+		commandButton(actions, app, "recipe-manager:meal-plan", "Plan a meal", { cls: "mrd-btn-primary", onRun: nudge });
+		commandButton(actions, app, "recipe-manager:grocery-list", "Build grocery list", { onRun: nudge });
+		commandButton(actions, app, "recipe-manager:open-recipe", "Open recipe", { onRun: nudge });
+		commandButton(actions, app, "recipe-manager:new-recipe", "New recipe", { onRun: nudge });
+		commandButton(actions, app, "recipe-manager:recipe-index", "Recipe index", { onRun: nudge });
 	}
 }

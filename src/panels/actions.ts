@@ -70,22 +70,22 @@ export class ActionsPanel extends BasePanel {
 	title = "Quick Actions";
 
 	protected renderBody(): void {
-		const { bridge } = this.ctx;
+		const { bridge, app } = this.ctx;
 		placard(this.el, "Quick Actions");
 
 		// One-tap hard-moment row.
 		const nudge = () => this.ctx.markFoodFocus();
 		const primary = this.el.createDiv({ cls: "mrd-btn-row mrd-actions-primary" });
-		commandButton(primary, bridge, "arfid-tracker:quick-log", "Log a food", { cls: "mrd-btn-primary mrd-btn-lg", onRun: nudge });
-		commandButton(primary, bridge, "spiral-shutdown-logger:quick-capture", "Log an entry", { cls: "mrd-btn-cold mrd-btn-lg" });
-		commandButton(primary, bridge, "arfid-tracker:struggling", "I'm struggling", { cls: "mrd-btn-lg mrd-btn-warn", onRun: nudge });
+		commandButton(primary, app, "arfid-tracker:quick-log", "Log a food", { cls: "mrd-btn-primary mrd-btn-lg", onRun: nudge });
+		commandButton(primary, app, "spiral-shutdown-logger:quick-capture", "Log an entry", { cls: "mrd-btn-cold mrd-btn-lg" });
+		commandButton(primary, app, "arfid-tracker:struggling", "I'm struggling", { cls: "mrd-btn-lg mrd-btn-warn", onRun: nudge });
 
 		for (const group of GROUPS) {
 			const block = this.el.createDiv({ cls: "mrd-actions-group" });
 			block.createDiv({ cls: "mrd-subhead", text: group.title });
 			const row = block.createDiv({ cls: "mrd-btn-row" });
 			for (const [id, label] of group.commands) {
-				commandButton(row, bridge, id, label, { cls: "mrd-btn-sm", onRun: group.foodNudge ? nudge : undefined });
+				commandButton(row, app, id, label, { cls: "mrd-btn-sm", onRun: group.foodNudge ? nudge : undefined });
 			}
 		}
 	}
