@@ -22,7 +22,8 @@ import { MeridianRuntime, RefreshReason } from "./panels/types";
 import { MeridianView, VIEW_TYPE_MERIDIAN } from "./view";
 import { TodoEditModal } from "dash-core";
 import { PromptModal } from "dash-core";
-import { WeekReviewModal } from "./panels/weekreview";
+import { WeekReviewModal } from "dash-core";
+import { meridianWeekReviewConfig } from "./weekreview";
 import { LocalEventModal } from "dash-core";
 import { meridianLocalEvents } from "./localevents";
 import { LineHistoryModal } from "./panels/linehistory";
@@ -192,7 +193,7 @@ export default class MeridianDashPlugin extends Plugin {
 		this.addCommand({
 			id: "weekly-review",
 			name: "Weekly review",
-			callback: () => new WeekReviewModal(this.app, this).open(),
+			callback: () => new WeekReviewModal(this.app, meridianWeekReviewConfig(this)).open(),
 		});
 		this.addCommand({
 			id: "weekly-goals",

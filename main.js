@@ -29,10 +29,10 @@ __export(main_exports, {
   default: () => MeridianDashPlugin
 });
 module.exports = __toCommonJS(main_exports);
-var import_obsidian28 = require("obsidian");
+var import_obsidian29 = require("obsidian");
 
 // src/settings.ts
-var import_obsidian25 = require("obsidian");
+var import_obsidian26 = require("obsidian");
 
 // src/core/tokens.ts
 var PALETTE = {
@@ -2983,6 +2983,57 @@ function activeSort(a, b) {
   return a.item.order - b.item.order;
 }
 
+// node_modules/dash-core/src/panels/weekreview.ts
+var import_obsidian18 = require("obsidian");
+var WeekReviewModal = class extends import_obsidian18.Modal {
+  constructor(app, config) {
+    super(app);
+    this.config = config;
+  }
+  onOpen() {
+    this.titleEl.setText(this.config.title);
+    this.modalEl.addClass("mrd-review-modal");
+    const body = this.contentEl.createDiv({ cls: "mrd-review" });
+    body.createDiv({ cls: "mrd-muted", text: this.config.compilingText });
+    void this.config.compile().then((data) => {
+      if (!body.isConnected) return;
+      this.render(body, data);
+    });
+  }
+  render(host, data) {
+    host.empty();
+    host.createDiv({ cls: "mrd-review-header", text: data.header });
+    if (data.streakLine) host.createDiv({ cls: "mrd-review-streak", text: data.streakLine });
+    for (const block of data.blocks) {
+      const b = host.createDiv({ cls: "mrd-review-block" });
+      b.createDiv({ cls: "mrd-review-stat-head", text: block.head });
+      if (block.figure !== void 0) b.createDiv({ cls: "mrd-review-figure", text: block.figure });
+      if (block.bars) this.renderBars(b, block.bars);
+      if (block.line !== void 0) b.createDiv({ cls: "mrd-review-line", text: block.line });
+      if (block.chips) {
+        const chips = b.createDiv({ cls: "mrd-review-chips" });
+        for (const name of block.chips) chips.createSpan({ cls: "mrd-chip mrd-chip-cold", text: name });
+      }
+    }
+  }
+  renderBars(parent, data) {
+    const bars = parent.createDiv({ cls: "mrd-review-bars" });
+    const max = Math.max(1, ...data.map((d) => d.count));
+    for (const d of data) {
+      const cell = bars.createDiv({ cls: "mrd-review-bar-cell" });
+      const track = cell.createDiv({ cls: "mrd-review-bar-track" });
+      const fill = track.createDiv({ cls: "mrd-review-bar-fill" });
+      fill.style.height = `${Math.round(d.count / max * 100)}%`;
+      if (d.count === 0) fill.addClass("is-empty");
+      cell.createDiv({ cls: "mrd-review-bar-day", text: d.label });
+      cell.createDiv({ cls: "mrd-review-bar-count", text: String(d.count) });
+    }
+  }
+  onClose() {
+    this.contentEl.empty();
+  }
+};
+
 // src/core/dailyfields.ts
 var SUPPLEMENTAL_STOP = /^\s*-\s+Supplemental\s*:?\s*$/i;
 var SPIRAL_MARKER = /%%\s*spiral-log\s*%%/i;
@@ -3080,7 +3131,7 @@ var MERIDIAN_COPY = {
 };
 
 // src/panels/qotd.ts
-var import_obsidian18 = require("obsidian");
+var import_obsidian19 = require("obsidian");
 
 // src/panels/types.ts
 var BasePanel2 = class extends BasePanel {
@@ -3113,7 +3164,7 @@ var QotdPanel = class extends BasePanel2 {
       card.createDiv({ cls: "mrd-muted", text: "The quotation archive is present but empty." });
       return;
     }
-    const m = (0, import_obsidian18.moment)((0, import_obsidian18.moment)().format("YYYY-MM-DD"), "YYYY-MM-DD");
+    const m = (0, import_obsidian19.moment)((0, import_obsidian19.moment)().format("YYYY-MM-DD"), "YYYY-MM-DD");
     const dayNumber = Math.floor(m.valueOf() / 864e5);
     const idx = (dayNumber % n + n) % n;
     const q = quotes[idx];
@@ -3155,11 +3206,11 @@ function parseQuotes(raw) {
 }
 
 // src/panels/meridian.ts
-var import_obsidian20 = require("obsidian");
+var import_obsidian21 = require("obsidian");
 
 // src/panels/linehistory.ts
-var import_obsidian19 = require("obsidian");
-var LineHistoryModal = class extends import_obsidian19.Modal {
+var import_obsidian20 = require("obsidian");
+var LineHistoryModal = class extends import_obsidian20.Modal {
   constructor(app, plugin) {
     super(app);
     this.plugin = plugin;
@@ -3177,7 +3228,7 @@ var LineHistoryModal = class extends import_obsidian19.Modal {
       const entry = history[i];
       const row = list.createDiv({ cls: "mrd-linehist-row" });
       row.createDiv({ cls: "mrd-linehist-line", text: entry.line });
-      row.createDiv({ cls: "mrd-linehist-when", text: (0, import_obsidian19.moment)(entry.at).fromNow() });
+      row.createDiv({ cls: "mrd-linehist-when", text: (0, import_obsidian20.moment)(entry.at).fromNow() });
     }
   }
   onClose() {
@@ -3585,7 +3636,7 @@ var MeridianPanel = class extends BasePanel2 {
     const bag = fresh.length ? fresh : candidates;
     const line = bag[Math.floor(Math.random() * bag.length)];
     if (pool === "milestone") {
-      this.ctx.plugin.milestoneShownDate = (0, import_obsidian20.moment)().format("YYYY-MM-DD");
+      this.ctx.plugin.milestoneShownDate = (0, import_obsidian21.moment)().format("YYYY-MM-DD");
       void this.ctx.plugin.saveData_();
     }
     ring.push(line);
@@ -3600,7 +3651,7 @@ var MeridianPanel = class extends BasePanel2 {
   }
   async weights() {
     const { todos, bridge, runtime, plugin } = this.ctx;
-    const todayStr2 = (0, import_obsidian20.moment)().format("YYYY-MM-DD");
+    const todayStr2 = (0, import_obsidian21.moment)().format("YYYY-MM-DD");
     const pending = todos.pendingCount();
     const overdueTodos = todos.overdueCount();
     const crm = safe(() => bridge.crmContacts(), []);
@@ -3639,7 +3690,7 @@ var MeridianPanel = class extends BasePanel2 {
     const completionsMilestone = doneToday > 0 && doneToday % 5 === 0;
     const streak = this.ctx.plugin.streak;
     const streakSeven = streak.current > 0 && streak.current % 7 === 0;
-    const newRecord = this.ctx.runtime.streakRecordDate === (0, import_obsidian20.moment)().format("YYYY-MM-DD");
+    const newRecord = this.ctx.runtime.streakRecordDate === (0, import_obsidian21.moment)().format("YYYY-MM-DD");
     return completionsMilestone || streakSeven || newRecord;
   }
 };
@@ -3697,10 +3748,10 @@ async function safeAsync(fn, fallback) {
 }
 
 // src/panels/agenda.ts
-var import_obsidian22 = require("obsidian");
+var import_obsidian23 = require("obsidian");
 
 // src/panels/weekprint.ts
-var import_obsidian21 = require("obsidian");
+var import_obsidian22 = require("obsidian");
 
 // src/weeklygoals.ts
 function meridianWeeklyGoals(plugin) {
@@ -3712,11 +3763,11 @@ function meridianWeeklyGoals(plugin) {
 }
 
 // src/panels/weekprint.ts
-var WeekPrintModal = class extends import_obsidian21.Modal {
+var WeekPrintModal = class extends import_obsidian22.Modal {
   constructor(app, plugin) {
     super(app);
     this.plugin = plugin;
-    this.weekStart = (0, import_obsidian21.moment)().startOf("week");
+    this.weekStart = (0, import_obsidian22.moment)().startOf("week");
     this.sources = [];
   }
   onOpen() {
@@ -3749,18 +3800,18 @@ var WeekPrintModal = class extends import_obsidian21.Modal {
       this.render();
     });
     this.ctrlBtn(nav, "This week", () => {
-      this.weekStart = (0, import_obsidian21.moment)().startOf("week");
+      this.weekStart = (0, import_obsidian22.moment)().startOf("week");
       this.render();
     });
     this.ctrlBtn(nav, "Set goals", () => {
       new WeeklyGoalsModal(this.app, meridianWeeklyGoals(this.plugin), this.plugin.todos, weekKeyOf(this.weekStart), () => this.render(), MERIDIAN_WEEKLYGOALS_COPY).open();
     });
     const shareBtn = controls.createEl("button", {
-      cls: `mrd-btn ${import_obsidian21.Platform.isMobile ? "mrd-btn-primary" : ""}`.trim(),
+      cls: `mrd-btn ${import_obsidian22.Platform.isMobile ? "mrd-btn-primary" : ""}`.trim(),
       text: "Share / Print"
     });
     shareBtn.addEventListener("click", () => void this.share());
-    if (!import_obsidian21.Platform.isMobile) {
+    if (!import_obsidian22.Platform.isMobile) {
       const printBtn = controls.createEl("button", { cls: "mrd-btn mrd-btn-primary", text: "Print" });
       printBtn.addEventListener("click", () => this.print());
     }
@@ -3924,7 +3975,7 @@ ${collectWeekPrintCss()}`;
     a.click();
     a.remove();
     window.setTimeout(() => URL.revokeObjectURL(url), 1e4);
-    new import_obsidian21.Notice(`Saved \u201C${name}\u201D. Open it in a browser to print.`);
+    new import_obsidian22.Notice(`Saved \u201C${name}\u201D. Open it in a browser to print.`);
   }
   onClose() {
     this.contentEl.empty();
@@ -4007,7 +4058,7 @@ var AgendaPanel = class extends BasePanel2 {
   renderBody() {
     const s = this.ctx.settings();
     const head = placard(this.el, "Today's Agenda");
-    head.createSpan({ cls: "mrd-placard-badge", text: (0, import_obsidian22.moment)().format("YYYY-MM-DD") });
+    head.createSpan({ cls: "mrd-placard-badge", text: (0, import_obsidian23.moment)().format("YYYY-MM-DD") });
     const actions = this.el.createDiv({ cls: "mrd-btn-row mrd-agenda-actions" });
     const addBtn = actions.createEl("button", { cls: "mrd-btn mrd-btn-sm", text: "+ Event" });
     addBtn.addEventListener(
@@ -4024,7 +4075,7 @@ var AgendaPanel = class extends BasePanel2 {
       void this.fetchAll();
       new WeekPrintModal(this.ctx.app, this.ctx.plugin).open();
     });
-    const today2 = (0, import_obsidian22.moment)().format("YYYY-MM-DD");
+    const today2 = (0, import_obsidian23.moment)().format("YYYY-MM-DD");
     const localToday = this.ctx.plugin.localEvents.filter((e) => e.date === today2);
     if (s.agendaUrls.length === 0 && localToday.length === 0) {
       this.el.createDiv({
@@ -4097,7 +4148,7 @@ var AgendaPanel = class extends BasePanel2 {
       if (age > 90 * 1e3) {
         this.el.createDiv({
           cls: "mrd-agenda-age",
-          text: `Serving the last successful read from ${(0, import_obsidian22.moment)(oldest).fromNow()}. Proton can take up to eight hours to propagate a change; a fresh read is on its way.`
+          text: `Serving the last successful read from ${(0, import_obsidian23.moment)(oldest).fromNow()}. Proton can take up to eight hours to propagate a change; a fresh read is on its way.`
         });
       }
     }
@@ -4171,110 +4222,64 @@ var AgendaPanel = class extends BasePanel2 {
   }
 };
 
-// src/panels/weekreview.ts
-var import_obsidian23 = require("obsidian");
-var WeekReviewModal = class extends import_obsidian23.Modal {
-  constructor(app, plugin) {
-    super(app);
-    this.plugin = plugin;
-  }
-  onOpen() {
-    this.titleEl.setText("Weekly review");
-    this.modalEl.addClass("mrd-review-modal");
-    const body = this.contentEl.createDiv({ cls: "mrd-review" });
-    body.createDiv({ cls: "mrd-muted", text: "Compiling the record\u2026" });
-    void this.compile().then((summary) => {
-      if (!body.isConnected) return;
-      this.render(body, summary);
-    });
-  }
-  async compile() {
-    const s = this.plugin.settings;
-    const bridge = this.plugin.bridge;
-    const days = [];
-    for (let i = 6; i >= 0; i--) days.push((0, import_obsidian23.moment)().subtract(i, "days").format("YYYY-MM-DD"));
-    const dayStats = [];
-    let totalCompleted = 0;
-    let contactLines = 0;
-    const contacts = /* @__PURE__ */ new Set();
-    let mealsDays = 0;
-    let regulationEntries = 0;
-    let nourishmentEntries = 0;
-    for (const date of days) {
-      const raw = await readDailyNoteRaw(this.app, date);
-      const completed = countBullets(readField(raw, headingField(s.completedTasksHeading)));
-      totalCompleted += completed;
-      dayStats.push({ date, completed });
-      const crm = readMarkerLogLines(raw, s.crmLogMarker || "%% crm-log %%", s.crmLogHeading);
-      contactLines += crm.length;
-      for (const line of crm) {
-        const name = contactName(line);
-        if (name) contacts.add(name);
-      }
-      if (readHeadingSection(raw, "Meals").trim().length > 0) mealsDays++;
-      nourishmentEntries += readMarkerLogLines(raw, "%% arfid-log %%", "Miscellaneous notes").length;
-      regulationEntries += await bridge.spiralEntriesForDate(date);
+// src/weekreview.ts
+var import_obsidian24 = require("obsidian");
+function meridianWeekReviewConfig(plugin) {
+  return {
+    title: "Weekly review",
+    compilingText: "Compiling the record\u2026",
+    compile: () => compile(plugin)
+  };
+}
+async function compile(plugin) {
+  const s = plugin.settings;
+  const bridge = plugin.bridge;
+  const days = [];
+  for (let i = 6; i >= 0; i--) days.push((0, import_obsidian24.moment)().subtract(i, "days").format("YYYY-MM-DD"));
+  const dayStats = [];
+  let totalCompleted = 0;
+  let contactLines = 0;
+  const contacts = /* @__PURE__ */ new Set();
+  let mealsDays = 0;
+  let regulationEntries = 0;
+  let nourishmentEntries = 0;
+  for (const date of days) {
+    const raw = await readDailyNoteRaw(plugin.app, date);
+    const completed = countBullets(readField(raw, headingField(s.completedTasksHeading)));
+    totalCompleted += completed;
+    dayStats.push({ date, completed });
+    const crm = readMarkerLogLines(raw, s.crmLogMarker || "%% crm-log %%", s.crmLogHeading);
+    contactLines += crm.length;
+    for (const line of crm) {
+      const name = contactName(line);
+      if (name) contacts.add(name);
     }
-    return {
-      days: dayStats,
-      totalCompleted,
-      contactLines,
-      contacts: [...contacts].sort((a, b) => a.localeCompare(b)),
-      mealsDays,
-      regulationEntries,
-      nourishmentEntries
-    };
+    if (readHeadingSection(raw, "Meals").trim().length > 0) mealsDays++;
+    nourishmentEntries += readMarkerLogLines(raw, "%% arfid-log %%", "Miscellaneous notes").length;
+    regulationEntries += await bridge.spiralEntriesForDate(date);
   }
-  render(host, sum) {
-    host.empty();
-    host.createDiv({ cls: "mrd-review-header", text: "OBSERVATION SUMMARY \u2014 7-day window. The record is complete." });
-    const streak = this.plugin.streak;
-    if (streak.current > 0) {
-      host.createDiv({
-        cls: "mrd-review-streak",
-        text: `RECORD \u2014 ${streak.current} consecutive ${plural(streak.current, "day", "days")} observed${streak.longest > streak.current ? ` \xB7 longest ${streak.longest}` : ""}.`
-      });
-    }
-    const dir = host.createDiv({ cls: "mrd-review-block" });
-    dir.createDiv({ cls: "mrd-review-stat-head", text: "Directives completed" });
-    dir.createDiv({ cls: "mrd-review-figure", text: String(sum.totalCompleted) });
-    const bars = dir.createDiv({ cls: "mrd-review-bars" });
-    const max = Math.max(1, ...sum.days.map((d) => d.completed));
-    for (const d of sum.days) {
-      const cell = bars.createDiv({ cls: "mrd-review-bar-cell" });
-      const track = cell.createDiv({ cls: "mrd-review-bar-track" });
-      const fill = track.createDiv({ cls: "mrd-review-bar-fill" });
-      fill.style.height = `${Math.round(d.completed / max * 100)}%`;
-      if (d.completed === 0) fill.addClass("is-empty");
-      cell.createDiv({ cls: "mrd-review-bar-day", text: (0, import_obsidian23.moment)(d.date, "YYYY-MM-DD").format("dd")[0] });
-      cell.createDiv({ cls: "mrd-review-bar-count", text: String(d.completed) });
-    }
-    const crm = host.createDiv({ cls: "mrd-review-block" });
-    crm.createDiv({ cls: "mrd-review-stat-head", text: "Contacts reached" });
-    crm.createDiv({
-      cls: "mrd-review-line",
-      text: `${sum.contactLines} ${plural(sum.contactLines, "interaction", "interactions")} \xB7 ${sum.contacts.length} distinct.`
-    });
-    if (sum.contacts.length > 0) {
-      const chips = crm.createDiv({ cls: "mrd-review-chips" });
-      for (const name of sum.contacts) chips.createSpan({ cls: "mrd-chip mrd-chip-cold", text: name });
-    }
-    const meals = host.createDiv({ cls: "mrd-review-block" });
-    meals.createDiv({ cls: "mrd-review-stat-head", text: "Meals planned" });
-    meals.createDiv({ cls: "mrd-review-line", text: `${sum.mealsDays} of 7 ${plural(sum.mealsDays, "day", "days")}.` });
-    const nour = host.createDiv({ cls: "mrd-review-block" });
-    nour.createDiv({ cls: "mrd-review-stat-head", text: "Nourishment log" });
-    nour.createDiv({ cls: "mrd-review-line", text: `${sum.nourishmentEntries} ${plural(sum.nourishmentEntries, "entry", "entries")} this week.` });
-    if (sum.regulationEntries > 0) {
-      const reg = host.createDiv({ cls: "mrd-review-block" });
-      reg.createDiv({ cls: "mrd-review-stat-head", text: "Regulation log" });
-      reg.createDiv({ cls: "mrd-review-line", text: `${sum.regulationEntries} ${plural(sum.regulationEntries, "entry", "entries")} this week.` });
-    }
+  const sortedContacts = [...contacts].sort((a, b) => a.localeCompare(b));
+  const streak = plugin.streak;
+  const streakLine = streak.current > 0 ? `RECORD \u2014 ${streak.current} consecutive ${plural(streak.current, "day", "days")} observed${streak.longest > streak.current ? ` \xB7 longest ${streak.longest}` : ""}.` : void 0;
+  const blocks = [
+    {
+      head: "Directives completed",
+      figure: String(totalCompleted),
+      bars: dayStats.map((d) => ({ label: (0, import_obsidian24.moment)(d.date, "YYYY-MM-DD").format("dd")[0], count: d.completed }))
+    },
+    {
+      head: "Contacts reached",
+      line: `${contactLines} ${plural(contactLines, "interaction", "interactions")} \xB7 ${sortedContacts.length} distinct.`,
+      chips: sortedContacts.length > 0 ? sortedContacts : void 0
+    },
+    { head: "Meals planned", line: `${mealsDays} of 7 ${plural(mealsDays, "day", "days")}.` },
+    { head: "Nourishment log", line: `${nourishmentEntries} ${plural(nourishmentEntries, "entry", "entries")} this week.` }
+  ];
+  if (regulationEntries > 0) {
+    blocks.push({ head: "Regulation log", line: `${regulationEntries} ${plural(regulationEntries, "entry", "entries")} this week.` });
   }
-  onClose() {
-    this.contentEl.empty();
-  }
-};
+  return { header: "OBSERVATION SUMMARY \u2014 7-day window. The record is complete.", streakLine, blocks };
+}
 function countBullets(body) {
   return body.split("\n").filter((l) => /^\s*-\s+\S/.test(l)).length;
 }
@@ -4361,7 +4366,7 @@ var SpiralPanel = class extends BasePanel2 {
 };
 
 // src/panels/crm.ts
-var import_obsidian24 = require("obsidian");
+var import_obsidian25 = require("obsidian");
 var CrmPanel = class extends BasePanel2 {
   constructor() {
     super(...arguments);
@@ -4401,7 +4406,7 @@ var CrmPanel = class extends BasePanel2 {
     name.addEventListener("click", (e) => {
       e.preventDefault();
       const file = this.ctx.app.vault.getAbstractFileByPath(c.path);
-      if (file instanceof import_obsidian24.TFile) void this.ctx.app.workspace.getLeaf(false).openFile(file);
+      if (file instanceof import_obsidian25.TFile) void this.ctx.app.workspace.getLeaf(false).openFile(file);
     });
     const meta = main.createDiv({ cls: "mrd-crm-meta" });
     if (c.priority) meta.createSpan({ cls: `mrd-chip mrd-prio-${c.priority}`, text: c.priority });
@@ -4413,10 +4418,10 @@ var CrmPanel = class extends BasePanel2 {
       new CrmInteractionModal(this.ctx.app, c.name, async (text) => {
         const ok = await this.ctx.bridge.crmWriteInteraction(c.path, text);
         if (ok) {
-          new import_obsidian24.Notice(`Logged interaction with ${c.name}.`);
+          new import_obsidian25.Notice(`Logged interaction with ${c.name}.`);
           this.ctx.requestRefresh("manual");
         } else {
-          new import_obsidian24.Notice("Could not log the interaction.");
+          new import_obsidian25.Notice("Could not log the interaction.");
         }
       }).open();
     });
@@ -4429,7 +4434,7 @@ var CrmPanel = class extends BasePanel2 {
       const lines = await this.ctx.bridge.crmReconcileLines();
       if (lines.length === 0) return;
       const s = this.ctx.settings();
-      const time = (0, import_obsidian24.moment)().format("HH:mm");
+      const time = (0, import_obsidian25.moment)().format("HH:mm");
       for (const tail of lines) {
         await appendDailyLogLine(this.ctx.app, `- ${time} ${tail}`, {
           marker: s.crmLogMarker,
@@ -4442,7 +4447,7 @@ var CrmPanel = class extends BasePanel2 {
     }
   }
 };
-var CrmInteractionModal = class extends import_obsidian24.Modal {
+var CrmInteractionModal = class extends import_obsidian25.Modal {
   constructor(app, contactName2, onSubmit) {
     super(app);
     this.contactName = contactName2;
@@ -4451,7 +4456,7 @@ var CrmInteractionModal = class extends import_obsidian24.Modal {
   }
   onOpen() {
     this.titleEl.setText(`Log interaction \u2014 ${this.contactName}`);
-    new import_obsidian24.Setting(this.contentEl).setName("Interaction note").addText((t) => {
+    new import_obsidian25.Setting(this.contentEl).setName("Interaction note").addText((t) => {
       t.setPlaceholder("e.g. Called re: contract renewal").onChange((v) => this.note = v);
       t.inputEl.classList.add("mrd-modal-wide");
       t.inputEl.focus();
@@ -4462,12 +4467,12 @@ var CrmInteractionModal = class extends import_obsidian24.Modal {
         }
       });
     });
-    new import_obsidian24.Setting(this.contentEl).addButton((b) => b.setButtonText("Cancel").onClick(() => this.close())).addButton((b) => b.setButtonText("Log interaction").setCta().onClick(() => this.submit()));
+    new import_obsidian25.Setting(this.contentEl).addButton((b) => b.setButtonText("Cancel").onClick(() => this.close())).addButton((b) => b.setButtonText("Log interaction").setCta().onClick(() => this.submit()));
   }
   submit() {
     const note = this.note.trim();
     if (!note) {
-      new import_obsidian24.Notice("Please enter an interaction note.");
+      new import_obsidian25.Notice("Please enter an interaction note.");
       return;
     }
     this.onSubmit(note);
@@ -4594,7 +4599,7 @@ function createPanels(order, enabled, plugin) {
   const factories = {
     clock: () => new ClockPanel(MERIDIAN_CLOCK_COPY),
     meridian: () => new MeridianPanel(),
-    todo: () => new TodoPanel(MERIDIAN_TODO_PANEL_COPY, MERIDIAN_TODO_COPY, () => new WeekReviewModal(plugin.app, plugin).open()),
+    todo: () => new TodoPanel(MERIDIAN_TODO_PANEL_COPY, MERIDIAN_TODO_COPY, () => new WeekReviewModal(plugin.app, meridianWeekReviewConfig(plugin)).open()),
     agenda: () => new AgendaPanel(),
     calendar: () => new CalendarPanel(),
     actions: () => new ActionsPanel(),
@@ -4681,7 +4686,7 @@ function pickKnown(map) {
   }
   return out;
 }
-var MeridianSettingTab = class extends import_obsidian25.PluginSettingTab {
+var MeridianSettingTab = class extends import_obsidian26.PluginSettingTab {
   constructor(app, plugin) {
     super(app, plugin);
     this.plugin = plugin;
@@ -4700,21 +4705,21 @@ var MeridianSettingTab = class extends import_obsidian25.PluginSettingTab {
     const { containerEl } = this;
     const s = this.plugin.settings;
     containerEl.empty();
-    new import_obsidian25.Setting(containerEl).setName("General").setHeading();
-    new import_obsidian25.Setting(containerEl).setName("Open on startup").setDesc("Open the MERIDIAN dashboard when Obsidian starts.").addToggle(
+    new import_obsidian26.Setting(containerEl).setName("General").setHeading();
+    new import_obsidian26.Setting(containerEl).setName("Open on startup").setDesc("Open the MERIDIAN dashboard when Obsidian starts.").addToggle(
       (t) => t.setValue(s.openOnStartup).onChange(async (v) => {
         s.openOnStartup = v;
         await this.save();
       })
     );
-    new import_obsidian25.Setting(containerEl).setName("Replace the New Tab page").setDesc("Turn every empty New Tab into the dashboard, so it becomes your landing view instead of the empty page or the daily note.").addToggle(
+    new import_obsidian26.Setting(containerEl).setName("Replace the New Tab page").setDesc("Turn every empty New Tab into the dashboard, so it becomes your landing view instead of the empty page or the daily note.").addToggle(
       (t) => t.setValue(s.replaceNewTab).onChange(async (v) => {
         s.replaceNewTab = v;
         await this.save();
         if (v) this.plugin.replaceActiveEmptyLeaf();
       })
     );
-    new import_obsidian25.Setting(containerEl).setName("Panels").setDesc(
+    new import_obsidian26.Setting(containerEl).setName("Panels").setDesc(
       "Toggle panels on or off and reorder them. On the desktop you can also place each panel in a column (1\u20133) and give it a span; leave everything at column 1 to keep the default packed layout. A phone always stacks to one column in this order."
     ).setHeading();
     const list = containerEl.createDiv({ cls: "mrd-settings-panel-list" });
@@ -4722,7 +4727,7 @@ var MeridianSettingTab = class extends import_obsidian25.PluginSettingTab {
       list.empty();
       s.panelOrder.forEach((id, index) => {
         var _a;
-        const row = new import_obsidian25.Setting(list).setName((_a = PANEL_TITLES[id]) != null ? _a : id);
+        const row = new import_obsidian26.Setting(list).setName((_a = PANEL_TITLES[id]) != null ? _a : id);
         row.addExtraButton(
           (b) => b.setIcon("arrow-up").setTooltip("Move up").setDisabled(index === 0).onClick(async () => {
             [s.panelOrder[index - 1], s.panelOrder[index]] = [s.panelOrder[index], s.panelOrder[index - 1]];
@@ -4762,8 +4767,8 @@ var MeridianSettingTab = class extends import_obsidian25.PluginSettingTab {
       });
     };
     renderList();
-    new import_obsidian25.Setting(containerEl).setName("MERIDIAN ambient line").setHeading();
-    new import_obsidian25.Setting(containerEl).setName("Rotation interval (minutes)").setDesc("How often the ambient line rotates. It also rotates on refresh.").addText(
+    new import_obsidian26.Setting(containerEl).setName("MERIDIAN ambient line").setHeading();
+    new import_obsidian26.Setting(containerEl).setName("Rotation interval (minutes)").setDesc("How often the ambient line rotates. It also rotates on refresh.").addText(
       (t) => t.setValue(String(s.meridianRotationMinutes)).onChange(async (v) => {
         const n = Number(v);
         if (Number.isFinite(n) && n > 0) {
@@ -4772,8 +4777,8 @@ var MeridianSettingTab = class extends import_obsidian25.PluginSettingTab {
         }
       })
     );
-    new import_obsidian25.Setting(containerEl).setName("Today's agenda").setHeading();
-    new import_obsidian25.Setting(containerEl).setName("Refresh interval (minutes)").setDesc("How often calendars are re-fetched while the dashboard is open.").addText(
+    new import_obsidian26.Setting(containerEl).setName("Today's agenda").setHeading();
+    new import_obsidian26.Setting(containerEl).setName("Refresh interval (minutes)").setDesc("How often calendars are re-fetched while the dashboard is open.").addText(
       (t) => t.setValue(String(s.agendaRefreshMinutes)).onChange(async (v) => {
         const n = Number(v);
         if (Number.isFinite(n) && n > 0) {
@@ -4782,14 +4787,14 @@ var MeridianSettingTab = class extends import_obsidian25.PluginSettingTab {
         }
       })
     );
-    new import_obsidian25.Setting(containerEl).setName("Calendars").setDesc(
+    new import_obsidian26.Setting(containerEl).setName("Calendars").setDesc(
       "Up to 10 public Proton Calendar share links (.ics). Today only \u2014 no month view. Each has a swatch colour, a countdown toggle (keep it on the agenda while excluding it from the NEXT / open-gap math \u2014 e.g. a birthdays feed), and a remove button."
     );
     const calList = containerEl.createDiv({ cls: "mrd-settings-cal-list" });
     const renderCals = () => {
       calList.empty();
       s.agendaUrls.forEach((cal, i) => {
-        const row = new import_obsidian25.Setting(calList).setName(`Calendar ${i + 1}`);
+        const row = new import_obsidian26.Setting(calList).setName(`Calendar ${i + 1}`);
         row.addText(
           (t) => t.setPlaceholder("Label").setValue(cal.label).onChange(async (v) => {
             cal.label = v.trim() || "Calendar";
@@ -4830,7 +4835,7 @@ var MeridianSettingTab = class extends import_obsidian25.PluginSettingTab {
           })
         );
       });
-      const addRow = new import_obsidian25.Setting(calList);
+      const addRow = new import_obsidian26.Setting(calList);
       addRow.addButton(
         (b) => b.setButtonText("+ Add calendar").setDisabled(s.agendaUrls.length >= 10).onClick(async () => {
           if (s.agendaUrls.length >= 10) return;
@@ -4841,7 +4846,7 @@ var MeridianSettingTab = class extends import_obsidian25.PluginSettingTab {
       );
     };
     renderCals();
-    new import_obsidian25.Setting(containerEl).setName("Calendar").setHeading();
+    new import_obsidian26.Setting(containerEl).setName("Calendar").setHeading();
     this.addText(
       containerEl,
       "Logs base note",
@@ -4850,14 +4855,14 @@ var MeridianSettingTab = class extends import_obsidian25.PluginSettingTab {
       (v) => s.logsBaseNote = v,
       true
     );
-    new import_obsidian25.Setting(containerEl).setName("Knowledge base").setHeading();
-    new import_obsidian25.Setting(containerEl).setName("Search folder").setDesc("Fuzzy search is scoped to this folder only.").addText(
+    new import_obsidian26.Setting(containerEl).setName("Knowledge base").setHeading();
+    new import_obsidian26.Setting(containerEl).setName("Search folder").setDesc("Fuzzy search is scoped to this folder only.").addText(
       (t) => t.setPlaceholder(DEFAULT_SETTINGS.kbSearchPath).setValue(s.kbSearchPath).onChange(async (v) => {
         s.kbSearchPath = v.trim() || DEFAULT_SETTINGS.kbSearchPath;
         await this.save();
       })
     );
-    new import_obsidian25.Setting(containerEl).setName("Recent notes shown").setDesc("How many recently-modified notes to list when the search box is empty.").addText(
+    new import_obsidian26.Setting(containerEl).setName("Recent notes shown").setDesc("How many recently-modified notes to list when the search box is empty.").addText(
       (t) => t.setValue(String(s.kbRecentCount)).onChange(async (v) => {
         const n = Number(v);
         if (Number.isFinite(n) && n >= 0) {
@@ -4866,7 +4871,7 @@ var MeridianSettingTab = class extends import_obsidian25.PluginSettingTab {
         }
       })
     );
-    new import_obsidian25.Setting(containerEl).setName("Search note bodies").setDesc("Also match note contents, not just filenames and headings. Filename/heading hits still rank first. Turn off if a large vault feels slow.").addToggle(
+    new import_obsidian26.Setting(containerEl).setName("Search note bodies").setDesc("Also match note contents, not just filenames and headings. Filename/heading hits still rank first. Turn off if a large vault feels slow.").addToggle(
       (t) => t.setValue(s.kbSearchBody).onChange(async (v) => {
         s.kbSearchBody = v;
         await this.save();
@@ -4876,11 +4881,11 @@ var MeridianSettingTab = class extends import_obsidian25.PluginSettingTab {
     this.addText(containerEl, "Notes subfolder", "Where notes live, relative to the library root \u2014 the pool you assign to categories.", s.kbNotesSubfolder, (v) => s.kbNotesSubfolder = v, true);
     this.addText(containerEl, "Categories subfolder", "Where category notes live, relative to the library root.", s.kbCategoriesSubfolder, (v) => s.kbCategoriesSubfolder = v || "Categories");
     this.addText(containerEl, "Category list heading", "Heading in a category note under which the alphabetized wikilinks live.", s.kbListHeading, (v) => s.kbListHeading = v || "Notes");
-    new import_obsidian25.Setting(containerEl).setName("Second Brain").setHeading();
+    new import_obsidian26.Setting(containerEl).setName("Second Brain").setHeading();
     this.addText(containerEl, "Second Brain folder", "The ongoing-project library the Second Brain panel manages.", s.secondBrainPath, (v) => s.secondBrainPath = v || "Second Brain");
     this.addText(containerEl, "Archive subfolder", "Where archived notes are moved, relative to the Second Brain folder.", s.secondBrainArchiveSubfolder, (v) => s.secondBrainArchiveSubfolder = v || "Archive");
-    new import_obsidian25.Setting(containerEl).setName("Places / navigation").setHeading();
-    new import_obsidian25.Setting(containerEl).setName("Destinations").setDesc(
+    new import_obsidian26.Setting(containerEl).setName("Places / navigation").setHeading();
+    new import_obsidian26.Setting(containerEl).setName("Destinations").setDesc(
       "One per line as `Label | target`. A target is a note/base name (e.g. `Central Hub`, `Logs Hub.base`) or, prefixed with `cmd:`, a command id (e.g. `cmd:arfid-tracker:open-dashboard`)."
     ).addTextArea((t) => {
       t.setValue(
@@ -4899,7 +4904,7 @@ var MeridianSettingTab = class extends import_obsidian25.PluginSettingTab {
         await this.save();
       });
     });
-    new import_obsidian25.Setting(containerEl).setName("Directives").setHeading();
+    new import_obsidian26.Setting(containerEl).setName("Directives").setHeading();
     this.addText(
       containerEl,
       "Directives file",
@@ -4907,14 +4912,14 @@ var MeridianSettingTab = class extends import_obsidian25.PluginSettingTab {
       s.directivesPath,
       (v) => s.directivesPath = v || "MERIDIAN/Directives.md"
     );
-    new import_obsidian25.Setting(containerEl).setName("Daily note write targets").setHeading();
+    new import_obsidian26.Setting(containerEl).setName("Daily note write targets").setHeading();
     this.addText(containerEl, "Completed-tasks heading", "Completed to-dos are archived under this heading.", s.completedTasksHeading, (v) => s.completedTasksHeading = v || "Completed tasks");
     this.addText(containerEl, "Completed-tasks marker", "Optional. If set, completed tasks go after this marker instead of the heading.", s.completedTasksMarker, (v) => s.completedTasksMarker = v, true);
     this.addText(containerEl, "Contacts-reached marker", "Marker Simple Contact Manager writes its daily log under; used by the reconcile safety net.", s.crmLogMarker, (v) => s.crmLogMarker = v);
     this.addText(containerEl, "Contacts-reached heading", "Fallback heading for the contacts-reached log.", s.crmLogHeading, (v) => s.crmLogHeading = v || "Contacts reached");
   }
   addText(el, name, desc, value, set, allowEmpty = false) {
-    new import_obsidian25.Setting(el).setName(name).setDesc(desc).addText(
+    new import_obsidian26.Setting(el).setName(name).setDesc(desc).addText(
       (t) => t.setValue(value).onChange(async (v) => {
         const trimmed = v.trim();
         if (!trimmed && !allowEmpty) return;
@@ -4926,7 +4931,7 @@ var MeridianSettingTab = class extends import_obsidian25.PluginSettingTab {
 };
 
 // src/core/bridge.ts
-var import_obsidian26 = require("obsidian");
+var import_obsidian27 = require("obsidian");
 var ARFID_ID = "arfid-tracker";
 var SPIRAL_ID = "spiral-shutdown-logger";
 var CRM_ID = "simple-contact-manager";
@@ -5045,7 +5050,7 @@ var Bridge = class {
   resolveContact(pathOrName) {
     var _a, _b, _c, _d;
     const byPath = this.app.vault.getAbstractFileByPath(pathOrName);
-    if (byPath instanceof import_obsidian26.TFile) return byPath;
+    if (byPath instanceof import_obsidian27.TFile) return byPath;
     const folder = ((_c = (_b = (_a = this.plugin(CRM_ID)) == null ? void 0 : _a.settings) == null ? void 0 : _b.contactsFolder) != null ? _c : "Contacts").trim();
     return (_d = this.app.vault.getMarkdownFiles().find((f) => (!folder || f.path.startsWith(folder + "/")) && f.basename === pathOrName)) != null ? _d : null;
   }
@@ -5062,7 +5067,7 @@ var Bridge = class {
     const fm = (_b = (_a = this.app.metadataCache.getFileCache(file)) == null ? void 0 : _a.frontmatter) != null ? _b : {};
     const followupDays = Number(fm.followup_days) || 30;
     const todayStr2 = today();
-    const next = (0, import_obsidian26.moment)().add(followupDays, "days").format("YYYY-MM-DD");
+    const next = (0, import_obsidian27.moment)().add(followupDays, "days").format("YYYY-MM-DD");
     const name = String((_c = fm.name) != null ? _c : file.basename);
     await this.app.fileManager.processFrontMatter(file, (f) => {
       f.last_contacted = todayStr2;
@@ -5072,7 +5077,7 @@ var Bridge = class {
     const s = (_e = (_d = this.plugin(CRM_ID)) == null ? void 0 : _d.settings) != null ? _e : {};
     const marker = ((_f = s.dailyNoteMarker) != null ? _f : "%% crm-log %%").trim();
     const heading = ((_g = s.dailyNoteHeading) != null ? _g : "Contacts reached").trim();
-    const time = (0, import_obsidian26.moment)().format("HH:mm");
+    const time = (0, import_obsidian27.moment)().format("HH:mm");
     try {
       await appendDailyLogLine(this.app, `- ${time} [[${name}|${name}]] \u2014 ${text}`, { marker, heading, time });
     } catch (e) {
@@ -5103,7 +5108,7 @@ var Bridge = class {
       const cache = this.app.metadataCache.getFileCache(file);
       const fm = cache == null ? void 0 : cache.frontmatter;
       if (!fm) continue;
-      const tags = cache ? (_d = (0, import_obsidian26.getAllTags)(cache)) != null ? _d : [] : [];
+      const tags = cache ? (_d = (0, import_obsidian27.getAllTags)(cache)) != null ? _d : [] : [];
       const isContact = tags.includes("#contact") || fm.tags === "contact" || Array.isArray(fm.tags) && fm.tags.includes("contact");
       if (!isContact || fm.is_template === true) continue;
       const last = String((_e = fm.last_contacted) != null ? _e : "").slice(0, 10);
@@ -5112,7 +5117,7 @@ var Bridge = class {
         name: String((_g = fm.name) != null ? _g : file.basename),
         path: file.path,
         priority: normalizePriority(fm.priority),
-        daysSince: last ? (0, import_obsidian26.moment)(todayStr2).diff((0, import_obsidian26.moment)(last, "YYYY-MM-DD"), "days") : null,
+        daysSince: last ? (0, import_obsidian27.moment)(todayStr2).diff((0, import_obsidian27.moment)(last, "YYYY-MM-DD"), "days") : null,
         nextFollowup: next,
         overdue: !!next && next < todayStr2,
         dueToday: !!next && next === todayStr2
@@ -5165,7 +5170,7 @@ var Bridge = class {
   async groceryList() {
     const path = this.groceryListPath();
     const file = this.app.vault.getAbstractFileByPath(path);
-    if (!(file instanceof import_obsidian26.TFile)) return { path, items: [], exists: false };
+    if (!(file instanceof import_obsidian27.TFile)) return { path, items: [], exists: false };
     const content = await this.app.vault.cachedRead(file);
     const items = [];
     content.split("\n").forEach((line, idx) => {
@@ -5184,7 +5189,7 @@ var Bridge = class {
   async toggleGroceryItem(lineIndex) {
     const path = this.groceryListPath();
     const file = this.app.vault.getAbstractFileByPath(path);
-    if (!(file instanceof import_obsidian26.TFile)) return;
+    if (!(file instanceof import_obsidian27.TFile)) return;
     await this.app.vault.process(file, (content) => {
       const lines = content.split("\n");
       const line = lines[lineIndex];
@@ -5212,7 +5217,7 @@ var Bridge = class {
       if (folder && !file.path.startsWith(folder + "/")) continue;
       const cache = this.app.metadataCache.getFileCache(file);
       if (!(cache == null ? void 0 : cache.frontmatter)) continue;
-      const tags = (_d = (0, import_obsidian26.getAllTags)(cache)) != null ? _d : [];
+      const tags = (_d = (0, import_obsidian27.getAllTags)(cache)) != null ? _d : [];
       if (!tags.includes("#contact")) continue;
       const name = String((_e = cache.frontmatter.name) != null ? _e : file.basename);
       const content = await this.app.vault.cachedRead(file);
@@ -5226,7 +5231,7 @@ var Bridge = class {
   }
 };
 function today() {
-  return (0, import_obsidian26.moment)().format("YYYY-MM-DD");
+  return (0, import_obsidian27.moment)().format("YYYY-MM-DD");
 }
 function parseLogLines(lines) {
   return lines.map((l) => {
@@ -5327,7 +5332,7 @@ function seedTodos() {
 }
 
 // src/view.ts
-var import_obsidian27 = require("obsidian");
+var import_obsidian28 = require("obsidian");
 
 // src/companion.ts
 function meridianCompanion(bridge) {
@@ -5344,7 +5349,7 @@ function meridianCompanion(bridge) {
 
 // src/view.ts
 var VIEW_TYPE_MERIDIAN = "meridian-dashboard";
-var MeridianView = class extends import_obsidian27.ItemView {
+var MeridianView = class extends import_obsidian28.ItemView {
   constructor(leaf, plugin) {
     super(leaf);
     this.plugin = plugin;
@@ -5436,7 +5441,7 @@ var MeridianView = class extends import_obsidian27.ItemView {
     label.createDiv({ cls: "mrd-brand-name", text: "MERIDIAN" });
     label.createDiv({ cls: "mrd-brand-sub", text: "HALCYON SYSTEMS \xB7 STABILITY THROUGH OBSERVATION" });
     const refresh = header.createEl("button", { cls: "mrd-icon-btn", attr: { "aria-label": "Refresh" } });
-    (0, import_obsidian27.setIcon)(refresh, "refresh-cw");
+    (0, import_obsidian28.setIcon)(refresh, "refresh-cw");
     refresh.addEventListener("click", () => void this.refreshPanels("manual"));
   }
   async mountPanel(panel, host, ctx) {
@@ -5518,7 +5523,7 @@ function radarMark() {
 }
 
 // src/main.ts
-var MeridianDashPlugin = class extends import_obsidian28.Plugin {
+var MeridianDashPlugin = class extends import_obsidian29.Plugin {
   constructor() {
     super(...arguments);
     this.settings = DEFAULT_SETTINGS;
@@ -5653,7 +5658,7 @@ var MeridianDashPlugin = class extends import_obsidian28.Plugin {
     this.addCommand({
       id: "weekly-review",
       name: "Weekly review",
-      callback: () => new WeekReviewModal(this.app, this).open()
+      callback: () => new WeekReviewModal(this.app, meridianWeekReviewConfig(this)).open()
     });
     this.addCommand({
       id: "weekly-goals",
@@ -5686,12 +5691,12 @@ var MeridianDashPlugin = class extends import_obsidian28.Plugin {
   async completeNextDirective() {
     const inst = this.todos.firstPending();
     if (!inst) {
-      new import_obsidian28.Notice("Nothing pending. The queue is already clear.");
+      new import_obsidian29.Notice("Nothing pending. The queue is already clear.");
       return;
     }
     await this.todos.toggleComplete(inst.item.id);
     this.refreshOpenViews("vault");
-    new import_obsidian28.Notice(`Directive completed: ${inst.item.text}. The record is updated.`);
+    new import_obsidian29.Notice(`Directive completed: ${inst.item.text}. The record is updated.`);
   }
   promptLog(field) {
     new PromptModal(
@@ -5706,13 +5711,13 @@ var MeridianDashPlugin = class extends import_obsidian28.Plugin {
       const wrote = await appendToDailyField(this.app, LOG_FIELD_SPECS[field], text);
       if (wrote) {
         this.refreshOpenViews("vault");
-        new import_obsidian28.Notice(`Recorded to ${LOG_FIELD_LABELS[field]}. The record is updated.`);
+        new import_obsidian29.Notice(`Recorded to ${LOG_FIELD_LABELS[field]}. The record is updated.`);
       } else {
-        new import_obsidian28.Notice(`The ${LOG_FIELD_LABELS[field]} section is not present in today's note. Nothing was written.`);
+        new import_obsidian29.Notice(`The ${LOG_FIELD_LABELS[field]} section is not present in today's note. Nothing was written.`);
       }
     } catch (e) {
       console.error("MERIDIAN: log-to-field failed", e);
-      new import_obsidian28.Notice("The record could not be written. The condition has been logged.");
+      new import_obsidian29.Notice("The record could not be written. The condition has been logged.");
     }
   }
   newMeridianLine() {
@@ -5721,7 +5726,7 @@ var MeridianDashPlugin = class extends import_obsidian28.Plugin {
       const view = leaf.view;
       if (view instanceof MeridianView && view.rotateMeridian()) rotated = true;
     }
-    if (!rotated) new import_obsidian28.Notice(anyCanonLine());
+    if (!rotated) new import_obsidian29.Notice(anyCanonLine());
   }
   /** URI action surface (§1.1). Headless with `text`; falls back to the modal
    * without it. Every write goes through the same daily-note writer / store. */
@@ -5741,7 +5746,7 @@ var MeridianDashPlugin = class extends import_obsidian28.Plugin {
         if (text) {
           await this.todos.add({ text });
           this.refreshOpenViews("vault");
-          new import_obsidian28.Notice(`Directive filed: ${text}.`);
+          new import_obsidian29.Notice(`Directive filed: ${text}.`);
         } else {
           new TodoEditModal(this.app, this.todos, void 0, () => this.refreshOpenViews("vault"), MERIDIAN_TODO_COPY).open();
         }
@@ -5750,7 +5755,7 @@ var MeridianDashPlugin = class extends import_obsidian28.Plugin {
       case "log": {
         const field = ((_c = params.field) != null ? _c : "").toLowerCase();
         if (!isLogField(field)) {
-          new import_obsidian28.Notice("That field is not on record. Nothing was written.");
+          new import_obsidian29.Notice("That field is not on record. Nothing was written.");
           return;
         }
         const text = ((_d = params.text) != null ? _d : "").trim();
@@ -5761,17 +5766,17 @@ var MeridianDashPlugin = class extends import_obsidian28.Plugin {
       case "add-event": {
         const summary = ((_f = (_e = params.summary) != null ? _e : params.text) != null ? _f : "").trim();
         if (summary) {
-          const date = /^\d{4}-\d{2}-\d{2}$/.test((_g = params.date) != null ? _g : "") ? params.date : (0, import_obsidian28.moment)().format("YYYY-MM-DD");
+          const date = /^\d{4}-\d{2}-\d{2}$/.test((_g = params.date) != null ? _g : "") ? params.date : (0, import_obsidian29.moment)().format("YYYY-MM-DD");
           const start = params.start || void 0;
           await this.addLocalEvent({ summary, date, start, end: start && params.end ? params.end : void 0 });
-          new import_obsidian28.Notice(`Event filed: ${summary}.`);
+          new import_obsidian29.Notice(`Event filed: ${summary}.`);
         } else {
           new LocalEventModal(this.app, meridianLocalEvents(this), void 0, () => this.refreshOpenViews("vault")).open();
         }
         return;
       }
       default:
-        new import_obsidian28.Notice("That instruction is not recognised. Nothing was done.");
+        new import_obsidian29.Notice("That instruction is not recognised. Nothing was done.");
     }
   }
   // ------------------------------------------------------------- data
@@ -5925,11 +5930,11 @@ var MeridianDashPlugin = class extends import_obsidian28.Plugin {
    * per day once today is locked in; a broken streak is silent. Records a
    * new-record day in runtime as a milestone trigger. */
   async updateStreak() {
-    const today2 = (0, import_obsidian28.moment)().format("YYYY-MM-DD");
+    const today2 = (0, import_obsidian29.moment)().format("YYYY-MM-DD");
     if (this.data.streak.lastDayCounted === today2) return;
     const counts = [];
     for (let i = 0; i < 366; i++) {
-      const c = await this.dayCounts((0, import_obsidian28.moment)().subtract(i, "day").format("YYYY-MM-DD"));
+      const c = await this.dayCounts((0, import_obsidian29.moment)().subtract(i, "day").format("YYYY-MM-DD"));
       counts.push(c);
       if (!c && i >= 1) break;
     }
@@ -5954,7 +5959,7 @@ var MeridianDashPlugin = class extends import_obsidian28.Plugin {
    * it recomputes the streak (day rollover) and re-arms. */
   scheduleMidnight() {
     if (this.midnightTimer !== null) window.clearTimeout(this.midnightTimer);
-    const msToMidnight = (0, import_obsidian28.moment)().endOf("day").valueOf() - Date.now() + 2e3;
+    const msToMidnight = (0, import_obsidian29.moment)().endOf("day").valueOf() - Date.now() + 2e3;
     this.midnightTimer = window.setTimeout(() => {
       this.midnightTimer = null;
       void this.updateStreak();

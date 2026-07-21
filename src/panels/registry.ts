@@ -12,7 +12,8 @@ import {
 import { QotdPanel } from "./qotd";
 import { MeridianPanel } from "./meridian";
 import { AgendaPanel } from "./agenda";
-import { WeekReviewModal } from "./weekreview";
+import { WeekReviewModal } from "dash-core";
+import { meridianWeekReviewConfig } from "../weekreview";
 import { ArfidPanel } from "./arfid";
 import { SpiralPanel } from "./spiral";
 import { CrmPanel } from "./crm";
@@ -65,7 +66,7 @@ export function createPanels(order: string[], enabled: Record<string, boolean>, 
 	const factories: Record<string, PanelFactory> = {
 		clock: () => new ClockPanel(MERIDIAN_CLOCK_COPY),
 		meridian: () => new MeridianPanel(),
-		todo: () => new TodoPanel(MERIDIAN_TODO_PANEL_COPY, MERIDIAN_TODO_COPY, () => new WeekReviewModal(plugin.app, plugin).open()),
+		todo: () => new TodoPanel(MERIDIAN_TODO_PANEL_COPY, MERIDIAN_TODO_COPY, () => new WeekReviewModal(plugin.app, meridianWeekReviewConfig(plugin)).open()),
 		agenda: () => new AgendaPanel(),
 		calendar: () => new CalendarPanel(),
 		actions: () => new ActionsPanel(),
