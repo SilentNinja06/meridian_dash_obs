@@ -7,7 +7,9 @@ import { calendarColor } from "../core/tokens";
 import { WeekPrintModal } from "./weekprint";
 import { LocalEventModal } from "dash-core";
 import { meridianLocalEvents } from "../localevents";
-import { WeeklyGoalsModal, currentWeekKey } from "./weeklygoals";
+import { WeeklyGoalsModal, currentWeekKey } from "dash-core";
+import { meridianWeeklyGoals } from "../weeklygoals";
+import { MERIDIAN_WEEKLYGOALS_COPY } from "../copy";
 
 /**
  * Today's agenda (§7.5). Today only — no month view. Fetches each Proton share
@@ -48,7 +50,7 @@ export class AgendaPanel extends BasePanel {
 		);
 		const goalsBtn = actions.createEl("button", { cls: "mrd-btn mrd-btn-sm", text: "Weekly goals" });
 		goalsBtn.addEventListener("click", () =>
-			new WeeklyGoalsModal(this.ctx.app, this.ctx.plugin, currentWeekKey(), () => this.rerender()).open()
+			new WeeklyGoalsModal(this.ctx.app, meridianWeeklyGoals(this.ctx.plugin), this.ctx.todos, currentWeekKey(), () => this.rerender(), MERIDIAN_WEEKLYGOALS_COPY).open()
 		);
 		const printBtn = actions.createEl("button", { cls: "mrd-btn mrd-btn-sm", text: "Print week" });
 		printBtn.addEventListener("click", () => {

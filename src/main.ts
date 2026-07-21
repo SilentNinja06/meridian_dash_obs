@@ -26,7 +26,9 @@ import { WeekReviewModal } from "./panels/weekreview";
 import { LocalEventModal } from "dash-core";
 import { meridianLocalEvents } from "./localevents";
 import { LineHistoryModal } from "./panels/linehistory";
-import { WeeklyGoalsModal, currentWeekKey } from "./panels/weeklygoals";
+import { WeeklyGoalsModal, currentWeekKey } from "dash-core";
+import { meridianWeeklyGoals } from "./weeklygoals";
+import { MERIDIAN_WEEKLYGOALS_COPY } from "./copy";
 import { anyCanonLine } from "./panels/meridian";
 
 export default class MeridianDashPlugin extends Plugin {
@@ -195,7 +197,7 @@ export default class MeridianDashPlugin extends Plugin {
 		this.addCommand({
 			id: "weekly-goals",
 			name: "Set weekly goals",
-			callback: () => new WeeklyGoalsModal(this.app, this, currentWeekKey(), () => this.refreshOpenViews("vault")).open(),
+			callback: () => new WeeklyGoalsModal(this.app, meridianWeeklyGoals(this), this.todos, currentWeekKey(), () => this.refreshOpenViews("vault"), MERIDIAN_WEEKLYGOALS_COPY).open(),
 		});
 		this.addCommand({
 			id: "refresh",

@@ -2,7 +2,9 @@ import { App, Modal, Notice, Platform, moment } from "obsidian";
 import type MeridianDashPlugin from "../main";
 import { AgendaItem, eventsOnDate, parseICS } from "dash-core";
 import { calendarColor } from "../core/tokens";
-import { WeeklyGoalsModal, weekKeyOf, weekLabel } from "./weeklygoals";
+import { WeeklyGoalsModal, weekKeyOf, weekLabel } from "dash-core";
+import { meridianWeeklyGoals } from "../weeklygoals";
+import { MERIDIAN_WEEKLYGOALS_COPY } from "../copy";
 
 interface CalendarSource {
 	label: string;
@@ -65,7 +67,7 @@ export class WeekPrintModal extends Modal {
 			this.render();
 		});
 		this.ctrlBtn(nav, "Set goals", () => {
-			new WeeklyGoalsModal(this.app, this.plugin, weekKeyOf(this.weekStart), () => this.render()).open();
+			new WeeklyGoalsModal(this.app, meridianWeeklyGoals(this.plugin), this.plugin.todos, weekKeyOf(this.weekStart), () => this.render(), MERIDIAN_WEEKLYGOALS_COPY).open();
 		});
 		// Desktop prints directly; mobile WebViews can't, so the share sheet
 		// (AirPrint / Save to Files / open in a browser) is the primary route there.

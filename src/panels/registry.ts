@@ -6,7 +6,8 @@ import { MeridianPanel } from "./meridian";
 import { TodoPanel } from "./todo";
 import { AgendaPanel } from "./agenda";
 import { CalendarPanel } from "dash-core";
-import { JournalPanel } from "./journal";
+import { JournalPanel } from "dash-core";
+import { MERIDIAN_JOURNAL_COPY } from "../copy";
 import { ArfidPanel } from "./arfid";
 import { SpiralPanel } from "./spiral";
 import { CrmPanel } from "./crm";
@@ -67,7 +68,7 @@ const FACTORIES: Record<string, PanelFactory> = {
 	calendar: () => new CalendarPanel(),
 	actions: () => new ActionsPanel(),
 	qotd: () => new QotdPanel(),
-	journal: () => new JournalPanel(),
+	journal: () => new JournalPanel(MERIDIAN_JOURNAL_COPY),
 	meals: () => new MealsPanel(MERIDIAN_MEALS_COPY),
 	arfid: () => new ArfidPanel(),
 	spiral: () => new SpiralPanel(),

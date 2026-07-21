@@ -1,4 +1,32 @@
-import type { DashCopy, TodoModalCopy, ClockCopy, MealsCopy } from "dash-core";
+import type { DashCopy, TodoModalCopy, ClockCopy, MealsCopy, JournalCopy, WeeklyGoalsCopy } from "dash-core";
+import { LOG_FIELD_SPECS } from "./core/dailyfields";
+
+/** MERIDIAN's daily-log journal fields (the specific note sections + labels) and
+ * the yesterday carry-over. The field specs come from the shared dailyfields. */
+export const MERIDIAN_JOURNAL_COPY: JournalCopy = {
+	title: "Daily Log",
+	carryHeading: "Reconsider tomorrow",
+	carryLabel: "Carried from yesterday · to reconsider",
+	fields: [
+		{ label: "Musings / random thoughts", spec: LOG_FIELD_SPECS.musing },
+		{ label: "Daily log · Primary", spec: LOG_FIELD_SPECS.primary },
+		{ label: "Daily log · Supplemental", spec: LOG_FIELD_SPECS.supplemental },
+		{ label: "Reconsider tomorrow", spec: LOG_FIELD_SPECS.reconsider, stripPlaceholder: true },
+	],
+};
+
+/** MERIDIAN's copy for the weekly-goals modal ("Directive" vocabulary). */
+export const MERIDIAN_WEEKLYGOALS_COPY: WeeklyGoalsCopy = {
+	titleTemplate: "Weekly goals · {week}",
+	empty: "No goals set for this week yet.",
+	toItem: "→ Directive",
+	removeGoal: "Remove goal",
+	addName: "Add a goal",
+	addPlaceholder: "A goal for the week",
+	addButton: "Add",
+	done: "Done",
+	addedNotice: "Added to Directives.",
+};
 
 /** MERIDIAN's copy for the meals & provisioning panel — exact strings and the
  * Recipe Manager command buttons the dashboard has always shown. */

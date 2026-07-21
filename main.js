@@ -2218,7 +2218,226 @@ var MealsPanel = class extends BasePanel {
   }
 };
 
+// node_modules/dash-core/src/panels/journal.ts
+var import_obsidian13 = require("obsidian");
+var JournalPanel = class extends BasePanel {
+  constructor(copy) {
+    super();
+    this.copy = copy;
+    __publicField(this, "id", "journal");
+    __publicField(this, "title");
+    __publicField(this, "editing", false);
+    this.title = copy.title;
+  }
+  async refresh(reason) {
+    var _a;
+    if (reason === "vault" && this.editing) return;
+    if ((_a = this.el) == null ? void 0 : _a.isConnected) {
+      this.el.empty();
+      await this.renderBody();
+    }
+  }
+  async renderBody() {
+    placard(this.el, this.copy.title);
+    await this.renderYesterdayCarry();
+    const wrap = this.el.createDiv({ cls: "mrd-journal" });
+    for (const field of this.copy.fields) {
+      await this.renderField(wrap, field);
+    }
+  }
+  /** Read-only carry-over of yesterday's configured heading onto today. */
+  async renderYesterdayCarry() {
+    if (!this.copy.carryHeading) return;
+    const yesterday = (0, import_obsidian13.moment)().subtract(1, "day").format("YYYY-MM-DD");
+    let text = "";
+    try {
+      const raw = await readDailyNoteRaw(this.ctx.app, yesterday);
+      text = tidy(readField(raw, headingField(this.copy.carryHeading)));
+    } catch (e) {
+      console.error("dash-core: could not read yesterday's carry-over", e);
+    }
+    if (!text) return;
+    const block = this.el.createDiv({ cls: "mrd-carry" });
+    if (this.copy.carryLabel) block.createDiv({ cls: "mrd-carry-label", text: this.copy.carryLabel });
+    block.createDiv({ cls: "mrd-carry-body", text });
+  }
+  async renderField(parent, field) {
+    const block = parent.createDiv({ cls: "mrd-journal-field" });
+    block.createDiv({ cls: "mrd-journal-label", text: field.label });
+    const ta = block.createEl("textarea", { cls: "mrd-journal-input" });
+    const loaded = await readDailyField(this.ctx.app, field.spec);
+    ta.value = field.stripPlaceholder ? tidy(loaded) : loaded;
+    autosize(ta);
+    let timer = null;
+    const save = () => {
+      void writeDailyField(this.ctx.app, field.spec, ta.value).catch(
+        (e) => console.error("dash-core: journal save failed", e)
+      );
+    };
+    ta.addEventListener("focus", () => {
+      this.editing = true;
+      this.ctx.runtime.typingUntil = Date.now() + 2e3;
+    });
+    ta.addEventListener("blur", () => {
+      this.editing = false;
+      this.ctx.runtime.typingUntil = 0;
+      if (timer !== null) {
+        window.clearTimeout(timer);
+        timer = null;
+      }
+      save();
+    });
+    ta.addEventListener("input", () => {
+      this.ctx.runtime.typingUntil = Date.now() + 2e3;
+      autosize(ta);
+      if (timer !== null) window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        timer = null;
+        save();
+      }, 800);
+    });
+    this.onCleanup(() => {
+      if (timer !== null) window.clearTimeout(timer);
+    });
+  }
+};
+function autosize(ta) {
+  ta.style.height = "auto";
+  ta.style.height = Math.max(48, ta.scrollHeight) + "px";
+}
+function tidy(text) {
+  return text.split("\n").map((l) => l.replace(/\s+$/, "")).filter((l) => l.trim() !== "" && !/^\s*-\s*(\[[ xX]?\]\s*)?$/.test(l)).join("\n").trim();
+}
+
+// node_modules/dash-core/src/panels/weeklygoals.ts
+var import_obsidian14 = require("obsidian");
+function weekKeyOf(weekStart) {
+  return weekStart.clone().startOf("week").format("YYYY-MM-DD");
+}
+function currentWeekKey() {
+  return weekKeyOf((0, import_obsidian14.moment)());
+}
+function weekLabel(weekKey) {
+  const start = (0, import_obsidian14.moment)(weekKey, "YYYY-MM-DD");
+  return `${start.format("MMM D")} \u2013 ${start.clone().add(6, "days").format("MMM D")}`;
+}
+var WeeklyGoalsModal = class extends import_obsidian14.Modal {
+  constructor(app, store, todos, weekKey, onDone, copy) {
+    super(app);
+    this.store = store;
+    this.todos = todos;
+    this.weekKey = weekKey;
+    this.onDone = onDone;
+    this.copy = copy;
+    __publicField(this, "draft", "");
+  }
+  onOpen() {
+    this.titleEl.setText(this.copy.titleTemplate.replace("{week}", weekLabel(this.weekKey)));
+    this.render();
+  }
+  render() {
+    const { contentEl } = this;
+    contentEl.empty();
+    const goals = this.store.forWeek(this.weekKey);
+    const list = contentEl.createDiv({ cls: "mrd-goals-list" });
+    if (goals.length === 0) {
+      list.createDiv({ cls: "mrd-muted", text: this.copy.empty });
+    }
+    for (const goal of goals) {
+      const row = list.createDiv({ cls: "mrd-goals-row" });
+      row.createSpan({ cls: "mrd-goals-text", text: goal.text });
+      const actions = row.createDiv({ cls: "mrd-goals-actions" });
+      const toDir = actions.createEl("button", { cls: "mrd-btn mrd-btn-sm", text: this.copy.toItem });
+      toDir.addEventListener("click", () => void this.toItem(goal.text));
+      const del = actions.createEl("button", {
+        cls: "mrd-icon-btn",
+        text: "\u{1F5D1}",
+        attr: { "aria-label": this.copy.removeGoal, title: this.copy.removeGoal }
+      });
+      del.addEventListener("click", async () => {
+        await this.store.remove(this.weekKey, goal.id);
+        this.onDone();
+        this.render();
+      });
+    }
+    const addRow = new import_obsidian14.Setting(contentEl).setName(this.copy.addName);
+    addRow.addText((t) => {
+      t.setPlaceholder(this.copy.addPlaceholder).setValue(this.draft).onChange((v) => this.draft = v);
+      t.inputEl.classList.add("mrd-modal-wide");
+      t.inputEl.focus();
+      t.inputEl.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          void this.add();
+        }
+      });
+    });
+    addRow.addButton((b) => b.setButtonText(this.copy.addButton).setCta().onClick(() => void this.add()));
+    new import_obsidian14.Setting(contentEl).addButton((b) => b.setButtonText(this.copy.done).onClick(() => this.close()));
+  }
+  async add() {
+    const text = this.draft.trim();
+    if (!text) return;
+    await this.store.add(this.weekKey, text);
+    this.draft = "";
+    this.onDone();
+    this.render();
+  }
+  /** Send a goal to the to-do list as a one-time item due at week's end. */
+  async toItem(text) {
+    const due = (0, import_obsidian14.moment)(this.weekKey, "YYYY-MM-DD").add(6, "days").format("YYYY-MM-DD");
+    await this.todos.add({ text, dueDate: due });
+    new import_obsidian14.Notice(this.copy.addedNotice);
+    this.onDone();
+  }
+  onClose() {
+    this.contentEl.empty();
+  }
+};
+
+// src/core/dailyfields.ts
+var SUPPLEMENTAL_STOP = /^\s*-\s+Supplemental\s*:?\s*$/i;
+var SPIRAL_MARKER = /%%\s*spiral-log\s*%%/i;
+var LOG_FIELDS = ["primary", "supplemental", "musing", "reconsider"];
+var LOG_FIELD_SPECS = {
+  primary: labelField("Primary", [SUPPLEMENTAL_STOP, SPIRAL_MARKER]),
+  supplemental: labelField("Supplemental", [SPIRAL_MARKER]),
+  musing: headingField("Musings"),
+  reconsider: headingField("Reconsider tomorrow")
+};
+var LOG_FIELD_LABELS = {
+  primary: "Daily log \xB7 Primary",
+  supplemental: "Daily log \xB7 Supplemental",
+  musing: "Musings",
+  reconsider: "Reconsider tomorrow"
+};
+function isLogField(v) {
+  return LOG_FIELDS.includes(v);
+}
+
 // src/copy.ts
+var MERIDIAN_JOURNAL_COPY = {
+  title: "Daily Log",
+  carryHeading: "Reconsider tomorrow",
+  carryLabel: "Carried from yesterday \xB7 to reconsider",
+  fields: [
+    { label: "Musings / random thoughts", spec: LOG_FIELD_SPECS.musing },
+    { label: "Daily log \xB7 Primary", spec: LOG_FIELD_SPECS.primary },
+    { label: "Daily log \xB7 Supplemental", spec: LOG_FIELD_SPECS.supplemental },
+    { label: "Reconsider tomorrow", spec: LOG_FIELD_SPECS.reconsider, stripPlaceholder: true }
+  ]
+};
+var MERIDIAN_WEEKLYGOALS_COPY = {
+  titleTemplate: "Weekly goals \xB7 {week}",
+  empty: "No goals set for this week yet.",
+  toItem: "\u2192 Directive",
+  removeGoal: "Remove goal",
+  addName: "Add a goal",
+  addPlaceholder: "A goal for the week",
+  addButton: "Add",
+  done: "Done",
+  addedNotice: "Added to Directives."
+};
 var MERIDIAN_MEALS_COPY = {
   title: "Meals & Provisioning",
   offline: "The provisioning subsystem is offline. Enable Recipe Manager to bring it online.",
@@ -2268,7 +2487,7 @@ var MERIDIAN_COPY = {
 };
 
 // src/panels/qotd.ts
-var import_obsidian13 = require("obsidian");
+var import_obsidian15 = require("obsidian");
 
 // src/panels/types.ts
 var BasePanel2 = class extends BasePanel {
@@ -2301,7 +2520,7 @@ var QotdPanel = class extends BasePanel2 {
       card.createDiv({ cls: "mrd-muted", text: "The quotation archive is present but empty." });
       return;
     }
-    const m = (0, import_obsidian13.moment)((0, import_obsidian13.moment)().format("YYYY-MM-DD"), "YYYY-MM-DD");
+    const m = (0, import_obsidian15.moment)((0, import_obsidian15.moment)().format("YYYY-MM-DD"), "YYYY-MM-DD");
     const dayNumber = Math.floor(m.valueOf() / 864e5);
     const idx = (dayNumber % n + n) % n;
     const q = quotes[idx];
@@ -2343,11 +2562,11 @@ function parseQuotes(raw) {
 }
 
 // src/panels/meridian.ts
-var import_obsidian15 = require("obsidian");
+var import_obsidian17 = require("obsidian");
 
 // src/panels/linehistory.ts
-var import_obsidian14 = require("obsidian");
-var LineHistoryModal = class extends import_obsidian14.Modal {
+var import_obsidian16 = require("obsidian");
+var LineHistoryModal = class extends import_obsidian16.Modal {
   constructor(app, plugin) {
     super(app);
     this.plugin = plugin;
@@ -2365,7 +2584,7 @@ var LineHistoryModal = class extends import_obsidian14.Modal {
       const entry = history[i];
       const row = list.createDiv({ cls: "mrd-linehist-row" });
       row.createDiv({ cls: "mrd-linehist-line", text: entry.line });
-      row.createDiv({ cls: "mrd-linehist-when", text: (0, import_obsidian14.moment)(entry.at).fromNow() });
+      row.createDiv({ cls: "mrd-linehist-when", text: (0, import_obsidian16.moment)(entry.at).fromNow() });
     }
   }
   onClose() {
@@ -2773,7 +2992,7 @@ var MeridianPanel = class extends BasePanel2 {
     const bag = fresh.length ? fresh : candidates;
     const line = bag[Math.floor(Math.random() * bag.length)];
     if (pool === "milestone") {
-      this.ctx.plugin.milestoneShownDate = (0, import_obsidian15.moment)().format("YYYY-MM-DD");
+      this.ctx.plugin.milestoneShownDate = (0, import_obsidian17.moment)().format("YYYY-MM-DD");
       void this.ctx.plugin.saveData_();
     }
     ring.push(line);
@@ -2788,7 +3007,7 @@ var MeridianPanel = class extends BasePanel2 {
   }
   async weights() {
     const { todos, bridge, runtime, plugin } = this.ctx;
-    const todayStr2 = (0, import_obsidian15.moment)().format("YYYY-MM-DD");
+    const todayStr2 = (0, import_obsidian17.moment)().format("YYYY-MM-DD");
     const pending = todos.pendingCount();
     const overdueTodos = todos.overdueCount();
     const crm = safe(() => bridge.crmContacts(), []);
@@ -2827,7 +3046,7 @@ var MeridianPanel = class extends BasePanel2 {
     const completionsMilestone = doneToday > 0 && doneToday % 5 === 0;
     const streak = this.ctx.plugin.streak;
     const streakSeven = streak.current > 0 && streak.current % 7 === 0;
-    const newRecord = this.ctx.runtime.streakRecordDate === (0, import_obsidian15.moment)().format("YYYY-MM-DD");
+    const newRecord = this.ctx.runtime.streakRecordDate === (0, import_obsidian17.moment)().format("YYYY-MM-DD");
     return completionsMilestone || streakSeven || newRecord;
   }
 };
@@ -2885,11 +3104,11 @@ async function safeAsync(fn, fallback) {
 }
 
 // src/panels/todo.ts
-var import_obsidian17 = require("obsidian");
+var import_obsidian19 = require("obsidian");
 
 // src/panels/weekreview.ts
-var import_obsidian16 = require("obsidian");
-var WeekReviewModal = class extends import_obsidian16.Modal {
+var import_obsidian18 = require("obsidian");
+var WeekReviewModal = class extends import_obsidian18.Modal {
   constructor(app, plugin) {
     super(app);
     this.plugin = plugin;
@@ -2908,7 +3127,7 @@ var WeekReviewModal = class extends import_obsidian16.Modal {
     const s = this.plugin.settings;
     const bridge = this.plugin.bridge;
     const days = [];
-    for (let i = 6; i >= 0; i--) days.push((0, import_obsidian16.moment)().subtract(i, "days").format("YYYY-MM-DD"));
+    for (let i = 6; i >= 0; i--) days.push((0, import_obsidian18.moment)().subtract(i, "days").format("YYYY-MM-DD"));
     const dayStats = [];
     let totalCompleted = 0;
     let contactLines = 0;
@@ -2962,7 +3181,7 @@ var WeekReviewModal = class extends import_obsidian16.Modal {
       const fill = track.createDiv({ cls: "mrd-review-bar-fill" });
       fill.style.height = `${Math.round(d.completed / max * 100)}%`;
       if (d.completed === 0) fill.addClass("is-empty");
-      cell.createDiv({ cls: "mrd-review-bar-day", text: (0, import_obsidian16.moment)(d.date, "YYYY-MM-DD").format("dd")[0] });
+      cell.createDiv({ cls: "mrd-review-bar-day", text: (0, import_obsidian18.moment)(d.date, "YYYY-MM-DD").format("dd")[0] });
       cell.createDiv({ cls: "mrd-review-bar-count", text: String(d.completed) });
     }
     const crm = host.createDiv({ cls: "mrd-review-block" });
@@ -3052,7 +3271,7 @@ var TodoPanel = class extends BasePanel2 {
     var _a;
     const store = this.ctx.todos;
     const item = inst.item;
-    const today2 = (0, import_obsidian17.moment)().format("YYYY-MM-DD");
+    const today2 = (0, import_obsidian19.moment)().format("YYYY-MM-DD");
     const wrap = parent.createDiv({ cls: "mrd-todo-item" });
     const row = wrap.createDiv({ cls: "mrd-todo-row" });
     if (inst.flagged) row.addClass("is-flagged");
@@ -3107,7 +3326,7 @@ var TodoPanel = class extends BasePanel2 {
     } else if (inst.recurring && !inst.done) {
       this.iconBtn(actions, "\u293C", "Postpone for today", false, async () => {
         await store.skipInstance(item.id);
-        new import_obsidian17.Notice("Postponed for today. It returns on the next occurrence.");
+        new import_obsidian19.Notice("Postponed for today. It returns on the next occurrence.");
         this.after();
       });
     }
@@ -3201,9 +3420,9 @@ var TodoPanel = class extends BasePanel2 {
   }
 };
 function dueLabel(due, today2) {
-  if (due < today2) return `overdue \xB7 ${(0, import_obsidian17.moment)(due, "YYYY-MM-DD").format("MMM D")}`;
+  if (due < today2) return `overdue \xB7 ${(0, import_obsidian19.moment)(due, "YYYY-MM-DD").format("MMM D")}`;
   if (due === today2) return "due today";
-  return `due ${(0, import_obsidian17.moment)(due, "YYYY-MM-DD").format("MMM D")}`;
+  return `due ${(0, import_obsidian19.moment)(due, "YYYY-MM-DD").format("MMM D")}`;
 }
 function activeSort(a, b) {
   var _a, _b;
@@ -3215,97 +3434,26 @@ function activeSort(a, b) {
 }
 
 // src/panels/agenda.ts
+var import_obsidian21 = require("obsidian");
+
+// src/panels/weekprint.ts
 var import_obsidian20 = require("obsidian");
 
-// src/panels/weekprint.ts
-var import_obsidian19 = require("obsidian");
-
-// src/panels/weeklygoals.ts
-var import_obsidian18 = require("obsidian");
-function weekKeyOf(weekStart) {
-  return weekStart.clone().startOf("week").format("YYYY-MM-DD");
+// src/weeklygoals.ts
+function meridianWeeklyGoals(plugin) {
+  return {
+    forWeek: (weekKey) => plugin.weeklyGoalsFor(weekKey),
+    add: (weekKey, text) => plugin.addWeeklyGoal(weekKey, text),
+    remove: (weekKey, id) => plugin.removeWeeklyGoal(weekKey, id)
+  };
 }
-function currentWeekKey() {
-  return weekKeyOf((0, import_obsidian18.moment)());
-}
-function weekLabel(weekKey) {
-  const start = (0, import_obsidian18.moment)(weekKey, "YYYY-MM-DD");
-  return `${start.format("MMM D")} \u2013 ${start.clone().add(6, "days").format("MMM D")}`;
-}
-var WeeklyGoalsModal = class extends import_obsidian18.Modal {
-  constructor(app, plugin, weekKey, onDone) {
-    super(app);
-    this.plugin = plugin;
-    this.weekKey = weekKey;
-    this.onDone = onDone;
-    this.draft = "";
-  }
-  onOpen() {
-    this.titleEl.setText(`Weekly goals \xB7 ${weekLabel(this.weekKey)}`);
-    this.render();
-  }
-  render() {
-    const { contentEl } = this;
-    contentEl.empty();
-    const goals = this.plugin.weeklyGoalsFor(this.weekKey);
-    const list = contentEl.createDiv({ cls: "mrd-goals-list" });
-    if (goals.length === 0) {
-      list.createDiv({ cls: "mrd-muted", text: "No goals set for this week yet." });
-    }
-    for (const goal of goals) {
-      const row = list.createDiv({ cls: "mrd-goals-row" });
-      row.createSpan({ cls: "mrd-goals-text", text: goal.text });
-      const actions = row.createDiv({ cls: "mrd-goals-actions" });
-      const toDir = actions.createEl("button", { cls: "mrd-btn mrd-btn-sm", text: "\u2192 Directive" });
-      toDir.addEventListener("click", () => void this.toDirective(goal.text));
-      const del = actions.createEl("button", { cls: "mrd-icon-btn", text: "\u{1F5D1}", attr: { "aria-label": "Remove goal", title: "Remove goal" } });
-      del.addEventListener("click", async () => {
-        await this.plugin.removeWeeklyGoal(this.weekKey, goal.id);
-        this.onDone();
-        this.render();
-      });
-    }
-    const addRow = new import_obsidian18.Setting(contentEl).setName("Add a goal");
-    addRow.addText((t) => {
-      t.setPlaceholder("A goal for the week").setValue(this.draft).onChange((v) => this.draft = v);
-      t.inputEl.classList.add("mrd-modal-wide");
-      t.inputEl.focus();
-      t.inputEl.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          void this.add();
-        }
-      });
-    });
-    addRow.addButton((b) => b.setButtonText("Add").setCta().onClick(() => void this.add()));
-    new import_obsidian18.Setting(contentEl).addButton((b) => b.setButtonText("Done").onClick(() => this.close()));
-  }
-  async add() {
-    const text = this.draft.trim();
-    if (!text) return;
-    await this.plugin.addWeeklyGoal(this.weekKey, text);
-    this.draft = "";
-    this.onDone();
-    this.render();
-  }
-  /** Send a goal to the Directives list as a one-time item due at week's end. */
-  async toDirective(text) {
-    const due = (0, import_obsidian18.moment)(this.weekKey, "YYYY-MM-DD").add(6, "days").format("YYYY-MM-DD");
-    await this.plugin.todos.add({ text, dueDate: due });
-    new import_obsidian18.Notice("Added to Directives.");
-    this.onDone();
-  }
-  onClose() {
-    this.contentEl.empty();
-  }
-};
 
 // src/panels/weekprint.ts
-var WeekPrintModal = class extends import_obsidian19.Modal {
+var WeekPrintModal = class extends import_obsidian20.Modal {
   constructor(app, plugin) {
     super(app);
     this.plugin = plugin;
-    this.weekStart = (0, import_obsidian19.moment)().startOf("week");
+    this.weekStart = (0, import_obsidian20.moment)().startOf("week");
     this.sources = [];
   }
   onOpen() {
@@ -3338,18 +3486,18 @@ var WeekPrintModal = class extends import_obsidian19.Modal {
       this.render();
     });
     this.ctrlBtn(nav, "This week", () => {
-      this.weekStart = (0, import_obsidian19.moment)().startOf("week");
+      this.weekStart = (0, import_obsidian20.moment)().startOf("week");
       this.render();
     });
     this.ctrlBtn(nav, "Set goals", () => {
-      new WeeklyGoalsModal(this.app, this.plugin, weekKeyOf(this.weekStart), () => this.render()).open();
+      new WeeklyGoalsModal(this.app, meridianWeeklyGoals(this.plugin), this.plugin.todos, weekKeyOf(this.weekStart), () => this.render(), MERIDIAN_WEEKLYGOALS_COPY).open();
     });
     const shareBtn = controls.createEl("button", {
-      cls: `mrd-btn ${import_obsidian19.Platform.isMobile ? "mrd-btn-primary" : ""}`.trim(),
+      cls: `mrd-btn ${import_obsidian20.Platform.isMobile ? "mrd-btn-primary" : ""}`.trim(),
       text: "Share / Print"
     });
     shareBtn.addEventListener("click", () => void this.share());
-    if (!import_obsidian19.Platform.isMobile) {
+    if (!import_obsidian20.Platform.isMobile) {
       const printBtn = controls.createEl("button", { cls: "mrd-btn mrd-btn-primary", text: "Print" });
       printBtn.addEventListener("click", () => this.print());
     }
@@ -3513,7 +3661,7 @@ ${collectWeekPrintCss()}`;
     a.click();
     a.remove();
     window.setTimeout(() => URL.revokeObjectURL(url), 1e4);
-    new import_obsidian19.Notice(`Saved \u201C${name}\u201D. Open it in a browser to print.`);
+    new import_obsidian20.Notice(`Saved \u201C${name}\u201D. Open it in a browser to print.`);
   }
   onClose() {
     this.contentEl.empty();
@@ -3596,7 +3744,7 @@ var AgendaPanel = class extends BasePanel2 {
   renderBody() {
     const s = this.ctx.settings();
     const head = placard(this.el, "Today's Agenda");
-    head.createSpan({ cls: "mrd-placard-badge", text: (0, import_obsidian20.moment)().format("YYYY-MM-DD") });
+    head.createSpan({ cls: "mrd-placard-badge", text: (0, import_obsidian21.moment)().format("YYYY-MM-DD") });
     const actions = this.el.createDiv({ cls: "mrd-btn-row mrd-agenda-actions" });
     const addBtn = actions.createEl("button", { cls: "mrd-btn mrd-btn-sm", text: "+ Event" });
     addBtn.addEventListener(
@@ -3606,14 +3754,14 @@ var AgendaPanel = class extends BasePanel2 {
     const goalsBtn = actions.createEl("button", { cls: "mrd-btn mrd-btn-sm", text: "Weekly goals" });
     goalsBtn.addEventListener(
       "click",
-      () => new WeeklyGoalsModal(this.ctx.app, this.ctx.plugin, currentWeekKey(), () => this.rerender()).open()
+      () => new WeeklyGoalsModal(this.ctx.app, meridianWeeklyGoals(this.ctx.plugin), this.ctx.todos, currentWeekKey(), () => this.rerender(), MERIDIAN_WEEKLYGOALS_COPY).open()
     );
     const printBtn = actions.createEl("button", { cls: "mrd-btn mrd-btn-sm", text: "Print week" });
     printBtn.addEventListener("click", () => {
       void this.fetchAll();
       new WeekPrintModal(this.ctx.app, this.ctx.plugin).open();
     });
-    const today2 = (0, import_obsidian20.moment)().format("YYYY-MM-DD");
+    const today2 = (0, import_obsidian21.moment)().format("YYYY-MM-DD");
     const localToday = this.ctx.plugin.localEvents.filter((e) => e.date === today2);
     if (s.agendaUrls.length === 0 && localToday.length === 0) {
       this.el.createDiv({
@@ -3686,7 +3834,7 @@ var AgendaPanel = class extends BasePanel2 {
       if (age > 90 * 1e3) {
         this.el.createDiv({
           cls: "mrd-agenda-age",
-          text: `Serving the last successful read from ${(0, import_obsidian20.moment)(oldest).fromNow()}. Proton can take up to eight hours to propagate a change; a fresh read is on its way.`
+          text: `Serving the last successful read from ${(0, import_obsidian21.moment)(oldest).fromNow()}. Proton can take up to eight hours to propagate a change; a fresh read is on its way.`
         });
       }
     }
@@ -3759,122 +3907,6 @@ var AgendaPanel = class extends BasePanel2 {
     if ((_b = this.el) == null ? void 0 : _b.isConnected) this.rerender();
   }
 };
-
-// src/panels/journal.ts
-var import_obsidian21 = require("obsidian");
-
-// src/core/dailyfields.ts
-var SUPPLEMENTAL_STOP = /^\s*-\s+Supplemental\s*:?\s*$/i;
-var SPIRAL_MARKER = /%%\s*spiral-log\s*%%/i;
-var LOG_FIELDS = ["primary", "supplemental", "musing", "reconsider"];
-var LOG_FIELD_SPECS = {
-  primary: labelField("Primary", [SUPPLEMENTAL_STOP, SPIRAL_MARKER]),
-  supplemental: labelField("Supplemental", [SPIRAL_MARKER]),
-  musing: headingField("Musings"),
-  reconsider: headingField("Reconsider tomorrow")
-};
-var LOG_FIELD_LABELS = {
-  primary: "Daily log \xB7 Primary",
-  supplemental: "Daily log \xB7 Supplemental",
-  musing: "Musings",
-  reconsider: "Reconsider tomorrow"
-};
-function isLogField(v) {
-  return LOG_FIELDS.includes(v);
-}
-
-// src/panels/journal.ts
-var FIELDS = [
-  { key: "musings", label: "Musings / random thoughts", spec: LOG_FIELD_SPECS.musing },
-  { key: "log-primary", label: "Daily log \xB7 Primary", spec: LOG_FIELD_SPECS.primary },
-  { key: "log-supplemental", label: "Daily log \xB7 Supplemental", spec: LOG_FIELD_SPECS.supplemental },
-  { key: "reconsider", label: "Reconsider tomorrow", spec: LOG_FIELD_SPECS.reconsider, stripPlaceholder: true }
-];
-var JournalPanel = class extends BasePanel2 {
-  constructor() {
-    super(...arguments);
-    this.id = "journal";
-    this.title = "Daily Log";
-    this.editing = false;
-  }
-  async refresh(reason) {
-    var _a;
-    if (reason === "vault" && this.editing) return;
-    if ((_a = this.el) == null ? void 0 : _a.isConnected) {
-      this.el.empty();
-      await this.renderBody();
-    }
-  }
-  async renderBody() {
-    placard(this.el, "Daily Log");
-    await this.renderYesterdayReconsider();
-    const wrap = this.el.createDiv({ cls: "mrd-journal" });
-    for (const field of FIELDS) {
-      await this.renderField(wrap, field);
-    }
-  }
-  /** Read-only carry-over of yesterday's "Reconsider tomorrow" onto today. */
-  async renderYesterdayReconsider() {
-    const yesterday = (0, import_obsidian21.moment)().subtract(1, "day").format("YYYY-MM-DD");
-    let text = "";
-    try {
-      const raw = await readDailyNoteRaw(this.ctx.app, yesterday);
-      text = tidy(readField(raw, headingField("Reconsider tomorrow")));
-    } catch (e) {
-      console.error("MERIDIAN: could not read yesterday's reconsider", e);
-    }
-    if (!text) return;
-    const block = this.el.createDiv({ cls: "mrd-carry" });
-    block.createDiv({ cls: "mrd-carry-label", text: "Carried from yesterday \xB7 to reconsider" });
-    block.createDiv({ cls: "mrd-carry-body", text });
-  }
-  async renderField(parent, field) {
-    const block = parent.createDiv({ cls: "mrd-journal-field" });
-    block.createDiv({ cls: "mrd-journal-label", text: field.label });
-    const ta = block.createEl("textarea", { cls: "mrd-journal-input" });
-    const loaded = await readDailyField(this.ctx.app, field.spec);
-    ta.value = field.stripPlaceholder ? tidy(loaded) : loaded;
-    autosize(ta);
-    let timer = null;
-    const save = () => {
-      void writeDailyField(this.ctx.app, field.spec, ta.value).catch(
-        (e) => console.error("MERIDIAN: journal save failed", e)
-      );
-    };
-    ta.addEventListener("focus", () => {
-      this.editing = true;
-      this.ctx.runtime.typingUntil = Date.now() + 2e3;
-    });
-    ta.addEventListener("blur", () => {
-      this.editing = false;
-      this.ctx.runtime.typingUntil = 0;
-      if (timer !== null) {
-        window.clearTimeout(timer);
-        timer = null;
-      }
-      save();
-    });
-    ta.addEventListener("input", () => {
-      this.ctx.runtime.typingUntil = Date.now() + 2e3;
-      autosize(ta);
-      if (timer !== null) window.clearTimeout(timer);
-      timer = window.setTimeout(() => {
-        timer = null;
-        save();
-      }, 800);
-    });
-    this.onCleanup(() => {
-      if (timer !== null) window.clearTimeout(timer);
-    });
-  }
-};
-function autosize(ta) {
-  ta.style.height = "auto";
-  ta.style.height = Math.max(48, ta.scrollHeight) + "px";
-}
-function tidy(text) {
-  return text.split("\n").map((l) => l.replace(/\s+$/, "")).filter((l) => l.trim() !== "" && !/^\s*-\s*(\[[ xX]?\]\s*)?$/.test(l)).join("\n").trim();
-}
 
 // src/panels/util.ts
 function commandButton2(parent, app, fullId, label, opts = {}) {
@@ -4558,7 +4590,7 @@ var FACTORIES = {
   calendar: () => new CalendarPanel(),
   actions: () => new ActionsPanel(),
   qotd: () => new QotdPanel(),
-  journal: () => new JournalPanel(),
+  journal: () => new JournalPanel(MERIDIAN_JOURNAL_COPY),
   meals: () => new MealsPanel(MERIDIAN_MEALS_COPY),
   arfid: () => new ArfidPanel(),
   spiral: () => new SpiralPanel(),
@@ -5618,7 +5650,7 @@ var MeridianDashPlugin = class extends import_obsidian28.Plugin {
     this.addCommand({
       id: "weekly-goals",
       name: "Set weekly goals",
-      callback: () => new WeeklyGoalsModal(this.app, this, currentWeekKey(), () => this.refreshOpenViews("vault")).open()
+      callback: () => new WeeklyGoalsModal(this.app, meridianWeeklyGoals(this), this.todos, currentWeekKey(), () => this.refreshOpenViews("vault"), MERIDIAN_WEEKLYGOALS_COPY).open()
     });
     this.addCommand({
       id: "refresh",
