@@ -1,7 +1,7 @@
 // Test entry: importing each suite registers its cases, then report() runs them.
-// The pure-logic suites (subitems, directives, agenda, streak) moved to
-// dash_core_obs with their modules; this host runs only its host-specific tests.
-import "./layout.test";
+// The pure-logic suites (subitems, directives, agenda, streak, layout) live in
+// dash_core_obs with their modules; this host currently has no host-specific
+// suites of its own. Host-only tests, when added, are imported here.
 import { report } from "./_harness";
 
 report();

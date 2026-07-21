@@ -2,7 +2,7 @@ import { ItemView, WorkspaceLeaf, setIcon } from "obsidian";
 import type MeridianDashPlugin from "./main";
 import { Panel, PanelContext, RefreshReason } from "./panels/types";
 import { createPanels } from "./panels/registry";
-import { computeLayout } from "./panels/layout";
+import { computeLayout } from "dash-core";
 import { MeridianPanel } from "./panels/meridian";
 
 export const VIEW_TYPE_MERIDIAN = "meridian-dashboard";

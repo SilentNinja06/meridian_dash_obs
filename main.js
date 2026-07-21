@@ -2139,6 +2139,37 @@ function currentStreakFromDays(counts) {
   return n;
 }
 
+// node_modules/dash-core/src/panels/layout.ts
+var MAX_COLUMNS = 3;
+function clampInt(v, lo, hi) {
+  const n = Math.floor(Number.isFinite(v) ? v : lo);
+  return Math.max(lo, Math.min(hi, n));
+}
+function computeLayout(order, enabled, columns, spans) {
+  const ids = order.filter((id) => enabled[id] !== false);
+  const raw = ids.map((id) => {
+    var _a, _b;
+    return {
+      id,
+      col: clampInt((_a = columns[id]) != null ? _a : 1, 1, MAX_COLUMNS),
+      span: clampInt((_b = spans[id]) != null ? _b : 1, 1, MAX_COLUMNS)
+    };
+  });
+  const configured = raw.some((p) => p.col > 1 || p.span > 1);
+  if (!configured) {
+    return { configured: false, columns: 1, placements: ids.map((id) => ({ id, column: 1, span: 1 })) };
+  }
+  let N = 1;
+  for (const p of raw) N = Math.max(N, p.col + p.span - 1);
+  N = Math.min(MAX_COLUMNS, Math.max(1, N));
+  const placements = raw.map((p) => {
+    const column = p.col > N ? 1 : p.col;
+    const span = Math.max(1, Math.min(p.span, N - column + 1));
+    return { id: p.id, column, span };
+  });
+  return { configured: true, columns: N, placements };
+}
+
 // src/panels/todomodal.ts
 var import_obsidian10 = require("obsidian");
 var WEEKDAYS = [
@@ -5095,39 +5126,6 @@ function seedTodos() {
 
 // src/view.ts
 var import_obsidian26 = require("obsidian");
-
-// src/panels/layout.ts
-var MAX_COLUMNS = 3;
-function clampInt(v, lo, hi) {
-  const n = Math.floor(Number.isFinite(v) ? v : lo);
-  return Math.max(lo, Math.min(hi, n));
-}
-function computeLayout(order, enabled, columns, spans) {
-  const ids = order.filter((id) => enabled[id] !== false);
-  const raw = ids.map((id) => {
-    var _a, _b;
-    return {
-      id,
-      col: clampInt((_a = columns[id]) != null ? _a : 1, 1, MAX_COLUMNS),
-      span: clampInt((_b = spans[id]) != null ? _b : 1, 1, MAX_COLUMNS)
-    };
-  });
-  const configured = raw.some((p) => p.col > 1 || p.span > 1);
-  if (!configured) {
-    return { configured: false, columns: 1, placements: ids.map((id) => ({ id, column: 1, span: 1 })) };
-  }
-  let N = 1;
-  for (const p of raw) N = Math.max(N, p.col + p.span - 1);
-  N = Math.min(MAX_COLUMNS, Math.max(1, N));
-  const placements = raw.map((p) => {
-    const column = p.col > N ? 1 : p.col;
-    const span = Math.max(1, Math.min(p.span, N - column + 1));
-    return { id: p.id, column, span };
-  });
-  return { configured: true, columns: N, placements };
-}
-
-// src/view.ts
 var VIEW_TYPE_MERIDIAN = "meridian-dashboard";
 var MeridianView = class extends import_obsidian26.ItemView {
   constructor(leaf, plugin) {
