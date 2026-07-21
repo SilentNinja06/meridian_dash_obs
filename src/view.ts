@@ -4,6 +4,8 @@ import { Panel, PanelContext, RefreshReason } from "./panels/types";
 import { createPanels } from "./panels/registry";
 import { computeLayout } from "dash-core";
 import { MeridianPanel } from "./panels/meridian";
+import { meridianCompanion } from "./companion";
+import { MERIDIAN_COPY } from "./copy";
 
 export const VIEW_TYPE_MERIDIAN = "meridian-dashboard";
 
@@ -43,6 +45,9 @@ export class MeridianView extends ItemView {
 			plugin: this.plugin,
 			bridge: this.plugin.bridge,
 			todos: this.plugin.todos,
+			streak: this.plugin.streak,
+			companion: meridianCompanion(this.plugin.bridge),
+			copy: MERIDIAN_COPY,
 			runtime: this.plugin.runtime,
 			settings: () => this.plugin.settings,
 			requestRefresh: (reason: RefreshReason = "manual") => void this.refreshPanels(reason),

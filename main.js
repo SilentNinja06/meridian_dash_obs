@@ -74,12 +74,1356 @@ function calendarColor(index) {
 }
 
 // src/panels/clock.ts
-var import_obsidian = require("obsidian");
+var import_obsidian6 = require("obsidian");
 
-// src/panels/types.ts
+// node_modules/dash-core/src/core/ics.ts
+var import_obsidian = require("obsidian");
+function tzOffsetMinutes(tz, utcMs) {
+  try {
+    const dtf = new Intl.DateTimeFormat("en-US", {
+      timeZone: tz,
+      hourCycle: "h23",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit"
+    });
+    const parts = dtf.formatToParts(new Date(utcMs));
+    const map = {};
+    for (const p of parts) if (p.type !== "literal") map[p.type] = Number(p.value);
+    const asUTC = Date.UTC(map.year, map.month - 1, map.day, map.hour, map.minute, map.second);
+    return (asUTC - utcMs) / 6e4;
+  } catch (e) {
+    return 0;
+  }
+}
+function toEpochMs(v) {
+  if (v.zone === "utc") return Date.UTC(v.y, v.mo - 1, v.d, v.h, v.mi, v.s);
+  if (v.zone === "local") return new Date(v.y, v.mo - 1, v.d, v.h, v.mi, v.s).getTime();
+  const guess = Date.UTC(v.y, v.mo - 1, v.d, v.h, v.mi, v.s);
+  let off = tzOffsetMinutes(v.zone, guess);
+  let utc = guess - off * 6e4;
+  off = tzOffsetMinutes(v.zone, utc);
+  utc = guess - off * 6e4;
+  return utc;
+}
+function unfold(text) {
+  const raw = text.replace(/\r\n/g, "\n").split("\n");
+  const out = [];
+  for (const line of raw) {
+    if ((line.startsWith(" ") || line.startsWith("	")) && out.length) {
+      out[out.length - 1] += line.slice(1);
+    } else {
+      out.push(line);
+    }
+  }
+  return out;
+}
+function parseDateVal(rawKey, value) {
+  const params = rawKey.split(";").slice(1);
+  let tzid = "";
+  let isDate = false;
+  for (const p of params) {
+    const [k, v2] = p.split("=");
+    if (k.toUpperCase() === "TZID") tzid = v2;
+    if (k.toUpperCase() === "VALUE" && v2.toUpperCase() === "DATE") isDate = true;
+  }
+  const v = value.trim();
+  if (isDate || /^\d{8}$/.test(v)) {
+    return {
+      allDay: true,
+      y: +v.slice(0, 4),
+      mo: +v.slice(4, 6),
+      d: +v.slice(6, 8),
+      h: 0,
+      mi: 0,
+      s: 0,
+      zone: "local"
+    };
+  }
+  const m = v.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(Z)?$/);
+  if (!m) {
+    const mm = (0, import_obsidian.moment)(v);
+    return { allDay: false, y: mm.year(), mo: mm.month() + 1, d: mm.date(), h: mm.hour(), mi: mm.minute(), s: mm.second(), zone: "local" };
+  }
+  const zone = m[7] ? "utc" : tzid || "local";
+  return { allDay: false, y: +m[1], mo: +m[2], d: +m[3], h: +m[4], mi: +m[5], s: +m[6], zone };
+}
+var WEEKDAY_CODES = { SU: 0, MO: 1, TU: 2, WE: 3, TH: 4, FR: 5, SA: 6 };
+function parseRRule(value) {
+  const parts = {};
+  for (const seg of value.split(";")) {
+    const [k, v] = seg.split("=");
+    if (k && v) parts[k.toUpperCase()] = v;
+  }
+  const freq = parts.FREQ;
+  if (!["DAILY", "WEEKLY", "MONTHLY", "YEARLY"].includes(freq)) return void 0;
+  const rule = { freq, interval: Math.max(1, Number(parts.INTERVAL) || 1) };
+  if (parts.COUNT) rule.count = Number(parts.COUNT);
+  if (parts.UNTIL) rule.until = parseDateVal("UNTIL", parts.UNTIL);
+  if (parts.BYDAY) {
+    rule.byday = parts.BYDAY.split(",").map((c) => WEEKDAY_CODES[c.replace(/^[+-]?\d+/, "").toUpperCase()]).filter((n) => n !== void 0);
+  }
+  if (parts.BYMONTHDAY) rule.bymonthday = parts.BYMONTHDAY.split(",").map(Number);
+  return rule;
+}
+function parseICS(text) {
+  const lines = unfold(text);
+  const events = [];
+  let cur = null;
+  for (const line of lines) {
+    if (line === "BEGIN:VEVENT") {
+      cur = { summary: "", location: "", uid: "", exdates: /* @__PURE__ */ new Set() };
+      continue;
+    }
+    if (line === "END:VEVENT") {
+      if (cur && cur.start) events.push(cur);
+      cur = null;
+      continue;
+    }
+    if (!cur) continue;
+    const idx = line.indexOf(":");
+    if (idx === -1) continue;
+    const rawKey = line.slice(0, idx);
+    const value = line.slice(idx + 1);
+    const key = rawKey.split(";")[0].toUpperCase();
+    switch (key) {
+      case "UID":
+        cur.uid = value.trim();
+        break;
+      case "SUMMARY":
+        cur.summary = unescapeText(value);
+        break;
+      case "LOCATION":
+        cur.location = unescapeText(value);
+        break;
+      case "DTSTART":
+        cur.start = parseDateVal(rawKey, value);
+        break;
+      case "DTEND":
+        cur.end = parseDateVal(rawKey, value);
+        break;
+      case "RRULE":
+        cur.rrule = parseRRule(value);
+        break;
+      case "EXDATE": {
+        for (const piece of value.split(",")) {
+          const dv = parseDateVal(rawKey, piece);
+          cur.exdates.add(canonicalDate(dv));
+        }
+        break;
+      }
+      case "RECURRENCE-ID": {
+        cur.recurrenceId = canonicalDate(parseDateVal(rawKey, value));
+        break;
+      }
+    }
+  }
+  return events;
+}
+function unescapeText(v) {
+  return v.replace(/\\n/gi, "\n").replace(/\\,/g, ",").replace(/\\;/g, ";").replace(/\\\\/g, "\\").trim();
+}
+function canonicalDate(v) {
+  return `${pad4(v.y)}-${pad2(v.mo)}-${pad2(v.d)}`;
+}
+function pad2(n) {
+  return String(n).padStart(2, "0");
+}
+function pad4(n) {
+  return String(n).padStart(4, "0");
+}
+function occurrencesOn(ev, targetDate) {
+  const start = ev.start;
+  const localDateOf = (v) => v.allDay ? canonicalDate(v) : (0, import_obsidian.moment)(toEpochMs(v)).format("YYYY-MM-DD");
+  if (!ev.rrule) {
+    if (localDateOf(start) === targetDate) return [start];
+    if (ev.end && spansDate(ev, targetDate)) return [start];
+    return [];
+  }
+  const rule = ev.rrule;
+  const results = [];
+  const targetEndMs = (0, import_obsidian.moment)(targetDate, "YYYY-MM-DD").endOf("day").valueOf();
+  const untilMs = rule.until ? toEpochMs(rule.until) : Infinity;
+  let emitted = 0;
+  const guard = 2e4;
+  const cursor = { y: start.y, mo: start.mo, d: start.d };
+  for (let i = 0; i < guard; i++) {
+    const candidates = expandPeriod(rule, cursor, start);
+    for (const cand of candidates) {
+      const occ = { ...start, y: cand.y, mo: cand.mo, d: cand.d };
+      const occMs = occ.allDay ? Date.UTC(occ.y, occ.mo - 1, occ.d) : toEpochMs(occ);
+      if (compareTuple(cand, { y: start.y, mo: start.mo, d: start.d }) < 0) continue;
+      if (occMs > untilMs && rule.until) return results;
+      if (ev.exdates.has(canonicalDate(occ))) continue;
+      emitted++;
+      if (localDateOf(occ) === targetDate) results.push(occ);
+      if (rule.count && emitted >= rule.count) return results;
+    }
+    advancePeriod(rule, cursor);
+    const cursorStartMs = Date.UTC(cursor.y, cursor.mo - 1, cursor.d);
+    if (cursorStartMs > targetEndMs + 8 * 864e5) break;
+  }
+  return results;
+}
+function expandPeriod(rule, cursor, start) {
+  if (rule.freq === "WEEKLY" && rule.byday && rule.byday.length) {
+    const base = new Date(Date.UTC(cursor.y, cursor.mo - 1, cursor.d));
+    const dow = base.getUTCDay();
+    const weekStart = new Date(base.getTime() - dow * 864e5);
+    return rule.byday.slice().sort((a, b) => a - b).map((wd) => {
+      const dt = new Date(weekStart.getTime() + wd * 864e5);
+      return { y: dt.getUTCFullYear(), mo: dt.getUTCMonth() + 1, d: dt.getUTCDate() };
+    });
+  }
+  if (rule.freq === "MONTHLY" && rule.bymonthday && rule.bymonthday.length) {
+    return rule.bymonthday.map((md) => clampDay({ y: cursor.y, mo: cursor.mo, d: md }));
+  }
+  return [{ y: cursor.y, mo: cursor.mo, d: cursor.d }];
+}
+function advancePeriod(rule, cursor) {
+  const step = rule.interval;
+  if (rule.freq === "DAILY") {
+    const dt = new Date(Date.UTC(cursor.y, cursor.mo - 1, cursor.d + step));
+    assign(cursor, dt);
+  } else if (rule.freq === "WEEKLY") {
+    const dt = new Date(Date.UTC(cursor.y, cursor.mo - 1, cursor.d + 7 * step));
+    assign(cursor, dt);
+  } else if (rule.freq === "MONTHLY") {
+    let mo = cursor.mo - 1 + step;
+    let y = cursor.y + Math.floor(mo / 12);
+    mo = (mo % 12 + 12) % 12;
+    cursor.y = y;
+    cursor.mo = mo + 1;
+  } else {
+    cursor.y += step;
+  }
+}
+function assign(cursor, dt) {
+  cursor.y = dt.getUTCFullYear();
+  cursor.mo = dt.getUTCMonth() + 1;
+  cursor.d = dt.getUTCDate();
+}
+function clampDay(t) {
+  const dim = new Date(Date.UTC(t.y, t.mo, 0)).getUTCDate();
+  return { y: t.y, mo: t.mo, d: Math.min(t.d, dim) };
+}
+function compareTuple(a, b) {
+  return a.y - b.y || a.mo - b.mo || a.d - b.d;
+}
+function spansDate(ev, targetDate) {
+  if (!ev.end) return false;
+  const startDay = ev.start.allDay ? canonicalDate(ev.start) : (0, import_obsidian.moment)(toEpochMs(ev.start)).format("YYYY-MM-DD");
+  const endMs = ev.end.allDay ? (0, import_obsidian.moment)(canonicalDate(ev.end), "YYYY-MM-DD").valueOf() : toEpochMs(ev.end);
+  const targetStartMs = (0, import_obsidian.moment)(targetDate, "YYYY-MM-DD").startOf("day").valueOf();
+  const startMs = ev.start.allDay ? (0, import_obsidian.moment)(startDay, "YYYY-MM-DD").valueOf() : toEpochMs(ev.start);
+  return startMs <= (0, import_obsidian.moment)(targetDate, "YYYY-MM-DD").endOf("day").valueOf() && endMs > targetStartMs;
+}
+function eventsOnDate(events, localDate) {
+  const overridden = /* @__PURE__ */ new Set();
+  for (const ev of events) if (ev.recurrenceId) overridden.add(`${ev.uid}|${ev.recurrenceId}`);
+  const items = [];
+  for (const ev of events) {
+    const occs = ev.recurrenceId ? occurrencesOn(ev, localDate) : occurrencesOn(ev, localDate).filter(
+      (o) => !overridden.has(`${ev.uid}|${canonicalDate(o)}`)
+    );
+    for (const occ of occs) items.push(toAgendaItem(ev, occ));
+  }
+  items.sort((a, b) => a.sortKey - b.sortKey || a.summary.localeCompare(b.summary));
+  return items;
+}
+function toAgendaItem(ev, occ) {
+  if (occ.allDay) {
+    return {
+      summary: ev.summary || "(untitled)",
+      location: ev.location,
+      allDay: true,
+      startMs: (0, import_obsidian.moment)(canonicalDate(occ), "YYYY-MM-DD").valueOf(),
+      timeLabel: "",
+      sortKey: -1
+    };
+  }
+  const startMs = toEpochMs(occ);
+  const startM = (0, import_obsidian.moment)(startMs);
+  let timeLabel = startM.format("HH:mm");
+  let endMs;
+  if (ev.end && !ev.end.allDay) {
+    const origStart = toEpochMs(ev.start);
+    const origEnd = toEpochMs(ev.end);
+    const durMs = Math.max(0, origEnd - origStart);
+    endMs = startMs + durMs;
+    timeLabel += `\u2013${(0, import_obsidian.moment)(endMs).format("HH:mm")}`;
+  }
+  return {
+    summary: ev.summary || "(untitled)",
+    location: ev.location,
+    allDay: false,
+    startMs,
+    endMs,
+    timeLabel,
+    sortKey: startM.hour() * 60 + startM.minute()
+  };
+}
+async function fetchICS(url) {
+  const res = await (0, import_obsidian.requestUrl)({ url, method: "GET", throw: false });
+  if (res.status < 200 || res.status >= 300) {
+    throw new Error(`HTTP ${res.status}`);
+  }
+  return res.text;
+}
+
+// node_modules/dash-core/src/core/agendamath.ts
+function agendaState(items, now) {
+  const timed = items.filter((i) => !i.allDay).sort((a, b) => a.startMs - b.startMs);
+  const inProgress = timed.filter((i) => i.endMs !== void 0 && i.startMs <= now && i.endMs > now).sort((a, b) => a.endMs - b.endMs)[0];
+  const nextEvent = timed.find((i) => i.startMs > now);
+  if (inProgress) {
+    const gapStart = inProgress.endMs;
+    return {
+      kind: "now",
+      summary: inProgress.summary,
+      untilMs: gapStart - now,
+      gapMs: nextEvent ? Math.max(0, nextEvent.startMs - gapStart) : void 0
+    };
+  }
+  if (nextEvent) {
+    return {
+      kind: "next",
+      summary: nextEvent.summary,
+      untilMs: nextEvent.startMs - now,
+      gapMs: nextEvent.startMs - now
+    };
+  }
+  return { kind: "clear" };
+}
+function formatGap(ms) {
+  const totalMin = Math.floor(Math.max(0, ms) / 6e4);
+  if (totalMin < 1) return "less than a minute";
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  if (h && m) return `${h}h ${m}m`;
+  if (h) return `${h}h`;
+  return `${m}m`;
+}
+
+// node_modules/dash-core/src/core/localevents.ts
+function localEventToAgendaItem(ev) {
+  const [y, mo, d] = ev.date.split("-").map(Number);
+  if (!ev.start) {
+    return {
+      summary: ev.summary || "(untitled)",
+      location: "",
+      allDay: true,
+      startMs: new Date(y, mo - 1, d).getTime(),
+      timeLabel: "",
+      sortKey: -1
+    };
+  }
+  const [sh, sm] = ev.start.split(":").map(Number);
+  const startMs = new Date(y, mo - 1, d, sh, sm).getTime();
+  let endMs;
+  let timeLabel = ev.start;
+  if (ev.end) {
+    const [eh, em] = ev.end.split(":").map(Number);
+    endMs = new Date(y, mo - 1, d, eh, em).getTime();
+    timeLabel += `\u2013${ev.end}`;
+  }
+  return {
+    summary: ev.summary || "(untitled)",
+    location: "",
+    allDay: false,
+    startMs,
+    endMs,
+    timeLabel,
+    sortKey: sh * 60 + sm
+  };
+}
+
+// node_modules/dash-core/src/core/todostore.ts
+var import_obsidian3 = require("obsidian");
+
+// node_modules/dash-core/src/core/dailynote.ts
+var import_obsidian2 = require("obsidian");
+function getDailyNotesOptions(app) {
+  var _a, _b, _c, _d;
+  const dn = (_b = (_a = app.internalPlugins) == null ? void 0 : _a.getPluginById) == null ? void 0 : _b.call(_a, "daily-notes");
+  return (_d = (_c = dn == null ? void 0 : dn.instance) == null ? void 0 : _c.options) != null ? _d : {};
+}
+function dailyNotePath(app, date) {
+  var _a;
+  const opts = getDailyNotesOptions(app);
+  const format = opts.format || "YYYY-MM-DD";
+  const folder = ((_a = opts.folder) != null ? _a : "").trim().replace(/\/+$/, "");
+  const d = date != null ? date : (0, import_obsidian2.moment)().format("YYYY-MM-DD");
+  const name = (0, import_obsidian2.moment)(d, "YYYY-MM-DD").format(format);
+  return (0, import_obsidian2.normalizePath)((folder ? folder + "/" : "") + name + ".md");
+}
+function getDailyNoteFile(app, date) {
+  const f = app.vault.getAbstractFileByPath(dailyNotePath(app, date));
+  return f instanceof import_obsidian2.TFile ? f : null;
+}
+async function ensureDailyNote(app, date) {
+  const path = dailyNotePath(app, date);
+  const existing = app.vault.getAbstractFileByPath(path);
+  if (existing instanceof import_obsidian2.TFile) return existing;
+  await ensureParentFolder(app, path);
+  const opts = getDailyNotesOptions(app);
+  const body = await renderDailyTemplate(app, opts, path, date != null ? date : (0, import_obsidian2.moment)().format("YYYY-MM-DD"));
+  const raced = app.vault.getAbstractFileByPath(path);
+  if (raced instanceof import_obsidian2.TFile) return raced;
+  return app.vault.create(path, body);
+}
+async function ensureParentFolder(app, path) {
+  const dir = path.split("/").slice(0, -1).join("/");
+  if (!dir) return;
+  if (app.vault.getAbstractFileByPath(dir) instanceof import_obsidian2.TFolder) return;
+  await app.vault.createFolder(dir).catch(() => {
+  });
+}
+async function renderDailyTemplate(app, opts, dailyPath, date) {
+  var _a, _b, _c;
+  const templateSetting = ((_a = opts.template) != null ? _a : "").trim();
+  if (!templateSetting) return "";
+  const templatePath = (0, import_obsidian2.normalizePath)(
+    templateSetting.endsWith(".md") ? templateSetting : templateSetting + ".md"
+  );
+  const tFile = app.vault.getAbstractFileByPath(templatePath);
+  if (!(tFile instanceof import_obsidian2.TFile)) return "";
+  const raw = await app.vault.cachedRead(tFile);
+  const basename = (_c = (_b = dailyPath.split("/").pop()) == null ? void 0 : _b.replace(/\.md$/, "")) != null ? _c : "";
+  const m = (0, import_obsidian2.moment)(date, "YYYY-MM-DD");
+  const now = (0, import_obsidian2.moment)();
+  return raw.replace(/{{\s*title\s*}}/gi, basename).replace(/{{\s*date(?::([^}]+))?\s*}}/gi, (_, fmt) => m.format(fmt || "YYYY-MM-DD")).replace(/{{\s*time(?::([^}]+))?\s*}}/gi, (_, fmt) => now.format(fmt || "HH:mm"));
+}
+var HEADING_RE = /^#{1,6}\s/;
+function headingField(heading) {
+  const esc = heading.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return { anchor: new RegExp(`^#{1,6}\\s+${esc}:?\\s*$`, "i") };
+}
+function labelField(label, stops) {
+  const esc = label.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return { anchor: new RegExp(`^\\s*-\\s+${esc}\\s*:?\\s*$`, "i"), stops };
+}
+function locate(lines, spec) {
+  var _a;
+  const anchorIdx = lines.findIndex((l) => spec.anchor.test(l));
+  if (anchorIdx === -1) return null;
+  const stopAtHeading = spec.stopAtHeading !== false;
+  let end = lines.length;
+  for (let i = anchorIdx + 1; i < lines.length; i++) {
+    if (stopAtHeading && HEADING_RE.test(lines[i])) {
+      end = i;
+      break;
+    }
+    if ((_a = spec.stops) == null ? void 0 : _a.some((re) => re.test(lines[i]))) {
+      end = i;
+      break;
+    }
+  }
+  return { anchorIdx, start: anchorIdx + 1, end };
+}
+function readField(content, spec) {
+  const lines = content.split("\n");
+  const r = locate(lines, spec);
+  if (!r) return "";
+  return lines.slice(r.start, r.end).join("\n").replace(/^\n+/, "").replace(/\s+$/, "");
+}
+function replaceField(content, spec, body) {
+  const lines = content.split("\n");
+  const r = locate(lines, spec);
+  if (!r) return content;
+  const bodyLines = body.replace(/\s+$/, "").split("\n");
+  const replacement = body.trim() ? ["", ...bodyLines, ""] : [""];
+  lines.splice(r.start, r.end - r.start, ...replacement);
+  return lines.join("\n");
+}
+var PLUGIN_LOG_LINE = /^- \d{2}:\d{2}\b/;
+function insertLogLine(content, line, opts) {
+  var _a;
+  const lines = content.split("\n");
+  if (lines.some((l) => l.trim() === line.trim())) return content;
+  let anchor = -1;
+  const marker = (_a = opts.marker) == null ? void 0 : _a.trim();
+  if (marker) anchor = lines.findIndex((l) => l.includes(marker));
+  if (anchor === -1) {
+    const heading = opts.heading.trim().toLowerCase().replace(/:$/, "");
+    anchor = lines.findIndex((l) => {
+      const m = l.match(/^#{1,6}\s+(.*?)\s*$/);
+      return !!m && m[1].trim().toLowerCase().replace(/:$/, "") === heading;
+    });
+  }
+  if (anchor === -1) {
+    const trimmed = content.replace(/\n+$/, "");
+    return (trimmed ? trimmed + "\n\n" : "") + `# ${opts.heading.replace(/:$/, "")}
+${line}
+`;
+  }
+  let insertAt = anchor + 1;
+  while (insertAt < lines.length && PLUGIN_LOG_LINE.test(lines[insertAt])) {
+    const existingTime = lines[insertAt].slice(2, 7);
+    if (existingTime > opts.time) break;
+    insertAt++;
+  }
+  lines.splice(insertAt, 0, line);
+  return lines.join("\n");
+}
+function openEditorFor(app, file) {
+  var _a;
+  for (const leaf of app.workspace.getLeavesOfType("markdown")) {
+    const view = leaf.view;
+    if (view instanceof import_obsidian2.MarkdownView && ((_a = view.file) == null ? void 0 : _a.path) === file.path) return view;
+  }
+  return null;
+}
+async function editDailyNote(app, transform, date) {
+  const file = await ensureDailyNote(app, date);
+  const view = openEditorFor(app, file);
+  if (view) {
+    const editor = view.editor;
+    const before = editor.getValue();
+    const after = transform(before);
+    if (after !== before) {
+      const { from, to, text } = minimalDiff(before, after);
+      editor.replaceRange(text, editor.offsetToPos(from), editor.offsetToPos(to));
+    }
+    return;
+  }
+  await app.vault.process(file, transform);
+}
+function minimalDiff(a, b) {
+  let start = 0;
+  const max = Math.min(a.length, b.length);
+  while (start < max && a[start] === b[start]) start++;
+  let endA = a.length;
+  let endB = b.length;
+  while (endA > start && endB > start && a[endA - 1] === b[endB - 1]) {
+    endA--;
+    endB--;
+  }
+  return { from: start, to: endA, text: b.slice(start, endB) };
+}
+async function writeDailyField(app, spec, body) {
+  await editDailyNote(app, (content) => replaceField(content, spec, body));
+}
+async function appendToDailyField(app, spec, text) {
+  const clean = text.trim();
+  if (!clean) return false;
+  const file = getDailyNoteFile(app);
+  if (file) {
+    const raw = await readDailyNoteRaw(app);
+    if (!raw.split("\n").some((l) => spec.anchor.test(l))) return false;
+  }
+  const current = await readDailyField(app, spec);
+  const next = current ? `${current}
+${clean}` : clean;
+  await writeDailyField(app, spec, next);
+  return true;
+}
+async function readDailyField(app, spec) {
+  const file = getDailyNoteFile(app);
+  if (!file) return "";
+  const view = openEditorFor(app, file);
+  const content = view ? view.editor.getValue() : await app.vault.cachedRead(file);
+  return readField(content, spec);
+}
+async function appendDailyLogLine(app, line, opts) {
+  await editDailyNote(app, (content) => insertLogLine(content, line, opts));
+}
+function readHeadingSection(content, heading) {
+  return readField(content, headingField(heading));
+}
+async function readDailyNoteRaw(app, date) {
+  const file = getDailyNoteFile(app, date);
+  if (!file) return "";
+  const view = openEditorFor(app, file);
+  return view ? view.editor.getValue() : app.vault.cachedRead(file);
+}
+function readMarkerLogLines(content, marker, heading) {
+  const lines = content.split("\n");
+  let anchor = lines.findIndex((l) => l.includes(marker));
+  if (anchor === -1 && heading) {
+    const h = heading.trim().toLowerCase().replace(/:$/, "");
+    anchor = lines.findIndex((l) => {
+      const m = l.match(/^#{1,6}\s+(.*?)\s*$/);
+      return !!m && m[1].trim().toLowerCase().replace(/:$/, "") === h;
+    });
+  }
+  if (anchor === -1) return [];
+  const out = [];
+  for (let i = anchor + 1; i < lines.length; i++) {
+    if (HEADING_RE.test(lines[i])) break;
+    if (/^- \d{2}:\d{2}\b/.test(lines[i])) out.push(lines[i]);
+    else if (lines[i].includes("%%") && !lines[i].includes(marker)) break;
+  }
+  return out;
+}
+
+// node_modules/dash-core/src/core/todostore.ts
+var WEEKDAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+function describeRecurrence(r) {
+  var _a, _b, _c;
+  switch (r.type) {
+    case "none":
+      return "One-time";
+    case "daily":
+      return "Every day";
+    case "weekdays":
+      return "Weekdays";
+    case "weekly": {
+      const days = ((_a = r.days) != null ? _a : []).slice().sort((a, b) => a - b).map((d) => WEEKDAY_NAMES[d]);
+      return days.length ? `Weekly \xB7 ${days.join(", ")}` : "Weekly";
+    }
+    case "monthly":
+      return `Monthly \xB7 day ${(_b = r.date) != null ? _b : 1}`;
+    case "everyNDays":
+      return `Every ${(_c = r.n) != null ? _c : 2} days`;
+  }
+}
+function todayStr() {
+  return (0, import_obsidian3.moment)().format("YYYY-MM-DD");
+}
+function nowTime() {
+  return (0, import_obsidian3.moment)().format("HH:mm");
+}
+function weekday(date) {
+  return (0, import_obsidian3.moment)(date, "YYYY-MM-DD").day();
+}
+function dayOfMonth(date) {
+  return (0, import_obsidian3.moment)(date, "YYYY-MM-DD").date();
+}
+function lastDayOfMonth(date) {
+  return (0, import_obsidian3.moment)(date, "YYYY-MM-DD").daysInMonth();
+}
+function daysBetween(a, b) {
+  return (0, import_obsidian3.moment)(b, "YYYY-MM-DD").diff((0, import_obsidian3.moment)(a, "YYYY-MM-DD"), "days");
+}
+var TodoStore = class {
+  constructor(app, getItems, setItems, save, getLogTarget) {
+    this.app = app;
+    this.getItems = getItems;
+    this.setItems = setItems;
+    this.save = save;
+    this.getLogTarget = getLogTarget;
+  }
+  all() {
+    return this.getItems().slice().sort((a, b) => a.order - b.order);
+  }
+  anchorDate(item) {
+    return item.scheduledDate || (0, import_obsidian3.moment)(item.createdAt).format("YYYY-MM-DD");
+  }
+  /** Whether `date` is an occurrence for this item's recurrence. */
+  isOccurrence(item, date) {
+    var _a, _b, _c;
+    const start = item.scheduledDate;
+    if (start && date < start) return false;
+    const r = item.recurrence;
+    switch (r.type) {
+      case "none":
+        return start ? date >= start : true;
+      case "daily":
+        return true;
+      case "weekdays": {
+        const d = weekday(date);
+        return d >= 1 && d <= 5;
+      }
+      case "weekly":
+        return ((_a = r.days) != null ? _a : []).includes(weekday(date));
+      case "monthly": {
+        const target = (_b = r.date) != null ? _b : 1;
+        const dom = dayOfMonth(date);
+        if (dom === target) return true;
+        return target > lastDayOfMonth(date) && dom === lastDayOfMonth(date);
+      }
+      case "everyNDays": {
+        const n = Math.max(1, (_c = r.n) != null ? _c : 2);
+        return daysBetween(this.anchorDate(item), date) % n === 0;
+      }
+    }
+  }
+  /** Latest occurrence strictly before `date`, or null. Bounded scan. */
+  previousOccurrence(item, date) {
+    for (let i = 1; i <= 366; i++) {
+      const d = (0, import_obsidian3.moment)(date, "YYYY-MM-DD").subtract(i, "days").format("YYYY-MM-DD");
+      if (item.scheduledDate && d < item.scheduledDate) return null;
+      if (this.isOccurrence(item, d)) return d;
+    }
+    return null;
+  }
+  isRecurring(item) {
+    return item.recurrence.type !== "none";
+  }
+  isHiddenByTime(item, date) {
+    if (item.scheduledDate && date < item.scheduledDate) return true;
+    if (item.scheduledDate === date && item.scheduledTime) {
+      return nowTime() < item.scheduledTime;
+    }
+    return false;
+  }
+  /** Instances to render for `date` (default today): eligible, not future-hidden. */
+  instancesFor(date = todayStr()) {
+    var _a, _b, _c, _d;
+    const out = [];
+    for (const item of this.all()) {
+      if (this.isHiddenByTime(item, date)) continue;
+      if (this.isRecurring(item)) {
+        if (!this.isOccurrence(item, date)) continue;
+        const done = ((_a = item.completions) != null ? _a : []).includes(date);
+        const skipped = !done && ((_b = item.skips) != null ? _b : []).includes(date);
+        const prev = this.previousOccurrence(item, date);
+        const missed = !done && !skipped && !!prev && !((_c = item.completions) != null ? _c : []).includes(prev) && !((_d = item.skips) != null ? _d : []).includes(prev);
+        out.push({
+          item,
+          recurring: true,
+          done,
+          skipped,
+          flagged: missed,
+          flagLabel: missed ? missedLabel(prev, date) : ""
+        });
+      } else {
+        if (item.completed) {
+          if (item.completedDate === date) {
+            out.push({ item, recurring: false, done: true, skipped: false, flagged: false, flagLabel: "" });
+          }
+          continue;
+        }
+        const carried = !!item.scheduledDate && item.scheduledDate < date;
+        out.push({
+          item,
+          recurring: false,
+          done: false,
+          skipped: false,
+          flagged: carried,
+          flagLabel: carried ? "carried over" : ""
+        });
+      }
+    }
+    return out;
+  }
+  /** Directives to draw on the printed week planner for `date`: opt-in items
+   * that occur on that date (recurring), or whose scheduled/due date is that day
+   * (one-time). Ignores time-of-day hiding and completion — the planner is a
+   * blank-space paper artifact, not the live list. */
+  itemsForWeekPrint(date) {
+    const out = [];
+    for (const item of this.all()) {
+      if (!item.showOnWeekPrint) continue;
+      if (this.isRecurring(item)) {
+        if (this.isOccurrence(item, date)) out.push(item);
+      } else if (item.scheduledDate === date || item.dueDate === date) {
+        out.push(item);
+      }
+    }
+    return out;
+  }
+  /** Count of slipped items for overdue-based weighting. */
+  overdueCount(date = todayStr()) {
+    return this.instancesFor(date).filter((i) => i.flagged && !i.done).length;
+  }
+  /** Count of pending (undone, un-postponed, eligible) items today. */
+  pendingCount(date = todayStr()) {
+    return this.instancesFor(date).filter((i) => !i.done && !i.skipped).length;
+  }
+  /** The top pending instance for `date` in the same order the panel shows —
+   * flagged (slipped) first, then by scheduled time, then stored order. Used by
+   * the `complete-next-directive` command (§1.1). */
+  firstPending(date = todayStr()) {
+    var _a;
+    const active = this.instancesFor(date).filter((i) => !i.done && !i.skipped);
+    active.sort((a, b) => {
+      var _a2, _b;
+      if (a.flagged !== b.flagged) return a.flagged ? -1 : 1;
+      const at = (_a2 = a.item.scheduledTime) != null ? _a2 : "99:99";
+      const bt = (_b = b.item.scheduledTime) != null ? _b : "99:99";
+      if (at !== bt) return at.localeCompare(bt);
+      return a.item.order - b.item.order;
+    });
+    return (_a = active[0]) != null ? _a : null;
+  }
+  // ----------------------------------------------------------- mutations
+  async add(partial) {
+    var _a;
+    const items = this.getItems();
+    const maxOrder = items.reduce((m, i) => Math.max(m, i.order), 0);
+    const item = {
+      id: cryptoId(),
+      text: partial.text.trim(),
+      recurrence: (_a = partial.recurrence) != null ? _a : { type: "none" },
+      createdAt: Date.now(),
+      order: maxOrder + 1,
+      scheduledDate: partial.scheduledDate,
+      scheduledTime: partial.scheduledTime,
+      dueDate: partial.dueDate,
+      showOnWeekPrint: partial.showOnWeekPrint,
+      completions: [],
+      skips: []
+    };
+    items.push(item);
+    this.setItems(items);
+    await this.save();
+  }
+  async update(id, patch) {
+    const items = this.getItems();
+    const item = items.find((i) => i.id === id);
+    if (!item) return;
+    Object.assign(item, patch);
+    this.setItems(items);
+    await this.save();
+  }
+  /** First-class removal (§7.4) — deletes the item and all its recurrence. */
+  async remove(id) {
+    this.setItems(this.getItems().filter((i) => i.id !== id));
+    await this.save();
+  }
+  // ------------------------------------------------- sub-items + note (§1.2)
+  /** Add a sub-task to a directive. */
+  async addSubItem(parentId, text) {
+    var _a;
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    const items = this.getItems();
+    const item = items.find((i) => i.id === parentId);
+    if (!item) return;
+    ((_a = item.subItems) != null ? _a : item.subItems = []).push({ id: cryptoId(), text: trimmed, done: false });
+    this.setItems(items);
+    await this.save();
+  }
+  /** Remove a sub-task, and forget its per-occurrence completion state. */
+  async removeSubItem(parentId, subId) {
+    var _a;
+    const items = this.getItems();
+    const item = items.find((i) => i.id === parentId);
+    if (!item) return;
+    item.subItems = ((_a = item.subItems) != null ? _a : []).filter((s) => s.id !== subId);
+    if (item.subCompletions) {
+      for (const date of Object.keys(item.subCompletions)) {
+        item.subCompletions[date] = item.subCompletions[date].filter((id) => id !== subId);
+        if (item.subCompletions[date].length === 0) delete item.subCompletions[date];
+      }
+    }
+    this.setItems(items);
+    await this.save();
+  }
+  /** Toggle a sub-task's done state for `date`. Recurring parents key the state
+   * by date; non-recurring parents use the flat `SubItem.done`. */
+  async toggleSubItem(parentId, subId, date = todayStr()) {
+    var _a, _b, _c;
+    const items = this.getItems();
+    const item = items.find((i) => i.id === parentId);
+    if (!item) return;
+    const sub = ((_a = item.subItems) != null ? _a : []).find((s) => s.id === subId);
+    if (!sub) return;
+    if (this.isRecurring(item)) {
+      const map = (_b = item.subCompletions) != null ? _b : item.subCompletions = {};
+      const set = new Set((_c = map[date]) != null ? _c : []);
+      if (set.has(subId)) set.delete(subId);
+      else set.add(subId);
+      if (set.size === 0) delete map[date];
+      else map[date] = [...set];
+    } else {
+      sub.done = !sub.done;
+    }
+    this.setItems(items);
+    await this.save();
+  }
+  /** Set (or clear) the directive's single note line. */
+  async setNote(id, text) {
+    const items = this.getItems();
+    const item = items.find((i) => i.id === id);
+    if (!item) return;
+    const trimmed = text.trim();
+    item.note = trimmed || void 0;
+    this.setItems(items);
+    await this.save();
+  }
+  async reorder(orderedIds) {
+    const items = this.getItems();
+    orderedIds.forEach((id, idx) => {
+      const item = items.find((i) => i.id === id);
+      if (item) item.order = idx;
+    });
+    this.setItems(items);
+    await this.save();
+  }
+  /** Toggle completion for `date` (default today). Appends the archive line on
+   * the transition into completed; un-completing does not touch the note. */
+  async toggleComplete(id, date = todayStr()) {
+    var _a, _b, _c;
+    const items = this.getItems();
+    const item = items.find((i) => i.id === id);
+    if (!item) return;
+    let didComplete = false;
+    if (this.isRecurring(item)) {
+      const set = new Set((_a = item.completions) != null ? _a : []);
+      if (set.has(date)) {
+        set.delete(date);
+      } else {
+        set.add(date);
+        (_b = item.skips) != null ? _b : item.skips = [];
+        item.skips = ((_c = item.skips) != null ? _c : []).filter((d) => d !== date);
+        didComplete = true;
+      }
+      item.completions = [...set];
+    } else {
+      if (item.completed && item.completedDate === date) {
+        item.completed = false;
+        item.completedDate = void 0;
+      } else {
+        item.completed = true;
+        item.completedDate = date;
+        didComplete = true;
+      }
+    }
+    this.setItems(items);
+    await this.save();
+    if (didComplete && date === todayStr()) await this.archiveCompletion(item);
+  }
+  /** Dismiss/skip a single occurrence (recurring): leaves today's list, keeps
+   * future recurrence, and does not flag the next occurrence as missed. */
+  async skipInstance(id, date = todayStr()) {
+    var _a, _b;
+    const items = this.getItems();
+    const item = items.find((i) => i.id === id);
+    if (!item) return;
+    if (this.isRecurring(item)) {
+      const set = new Set((_a = item.skips) != null ? _a : []);
+      set.add(date);
+      item.skips = [...set];
+      item.completions = ((_b = item.completions) != null ? _b : []).filter((d) => d !== date);
+    } else {
+      item.completed = true;
+      item.completedDate = date;
+    }
+    this.setItems(items);
+    await this.save();
+  }
+  /** Un-postpone a skipped occurrence — bring it back to the active list. */
+  async unskipInstance(id, date = todayStr()) {
+    var _a;
+    const items = this.getItems();
+    const item = items.find((i) => i.id === id);
+    if (!item) return;
+    if (this.isRecurring(item)) {
+      item.skips = ((_a = item.skips) != null ? _a : []).filter((d) => d !== date);
+    } else if (item.completedDate === date) {
+      item.completed = false;
+      item.completedDate = void 0;
+    }
+    this.setItems(items);
+    await this.save();
+  }
+  async archiveCompletion(item) {
+    const { marker, heading } = this.getLogTarget();
+    const time = nowTime();
+    try {
+      await appendDailyLogLine(this.app, `- ${time} ${item.text}`, { marker, heading, time });
+    } catch (e) {
+      console.error("dash-core: could not archive completed task", e);
+    }
+  }
+};
+function missedLabel(prev, date) {
+  if (!prev) return "missed";
+  const diff = daysBetween(prev, date);
+  if (diff === 1) return "missed yesterday";
+  return `missed ${(0, import_obsidian3.moment)(prev, "YYYY-MM-DD").format("MMM D")}`;
+}
+function cryptoId() {
+  const c = globalThis.crypto;
+  if (c == null ? void 0 : c.randomUUID) return c.randomUUID();
+  return "t-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
+}
+
+// node_modules/dash-core/src/core/subitems.ts
+function isRecurringItem(item) {
+  return item.recurrence.type !== "none";
+}
+function subItemDone(item, subId, date) {
+  var _a, _b, _c, _d;
+  if (isRecurringItem(item)) {
+    return ((_b = (_a = item.subCompletions) == null ? void 0 : _a[date]) != null ? _b : []).includes(subId);
+  }
+  return !!((_d = (_c = item.subItems) == null ? void 0 : _c.find((s) => s.id === subId)) == null ? void 0 : _d.done);
+}
+function subItemsDoneCount(item, date) {
+  var _a;
+  const subs = (_a = item.subItems) != null ? _a : [];
+  return subs.filter((s) => subItemDone(item, s.id, date)).length;
+}
+function allSubItemsDone(item, date) {
+  var _a;
+  const subs = (_a = item.subItems) != null ? _a : [];
+  return subs.length > 0 && subs.every((s) => subItemDone(item, s.id, date));
+}
+
+// node_modules/dash-core/src/core/directivesserde.ts
+var DEFAULT_DIRECTIVES_HEADER = "%% Dashboard \u2014 persistent directives. Managed automatically; edit these in the dashboard, not here. %%";
+function buildMarkdown(items, header = DEFAULT_DIRECTIVES_HEADER) {
+  const json = JSON.stringify({ version: 1, todos: items }, null, 2);
+  return `${header}
+
+\`\`\`json
+${json}
+\`\`\`
+`;
+}
+function parseTodos(raw) {
+  const fenced = raw.match(/```json\s*([\s\S]*?)```/);
+  const candidate = fenced ? fenced[1] : raw;
+  try {
+    const parsed = JSON.parse(candidate);
+    return Array.isArray(parsed == null ? void 0 : parsed.todos) ? parsed.todos : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+// node_modules/dash-core/src/core/directivesstore.ts
+var import_obsidian4 = require("obsidian");
+var DEFAULT_PATH = "Dashboard/Directives.md";
+var DirectivesStore = class {
+  constructor(app, getPath, opts = {}) {
+    this.app = app;
+    this.getPath = getPath;
+    this.opts = opts;
+    __publicField(this, "items", []);
+    /** The exact text we last read from / wrote to disk, so a modify event
+     * caused by our own write reloads to identical content and is ignored. */
+    __publicField(this, "lastSerialized", "");
+  }
+  getItems() {
+    return this.items;
+  }
+  setItems(items) {
+    this.items = items;
+  }
+  /** The Markdown file the directives live in. Any configured extension is
+   * coerced to `.md` so the file always syncs. */
+  path() {
+    const raw = (this.getPath() || this.opts.defaultPath || DEFAULT_PATH).trim();
+    return (0, import_obsidian4.normalizePath)(raw.replace(/\.[^./]+$/, "") + ".md");
+  }
+  /** The pre-1.5.6 `.json` location, for one-time migration. */
+  legacyJsonPath() {
+    return this.path().replace(/\.md$/i, ".json");
+  }
+  isDirectivesPath(path) {
+    return (0, import_obsidian4.normalizePath)(path) === this.path();
+  }
+  /** Load from the Markdown file. Returns true if the file existed. */
+  async load() {
+    const file = this.app.vault.getAbstractFileByPath(this.path());
+    if (!(file instanceof import_obsidian4.TFile)) return false;
+    try {
+      const raw = await this.app.vault.read(file);
+      this.lastSerialized = raw;
+      this.items = parseTodos(raw);
+    } catch (e) {
+      console.error("dash-core: could not read the directives file", e);
+    }
+    return true;
+  }
+  /** Migrate from the old `.json` file if it exists. Returns true if migrated. */
+  async loadLegacyJson() {
+    const file = this.app.vault.getAbstractFileByPath(this.legacyJsonPath());
+    if (!(file instanceof import_obsidian4.TFile)) return false;
+    try {
+      const raw = await this.app.vault.read(file);
+      this.items = parseTodos(raw);
+      this.lastSerialized = "";
+      return true;
+    } catch (e) {
+      console.error("dash-core: could not read the legacy directives file", e);
+      return false;
+    }
+  }
+  /** Write the current list to the Markdown file (creating it and its folder if
+   * needed). No-op when the content is unchanged. */
+  async save() {
+    const body = buildMarkdown(this.items, this.opts.header);
+    if (body === this.lastSerialized) return;
+    this.lastSerialized = body;
+    const path = this.path();
+    const existing = this.app.vault.getAbstractFileByPath(path);
+    if (existing instanceof import_obsidian4.TFile) {
+      await this.app.vault.modify(existing, body);
+    } else {
+      await this.ensureFolder(path);
+      await this.app.vault.create(path, body);
+    }
+  }
+  /** React to a vault change on the directives file (e.g. Obsidian Sync landing
+   * the other device's edit). Returns true if the in-memory list actually
+   * changed — our own writes reload to identical content and return false. */
+  async onExternalChange(path) {
+    if (!this.isDirectivesPath(path)) return false;
+    const before = this.lastSerialized;
+    await this.load();
+    return this.lastSerialized !== before;
+  }
+  async ensureFolder(path) {
+    const dir = path.split("/").slice(0, -1).join("/");
+    if (!dir) return;
+    if (this.app.vault.getAbstractFileByPath(dir) instanceof import_obsidian4.TFolder) return;
+    await this.app.vault.createFolder(dir).catch(() => {
+    });
+  }
+};
+
+// node_modules/dash-core/src/core/library.ts
+var import_obsidian5 = require("obsidian");
+var LibraryStore = class {
+  constructor(app, cfg) {
+    this.app = app;
+    this.cfg = cfg;
+  }
+  root() {
+    return (0, import_obsidian5.normalizePath)((this.cfg().root || "Library").replace(/\/+$/, ""));
+  }
+  /** Folder new/active notes live in. */
+  notesFolder() {
+    var _a;
+    const sub = ((_a = this.cfg().notesSubfolder) != null ? _a : "").trim().replace(/\/+$/, "");
+    return sub ? (0, import_obsidian5.normalizePath)(this.root() + "/" + sub) : this.root();
+  }
+  categoriesFolder() {
+    return (0, import_obsidian5.normalizePath)(this.root() + "/" + (this.cfg().categoriesSubfolder || "Categories"));
+  }
+  archiveFolder() {
+    return (0, import_obsidian5.normalizePath)(this.root() + "/" + (this.cfg().archiveSubfolder || "Archive"));
+  }
+  heading() {
+    return (this.cfg().listHeading || "Notes").trim();
+  }
+  inFolder(file, folder) {
+    return file.path === folder || file.path.startsWith(folder + "/");
+  }
+  /** Active notes. With a notes subfolder, that folder's notes; otherwise
+   * everything under the root except the Archive and Categories subfolders. */
+  listNotes() {
+    var _a;
+    const sub = ((_a = this.cfg().notesSubfolder) != null ? _a : "").trim();
+    const files = this.app.vault.getMarkdownFiles();
+    let active;
+    if (sub) {
+      const notes = this.notesFolder();
+      active = files.filter((f) => this.inFolder(f, notes));
+    } else {
+      const root = this.root();
+      const cats = this.categoriesFolder();
+      const arch = this.archiveFolder();
+      active = files.filter(
+        (f) => this.inFolder(f, root) && !this.inFolder(f, cats) && !this.inFolder(f, arch)
+      );
+    }
+    return active.sort((a, b) => a.basename.localeCompare(b.basename));
+  }
+  listArchived() {
+    const arch = this.archiveFolder();
+    return this.app.vault.getMarkdownFiles().filter((f) => this.inFolder(f, arch)).sort((a, b) => a.basename.localeCompare(b.basename));
+  }
+  listCategories() {
+    const cats = this.categoriesFolder();
+    return this.app.vault.getMarkdownFiles().filter((f) => this.inFolder(f, cats)).map((file) => ({ name: file.basename, file, members: [] })).sort((a, b) => a.name.localeCompare(b.name));
+  }
+  async categoryMembers(file) {
+    const content = await this.app.vault.cachedRead(file);
+    return this.parseMembers(content);
+  }
+  // ----------------------------------------------------------- mutations
+  async ensureFolder(path) {
+    const norm = (0, import_obsidian5.normalizePath)(path);
+    if (!norm || norm === "/") return;
+    if (this.app.vault.getAbstractFileByPath(norm) instanceof import_obsidian5.TFolder) return;
+    const parts = norm.split("/");
+    let cur = "";
+    for (const p of parts) {
+      cur = cur ? cur + "/" + p : p;
+      if (!(this.app.vault.getAbstractFileByPath(cur) instanceof import_obsidian5.TFolder)) {
+        await this.app.vault.createFolder(cur).catch(() => {
+        });
+      }
+    }
+  }
+  sanitize(name) {
+    return name.replace(/[\\/:*?"<>|#^[\]]/g, "-").trim();
+  }
+  uniquePath(folder, base) {
+    let name = base;
+    for (let i = 1; i < 1e3; i++) {
+      const path = (0, import_obsidian5.normalizePath)(`${folder}/${name}.md`);
+      if (!this.app.vault.getAbstractFileByPath(path)) return path;
+      name = `${base} ${i + 1}`;
+    }
+    return (0, import_obsidian5.normalizePath)(`${folder}/${base} ${Date.now()}.md`);
+  }
+  /** Create a category note (with the list heading) if it doesn't exist. */
+  async createCategory(name) {
+    const clean = this.sanitize(name);
+    await this.ensureFolder(this.categoriesFolder());
+    const existing = this.app.vault.getAbstractFileByPath(
+      (0, import_obsidian5.normalizePath)(`${this.categoriesFolder()}/${clean}.md`)
+    );
+    if (existing instanceof import_obsidian5.TFile) return existing;
+    const body = `---
+type: category
+---
+
+# ${clean}
+
+## ${this.heading()}
+`;
+    const path = this.uniquePath(this.categoriesFolder(), clean);
+    return this.app.vault.create(path, body);
+  }
+  /** Create a note in the notes folder, optionally assigning a category. */
+  async createNote(title, category) {
+    const clean = this.sanitize(title);
+    await this.ensureFolder(this.notesFolder());
+    const path = this.uniquePath(this.notesFolder(), clean);
+    const file = await this.app.vault.create(path, `# ${clean}
+
+`);
+    if (category) await this.assign(file, category);
+    return file;
+  }
+  /** Delete a note (to the user's configured trash) and delink it from every
+   * category. */
+  async deleteNote(file) {
+    for (const cat of this.listCategories()) {
+      await this.removeMember(cat.file, file.basename);
+    }
+    const fm = this.app.fileManager;
+    if (typeof fm.trashFile === "function") await fm.trashFile(file);
+    else await this.app.vault.trash(file, true);
+  }
+  /** Assign `file` to `category`: write the frontmatter entry AND the
+   * alphabetized wikilink in the category note (creating it if needed). */
+  async assign(file, category) {
+    const catFile = await this.createCategory(category);
+    await this.app.fileManager.processFrontMatter(file, (fm) => {
+      const list = Array.isArray(fm.categories) ? fm.categories.map(String) : fm.categories ? [String(fm.categories)] : [];
+      if (!list.includes(catFile.basename)) list.push(catFile.basename);
+      fm.categories = list;
+    });
+    await this.addMember(catFile, file.basename);
+  }
+  async unassign(file, category) {
+    const catFile = this.app.vault.getAbstractFileByPath(
+      (0, import_obsidian5.normalizePath)(`${this.categoriesFolder()}/${this.sanitize(category)}.md`)
+    );
+    if (catFile instanceof import_obsidian5.TFile) await this.removeMember(catFile, file.basename);
+    await this.app.fileManager.processFrontMatter(file, (fm) => {
+      if (Array.isArray(fm.categories)) {
+        fm.categories = fm.categories.map(String).filter((c) => c !== category);
+      } else if (fm.categories === category) {
+        delete fm.categories;
+      }
+    });
+  }
+  /** Archive a note: remove it from every category list, then move it into the
+   * Archive subfolder (inbound links elsewhere are repointed by Obsidian). */
+  async archiveNote(file) {
+    for (const cat of this.listCategories()) {
+      await this.removeMember(cat.file, file.basename);
+    }
+    await this.ensureFolder(this.archiveFolder());
+    let dest = (0, import_obsidian5.normalizePath)(`${this.archiveFolder()}/${file.name}`);
+    if (this.app.vault.getAbstractFileByPath(dest)) {
+      dest = this.uniquePath(this.archiveFolder(), file.basename);
+    }
+    await this.app.fileManager.renameFile(file, dest);
+    await this.app.fileManager.processFrontMatter(file, (fm) => {
+      fm.archived = true;
+    });
+  }
+  async restoreNote(file) {
+    await this.ensureFolder(this.notesFolder());
+    let dest = (0, import_obsidian5.normalizePath)(`${this.notesFolder()}/${file.name}`);
+    if (this.app.vault.getAbstractFileByPath(dest)) {
+      dest = this.uniquePath(this.notesFolder(), file.basename);
+    }
+    await this.app.fileManager.renameFile(file, dest);
+    await this.app.fileManager.processFrontMatter(file, (fm) => {
+      delete fm.archived;
+    });
+  }
+  // -------------------------------------------------- category list I/O
+  headingRe() {
+    const esc = this.heading().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return new RegExp(`^#{1,6}\\s+${esc}:?\\s*$`, "i");
+  }
+  parseMembers(content) {
+    const lines = content.split("\n");
+    const start = lines.findIndex((l) => this.headingRe().test(l));
+    if (start === -1) return [];
+    const out = [];
+    for (let i = start + 1; i < lines.length; i++) {
+      if (/^#{1,6}\s/.test(lines[i])) break;
+      const m = lines[i].match(/^\s*-\s+\[\[([^\]|]+)(?:\|[^\]]+)?\]\]\s*$/);
+      if (m) out.push(m[1].trim());
+    }
+    return out;
+  }
+  async writeMembers(file, members) {
+    const sorted = [...new Set(members)].sort(
+      (a, b) => a.localeCompare(b, void 0, { sensitivity: "base" })
+    );
+    await this.app.vault.process(file, (content) => {
+      const lines = content.split("\n");
+      let start = lines.findIndex((l) => this.headingRe().test(l));
+      if (start === -1) {
+        const trimmed = content.replace(/\n+$/, "");
+        const block2 = [`## ${this.heading()}`, "", ...sorted.map((m) => `- [[${m}]]`)].join("\n");
+        return (trimmed ? trimmed + "\n\n" : "") + block2 + "\n";
+      }
+      let end = lines.length;
+      for (let i = start + 1; i < lines.length; i++) {
+        if (/^#{1,6}\s/.test(lines[i])) {
+          end = i;
+          break;
+        }
+      }
+      const block = ["", ...sorted.map((m) => `- [[${m}]]`), ""];
+      lines.splice(start + 1, end - (start + 1), ...block);
+      return lines.join("\n");
+    });
+  }
+  async addMember(file, basename) {
+    const members = await this.categoryMembers(file);
+    if (members.includes(basename)) return;
+    members.push(basename);
+    await this.writeMembers(file, members);
+  }
+  async removeMember(file, basename) {
+    const members = await this.categoryMembers(file);
+    if (!members.includes(basename)) return;
+    await this.writeMembers(
+      file,
+      members.filter((m) => m !== basename)
+    );
+  }
+};
+
+// node_modules/dash-core/src/core/streak.ts
+var DEFAULT_STREAK = { current: 0, longest: 0, lastDayCounted: "" };
+function currentStreakFromDays(counts) {
+  const start = counts[0] ? 0 : 1;
+  let n = 0;
+  for (let i = start; i < counts.length; i++) {
+    if (!counts[i]) break;
+    n++;
+  }
+  return n;
+}
+
+// node_modules/dash-core/src/panels/types.ts
 var BasePanel = class {
   constructor() {
-    this.cleanups = [];
+    __publicField(this, "el");
+    __publicField(this, "ctx");
+    __publicField(this, "cleanups", []);
   }
   async mount(el, ctx) {
     this.el = el;
@@ -125,8 +1469,43 @@ function placard(el, title) {
   return head;
 }
 
+// node_modules/dash-core/src/panels/layout.ts
+var MAX_COLUMNS = 3;
+function clampInt(v, lo, hi) {
+  const n = Math.floor(Number.isFinite(v) ? v : lo);
+  return Math.max(lo, Math.min(hi, n));
+}
+function computeLayout(order, enabled, columns, spans) {
+  const ids = order.filter((id) => enabled[id] !== false);
+  const raw = ids.map((id) => {
+    var _a, _b;
+    return {
+      id,
+      col: clampInt((_a = columns[id]) != null ? _a : 1, 1, MAX_COLUMNS),
+      span: clampInt((_b = spans[id]) != null ? _b : 1, 1, MAX_COLUMNS)
+    };
+  });
+  const configured = raw.some((p) => p.col > 1 || p.span > 1);
+  if (!configured) {
+    return { configured: false, columns: 1, placements: ids.map((id) => ({ id, column: 1, span: 1 })) };
+  }
+  let N = 1;
+  for (const p of raw) N = Math.max(N, p.col + p.span - 1);
+  N = Math.min(MAX_COLUMNS, Math.max(1, N));
+  const placements = raw.map((p) => {
+    const column = p.col > N ? 1 : p.col;
+    const span = Math.max(1, Math.min(p.span, N - column + 1));
+    return { id: p.id, column, span };
+  });
+  return { configured: true, columns: N, placements };
+}
+
+// src/panels/types.ts
+var BasePanel2 = class extends BasePanel {
+};
+
 // src/panels/clock.ts
-var ClockPanel = class extends BasePanel {
+var ClockPanel = class extends BasePanel2 {
   constructor() {
     super(...arguments);
     this.id = "clock";
@@ -155,7 +1534,7 @@ var ClockPanel = class extends BasePanel {
     this.tick();
   }
   tick() {
-    const now = (0, import_obsidian.moment)();
+    const now = (0, import_obsidian6.moment)();
     if (this.digitsEl) this.digitsEl.setText(now.format("HHmm"));
     if (this.secEl) this.secEl.setText(now.format("ss"));
     if (this.dateEl) this.dateEl.setText(now.format("dddd \xB7 YYYY-MM-DD").toUpperCase());
@@ -184,9 +1563,9 @@ function humanize(totalSecs) {
 }
 
 // src/panels/qotd.ts
-var import_obsidian2 = require("obsidian");
+var import_obsidian7 = require("obsidian");
 var QUOTES_PATH = "scripts/qotd/quotes.json";
-var QotdPanel = class extends BasePanel {
+var QotdPanel = class extends BasePanel2 {
   constructor() {
     super(...arguments);
     this.id = "qotd";
@@ -211,7 +1590,7 @@ var QotdPanel = class extends BasePanel {
       card.createDiv({ cls: "mrd-muted", text: "The quotation archive is present but empty." });
       return;
     }
-    const m = (0, import_obsidian2.moment)((0, import_obsidian2.moment)().format("YYYY-MM-DD"), "YYYY-MM-DD");
+    const m = (0, import_obsidian7.moment)((0, import_obsidian7.moment)().format("YYYY-MM-DD"), "YYYY-MM-DD");
     const dayNumber = Math.floor(m.valueOf() / 864e5);
     const idx = (dayNumber % n + n) % n;
     const q = quotes[idx];
@@ -253,11 +1632,11 @@ function parseQuotes(raw) {
 }
 
 // src/panels/meridian.ts
-var import_obsidian4 = require("obsidian");
+var import_obsidian9 = require("obsidian");
 
 // src/panels/linehistory.ts
-var import_obsidian3 = require("obsidian");
-var LineHistoryModal = class extends import_obsidian3.Modal {
+var import_obsidian8 = require("obsidian");
+var LineHistoryModal = class extends import_obsidian8.Modal {
   constructor(app, plugin) {
     super(app);
     this.plugin = plugin;
@@ -275,7 +1654,7 @@ var LineHistoryModal = class extends import_obsidian3.Modal {
       const entry = history[i];
       const row = list.createDiv({ cls: "mrd-linehist-row" });
       row.createDiv({ cls: "mrd-linehist-line", text: entry.line });
-      row.createDiv({ cls: "mrd-linehist-when", text: (0, import_obsidian3.moment)(entry.at).fromNow() });
+      row.createDiv({ cls: "mrd-linehist-when", text: (0, import_obsidian8.moment)(entry.at).fromNow() });
     }
   }
   onClose() {
@@ -626,7 +2005,7 @@ var meridian_lines_default = {
 
 // src/panels/meridian.ts
 var POOLS = meridian_lines_default;
-var MeridianPanel = class extends BasePanel {
+var MeridianPanel = class extends BasePanel2 {
   constructor() {
     super(...arguments);
     this.id = "meridian";
@@ -683,7 +2062,7 @@ var MeridianPanel = class extends BasePanel {
     const bag = fresh.length ? fresh : candidates;
     const line = bag[Math.floor(Math.random() * bag.length)];
     if (pool === "milestone") {
-      this.ctx.plugin.milestoneShownDate = (0, import_obsidian4.moment)().format("YYYY-MM-DD");
+      this.ctx.plugin.milestoneShownDate = (0, import_obsidian9.moment)().format("YYYY-MM-DD");
       void this.ctx.plugin.saveData_();
     }
     ring.push(line);
@@ -698,7 +2077,7 @@ var MeridianPanel = class extends BasePanel {
   }
   async weights() {
     const { todos, bridge, runtime, plugin } = this.ctx;
-    const todayStr2 = (0, import_obsidian4.moment)().format("YYYY-MM-DD");
+    const todayStr2 = (0, import_obsidian9.moment)().format("YYYY-MM-DD");
     const pending = todos.pendingCount();
     const overdueTodos = todos.overdueCount();
     const crm = safe(() => bridge.crmContacts(), []);
@@ -737,7 +2116,7 @@ var MeridianPanel = class extends BasePanel {
     const completionsMilestone = doneToday > 0 && doneToday % 5 === 0;
     const streak = this.ctx.plugin.streak;
     const streakSeven = streak.current > 0 && streak.current % 7 === 0;
-    const newRecord = this.ctx.runtime.streakRecordDate === (0, import_obsidian4.moment)().format("YYYY-MM-DD");
+    const newRecord = this.ctx.runtime.streakRecordDate === (0, import_obsidian9.moment)().format("YYYY-MM-DD");
     return completionsMilestone || streakSeven || newRecord;
   }
 };
@@ -796,1379 +2175,6 @@ async function safeAsync(fn, fallback) {
 
 // src/panels/todo.ts
 var import_obsidian12 = require("obsidian");
-
-// node_modules/dash-core/src/core/ics.ts
-var import_obsidian5 = require("obsidian");
-function tzOffsetMinutes(tz, utcMs) {
-  try {
-    const dtf = new Intl.DateTimeFormat("en-US", {
-      timeZone: tz,
-      hourCycle: "h23",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit"
-    });
-    const parts = dtf.formatToParts(new Date(utcMs));
-    const map = {};
-    for (const p of parts) if (p.type !== "literal") map[p.type] = Number(p.value);
-    const asUTC = Date.UTC(map.year, map.month - 1, map.day, map.hour, map.minute, map.second);
-    return (asUTC - utcMs) / 6e4;
-  } catch (e) {
-    return 0;
-  }
-}
-function toEpochMs(v) {
-  if (v.zone === "utc") return Date.UTC(v.y, v.mo - 1, v.d, v.h, v.mi, v.s);
-  if (v.zone === "local") return new Date(v.y, v.mo - 1, v.d, v.h, v.mi, v.s).getTime();
-  const guess = Date.UTC(v.y, v.mo - 1, v.d, v.h, v.mi, v.s);
-  let off = tzOffsetMinutes(v.zone, guess);
-  let utc = guess - off * 6e4;
-  off = tzOffsetMinutes(v.zone, utc);
-  utc = guess - off * 6e4;
-  return utc;
-}
-function unfold(text) {
-  const raw = text.replace(/\r\n/g, "\n").split("\n");
-  const out = [];
-  for (const line of raw) {
-    if ((line.startsWith(" ") || line.startsWith("	")) && out.length) {
-      out[out.length - 1] += line.slice(1);
-    } else {
-      out.push(line);
-    }
-  }
-  return out;
-}
-function parseDateVal(rawKey, value) {
-  const params = rawKey.split(";").slice(1);
-  let tzid = "";
-  let isDate = false;
-  for (const p of params) {
-    const [k, v2] = p.split("=");
-    if (k.toUpperCase() === "TZID") tzid = v2;
-    if (k.toUpperCase() === "VALUE" && v2.toUpperCase() === "DATE") isDate = true;
-  }
-  const v = value.trim();
-  if (isDate || /^\d{8}$/.test(v)) {
-    return {
-      allDay: true,
-      y: +v.slice(0, 4),
-      mo: +v.slice(4, 6),
-      d: +v.slice(6, 8),
-      h: 0,
-      mi: 0,
-      s: 0,
-      zone: "local"
-    };
-  }
-  const m = v.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(Z)?$/);
-  if (!m) {
-    const mm = (0, import_obsidian5.moment)(v);
-    return { allDay: false, y: mm.year(), mo: mm.month() + 1, d: mm.date(), h: mm.hour(), mi: mm.minute(), s: mm.second(), zone: "local" };
-  }
-  const zone = m[7] ? "utc" : tzid || "local";
-  return { allDay: false, y: +m[1], mo: +m[2], d: +m[3], h: +m[4], mi: +m[5], s: +m[6], zone };
-}
-var WEEKDAY_CODES = { SU: 0, MO: 1, TU: 2, WE: 3, TH: 4, FR: 5, SA: 6 };
-function parseRRule(value) {
-  const parts = {};
-  for (const seg of value.split(";")) {
-    const [k, v] = seg.split("=");
-    if (k && v) parts[k.toUpperCase()] = v;
-  }
-  const freq = parts.FREQ;
-  if (!["DAILY", "WEEKLY", "MONTHLY", "YEARLY"].includes(freq)) return void 0;
-  const rule = { freq, interval: Math.max(1, Number(parts.INTERVAL) || 1) };
-  if (parts.COUNT) rule.count = Number(parts.COUNT);
-  if (parts.UNTIL) rule.until = parseDateVal("UNTIL", parts.UNTIL);
-  if (parts.BYDAY) {
-    rule.byday = parts.BYDAY.split(",").map((c) => WEEKDAY_CODES[c.replace(/^[+-]?\d+/, "").toUpperCase()]).filter((n) => n !== void 0);
-  }
-  if (parts.BYMONTHDAY) rule.bymonthday = parts.BYMONTHDAY.split(",").map(Number);
-  return rule;
-}
-function parseICS(text) {
-  const lines = unfold(text);
-  const events = [];
-  let cur = null;
-  for (const line of lines) {
-    if (line === "BEGIN:VEVENT") {
-      cur = { summary: "", location: "", uid: "", exdates: /* @__PURE__ */ new Set() };
-      continue;
-    }
-    if (line === "END:VEVENT") {
-      if (cur && cur.start) events.push(cur);
-      cur = null;
-      continue;
-    }
-    if (!cur) continue;
-    const idx = line.indexOf(":");
-    if (idx === -1) continue;
-    const rawKey = line.slice(0, idx);
-    const value = line.slice(idx + 1);
-    const key = rawKey.split(";")[0].toUpperCase();
-    switch (key) {
-      case "UID":
-        cur.uid = value.trim();
-        break;
-      case "SUMMARY":
-        cur.summary = unescapeText(value);
-        break;
-      case "LOCATION":
-        cur.location = unescapeText(value);
-        break;
-      case "DTSTART":
-        cur.start = parseDateVal(rawKey, value);
-        break;
-      case "DTEND":
-        cur.end = parseDateVal(rawKey, value);
-        break;
-      case "RRULE":
-        cur.rrule = parseRRule(value);
-        break;
-      case "EXDATE": {
-        for (const piece of value.split(",")) {
-          const dv = parseDateVal(rawKey, piece);
-          cur.exdates.add(canonicalDate(dv));
-        }
-        break;
-      }
-      case "RECURRENCE-ID": {
-        cur.recurrenceId = canonicalDate(parseDateVal(rawKey, value));
-        break;
-      }
-    }
-  }
-  return events;
-}
-function unescapeText(v) {
-  return v.replace(/\\n/gi, "\n").replace(/\\,/g, ",").replace(/\\;/g, ";").replace(/\\\\/g, "\\").trim();
-}
-function canonicalDate(v) {
-  return `${pad4(v.y)}-${pad2(v.mo)}-${pad2(v.d)}`;
-}
-function pad2(n) {
-  return String(n).padStart(2, "0");
-}
-function pad4(n) {
-  return String(n).padStart(4, "0");
-}
-function occurrencesOn(ev, targetDate) {
-  const start = ev.start;
-  const localDateOf = (v) => v.allDay ? canonicalDate(v) : (0, import_obsidian5.moment)(toEpochMs(v)).format("YYYY-MM-DD");
-  if (!ev.rrule) {
-    if (localDateOf(start) === targetDate) return [start];
-    if (ev.end && spansDate(ev, targetDate)) return [start];
-    return [];
-  }
-  const rule = ev.rrule;
-  const results = [];
-  const targetEndMs = (0, import_obsidian5.moment)(targetDate, "YYYY-MM-DD").endOf("day").valueOf();
-  const untilMs = rule.until ? toEpochMs(rule.until) : Infinity;
-  let emitted = 0;
-  const guard = 2e4;
-  const cursor = { y: start.y, mo: start.mo, d: start.d };
-  for (let i = 0; i < guard; i++) {
-    const candidates = expandPeriod(rule, cursor, start);
-    for (const cand of candidates) {
-      const occ = { ...start, y: cand.y, mo: cand.mo, d: cand.d };
-      const occMs = occ.allDay ? Date.UTC(occ.y, occ.mo - 1, occ.d) : toEpochMs(occ);
-      if (compareTuple(cand, { y: start.y, mo: start.mo, d: start.d }) < 0) continue;
-      if (occMs > untilMs && rule.until) return results;
-      if (ev.exdates.has(canonicalDate(occ))) continue;
-      emitted++;
-      if (localDateOf(occ) === targetDate) results.push(occ);
-      if (rule.count && emitted >= rule.count) return results;
-    }
-    advancePeriod(rule, cursor);
-    const cursorStartMs = Date.UTC(cursor.y, cursor.mo - 1, cursor.d);
-    if (cursorStartMs > targetEndMs + 8 * 864e5) break;
-  }
-  return results;
-}
-function expandPeriod(rule, cursor, start) {
-  if (rule.freq === "WEEKLY" && rule.byday && rule.byday.length) {
-    const base = new Date(Date.UTC(cursor.y, cursor.mo - 1, cursor.d));
-    const dow = base.getUTCDay();
-    const weekStart = new Date(base.getTime() - dow * 864e5);
-    return rule.byday.slice().sort((a, b) => a - b).map((wd) => {
-      const dt = new Date(weekStart.getTime() + wd * 864e5);
-      return { y: dt.getUTCFullYear(), mo: dt.getUTCMonth() + 1, d: dt.getUTCDate() };
-    });
-  }
-  if (rule.freq === "MONTHLY" && rule.bymonthday && rule.bymonthday.length) {
-    return rule.bymonthday.map((md) => clampDay({ y: cursor.y, mo: cursor.mo, d: md }));
-  }
-  return [{ y: cursor.y, mo: cursor.mo, d: cursor.d }];
-}
-function advancePeriod(rule, cursor) {
-  const step = rule.interval;
-  if (rule.freq === "DAILY") {
-    const dt = new Date(Date.UTC(cursor.y, cursor.mo - 1, cursor.d + step));
-    assign(cursor, dt);
-  } else if (rule.freq === "WEEKLY") {
-    const dt = new Date(Date.UTC(cursor.y, cursor.mo - 1, cursor.d + 7 * step));
-    assign(cursor, dt);
-  } else if (rule.freq === "MONTHLY") {
-    let mo = cursor.mo - 1 + step;
-    let y = cursor.y + Math.floor(mo / 12);
-    mo = (mo % 12 + 12) % 12;
-    cursor.y = y;
-    cursor.mo = mo + 1;
-  } else {
-    cursor.y += step;
-  }
-}
-function assign(cursor, dt) {
-  cursor.y = dt.getUTCFullYear();
-  cursor.mo = dt.getUTCMonth() + 1;
-  cursor.d = dt.getUTCDate();
-}
-function clampDay(t) {
-  const dim = new Date(Date.UTC(t.y, t.mo, 0)).getUTCDate();
-  return { y: t.y, mo: t.mo, d: Math.min(t.d, dim) };
-}
-function compareTuple(a, b) {
-  return a.y - b.y || a.mo - b.mo || a.d - b.d;
-}
-function spansDate(ev, targetDate) {
-  if (!ev.end) return false;
-  const startDay = ev.start.allDay ? canonicalDate(ev.start) : (0, import_obsidian5.moment)(toEpochMs(ev.start)).format("YYYY-MM-DD");
-  const endMs = ev.end.allDay ? (0, import_obsidian5.moment)(canonicalDate(ev.end), "YYYY-MM-DD").valueOf() : toEpochMs(ev.end);
-  const targetStartMs = (0, import_obsidian5.moment)(targetDate, "YYYY-MM-DD").startOf("day").valueOf();
-  const startMs = ev.start.allDay ? (0, import_obsidian5.moment)(startDay, "YYYY-MM-DD").valueOf() : toEpochMs(ev.start);
-  return startMs <= (0, import_obsidian5.moment)(targetDate, "YYYY-MM-DD").endOf("day").valueOf() && endMs > targetStartMs;
-}
-function eventsOnDate(events, localDate) {
-  const overridden = /* @__PURE__ */ new Set();
-  for (const ev of events) if (ev.recurrenceId) overridden.add(`${ev.uid}|${ev.recurrenceId}`);
-  const items = [];
-  for (const ev of events) {
-    const occs = ev.recurrenceId ? occurrencesOn(ev, localDate) : occurrencesOn(ev, localDate).filter(
-      (o) => !overridden.has(`${ev.uid}|${canonicalDate(o)}`)
-    );
-    for (const occ of occs) items.push(toAgendaItem(ev, occ));
-  }
-  items.sort((a, b) => a.sortKey - b.sortKey || a.summary.localeCompare(b.summary));
-  return items;
-}
-function toAgendaItem(ev, occ) {
-  if (occ.allDay) {
-    return {
-      summary: ev.summary || "(untitled)",
-      location: ev.location,
-      allDay: true,
-      startMs: (0, import_obsidian5.moment)(canonicalDate(occ), "YYYY-MM-DD").valueOf(),
-      timeLabel: "",
-      sortKey: -1
-    };
-  }
-  const startMs = toEpochMs(occ);
-  const startM = (0, import_obsidian5.moment)(startMs);
-  let timeLabel = startM.format("HH:mm");
-  let endMs;
-  if (ev.end && !ev.end.allDay) {
-    const origStart = toEpochMs(ev.start);
-    const origEnd = toEpochMs(ev.end);
-    const durMs = Math.max(0, origEnd - origStart);
-    endMs = startMs + durMs;
-    timeLabel += `\u2013${(0, import_obsidian5.moment)(endMs).format("HH:mm")}`;
-  }
-  return {
-    summary: ev.summary || "(untitled)",
-    location: ev.location,
-    allDay: false,
-    startMs,
-    endMs,
-    timeLabel,
-    sortKey: startM.hour() * 60 + startM.minute()
-  };
-}
-async function fetchICS(url) {
-  const res = await (0, import_obsidian5.requestUrl)({ url, method: "GET", throw: false });
-  if (res.status < 200 || res.status >= 300) {
-    throw new Error(`HTTP ${res.status}`);
-  }
-  return res.text;
-}
-
-// node_modules/dash-core/src/core/agendamath.ts
-function agendaState(items, now) {
-  const timed = items.filter((i) => !i.allDay).sort((a, b) => a.startMs - b.startMs);
-  const inProgress = timed.filter((i) => i.endMs !== void 0 && i.startMs <= now && i.endMs > now).sort((a, b) => a.endMs - b.endMs)[0];
-  const nextEvent = timed.find((i) => i.startMs > now);
-  if (inProgress) {
-    const gapStart = inProgress.endMs;
-    return {
-      kind: "now",
-      summary: inProgress.summary,
-      untilMs: gapStart - now,
-      gapMs: nextEvent ? Math.max(0, nextEvent.startMs - gapStart) : void 0
-    };
-  }
-  if (nextEvent) {
-    return {
-      kind: "next",
-      summary: nextEvent.summary,
-      untilMs: nextEvent.startMs - now,
-      gapMs: nextEvent.startMs - now
-    };
-  }
-  return { kind: "clear" };
-}
-function formatGap(ms) {
-  const totalMin = Math.floor(Math.max(0, ms) / 6e4);
-  if (totalMin < 1) return "less than a minute";
-  const h = Math.floor(totalMin / 60);
-  const m = totalMin % 60;
-  if (h && m) return `${h}h ${m}m`;
-  if (h) return `${h}h`;
-  return `${m}m`;
-}
-
-// node_modules/dash-core/src/core/localevents.ts
-function localEventToAgendaItem(ev) {
-  const [y, mo, d] = ev.date.split("-").map(Number);
-  if (!ev.start) {
-    return {
-      summary: ev.summary || "(untitled)",
-      location: "",
-      allDay: true,
-      startMs: new Date(y, mo - 1, d).getTime(),
-      timeLabel: "",
-      sortKey: -1
-    };
-  }
-  const [sh, sm] = ev.start.split(":").map(Number);
-  const startMs = new Date(y, mo - 1, d, sh, sm).getTime();
-  let endMs;
-  let timeLabel = ev.start;
-  if (ev.end) {
-    const [eh, em] = ev.end.split(":").map(Number);
-    endMs = new Date(y, mo - 1, d, eh, em).getTime();
-    timeLabel += `\u2013${ev.end}`;
-  }
-  return {
-    summary: ev.summary || "(untitled)",
-    location: "",
-    allDay: false,
-    startMs,
-    endMs,
-    timeLabel,
-    sortKey: sh * 60 + sm
-  };
-}
-
-// node_modules/dash-core/src/core/todostore.ts
-var import_obsidian7 = require("obsidian");
-
-// node_modules/dash-core/src/core/dailynote.ts
-var import_obsidian6 = require("obsidian");
-function getDailyNotesOptions(app) {
-  var _a, _b, _c, _d;
-  const dn = (_b = (_a = app.internalPlugins) == null ? void 0 : _a.getPluginById) == null ? void 0 : _b.call(_a, "daily-notes");
-  return (_d = (_c = dn == null ? void 0 : dn.instance) == null ? void 0 : _c.options) != null ? _d : {};
-}
-function dailyNotePath(app, date) {
-  var _a;
-  const opts = getDailyNotesOptions(app);
-  const format = opts.format || "YYYY-MM-DD";
-  const folder = ((_a = opts.folder) != null ? _a : "").trim().replace(/\/+$/, "");
-  const d = date != null ? date : (0, import_obsidian6.moment)().format("YYYY-MM-DD");
-  const name = (0, import_obsidian6.moment)(d, "YYYY-MM-DD").format(format);
-  return (0, import_obsidian6.normalizePath)((folder ? folder + "/" : "") + name + ".md");
-}
-function getDailyNoteFile(app, date) {
-  const f = app.vault.getAbstractFileByPath(dailyNotePath(app, date));
-  return f instanceof import_obsidian6.TFile ? f : null;
-}
-async function ensureDailyNote(app, date) {
-  const path = dailyNotePath(app, date);
-  const existing = app.vault.getAbstractFileByPath(path);
-  if (existing instanceof import_obsidian6.TFile) return existing;
-  await ensureParentFolder(app, path);
-  const opts = getDailyNotesOptions(app);
-  const body = await renderDailyTemplate(app, opts, path, date != null ? date : (0, import_obsidian6.moment)().format("YYYY-MM-DD"));
-  const raced = app.vault.getAbstractFileByPath(path);
-  if (raced instanceof import_obsidian6.TFile) return raced;
-  return app.vault.create(path, body);
-}
-async function ensureParentFolder(app, path) {
-  const dir = path.split("/").slice(0, -1).join("/");
-  if (!dir) return;
-  if (app.vault.getAbstractFileByPath(dir) instanceof import_obsidian6.TFolder) return;
-  await app.vault.createFolder(dir).catch(() => {
-  });
-}
-async function renderDailyTemplate(app, opts, dailyPath, date) {
-  var _a, _b, _c;
-  const templateSetting = ((_a = opts.template) != null ? _a : "").trim();
-  if (!templateSetting) return "";
-  const templatePath = (0, import_obsidian6.normalizePath)(
-    templateSetting.endsWith(".md") ? templateSetting : templateSetting + ".md"
-  );
-  const tFile = app.vault.getAbstractFileByPath(templatePath);
-  if (!(tFile instanceof import_obsidian6.TFile)) return "";
-  const raw = await app.vault.cachedRead(tFile);
-  const basename = (_c = (_b = dailyPath.split("/").pop()) == null ? void 0 : _b.replace(/\.md$/, "")) != null ? _c : "";
-  const m = (0, import_obsidian6.moment)(date, "YYYY-MM-DD");
-  const now = (0, import_obsidian6.moment)();
-  return raw.replace(/{{\s*title\s*}}/gi, basename).replace(/{{\s*date(?::([^}]+))?\s*}}/gi, (_, fmt) => m.format(fmt || "YYYY-MM-DD")).replace(/{{\s*time(?::([^}]+))?\s*}}/gi, (_, fmt) => now.format(fmt || "HH:mm"));
-}
-var HEADING_RE = /^#{1,6}\s/;
-function headingField(heading) {
-  const esc = heading.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return { anchor: new RegExp(`^#{1,6}\\s+${esc}:?\\s*$`, "i") };
-}
-function labelField(label, stops) {
-  const esc = label.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return { anchor: new RegExp(`^\\s*-\\s+${esc}\\s*:?\\s*$`, "i"), stops };
-}
-function locate(lines, spec) {
-  var _a;
-  const anchorIdx = lines.findIndex((l) => spec.anchor.test(l));
-  if (anchorIdx === -1) return null;
-  const stopAtHeading = spec.stopAtHeading !== false;
-  let end = lines.length;
-  for (let i = anchorIdx + 1; i < lines.length; i++) {
-    if (stopAtHeading && HEADING_RE.test(lines[i])) {
-      end = i;
-      break;
-    }
-    if ((_a = spec.stops) == null ? void 0 : _a.some((re) => re.test(lines[i]))) {
-      end = i;
-      break;
-    }
-  }
-  return { anchorIdx, start: anchorIdx + 1, end };
-}
-function readField(content, spec) {
-  const lines = content.split("\n");
-  const r = locate(lines, spec);
-  if (!r) return "";
-  return lines.slice(r.start, r.end).join("\n").replace(/^\n+/, "").replace(/\s+$/, "");
-}
-function replaceField(content, spec, body) {
-  const lines = content.split("\n");
-  const r = locate(lines, spec);
-  if (!r) return content;
-  const bodyLines = body.replace(/\s+$/, "").split("\n");
-  const replacement = body.trim() ? ["", ...bodyLines, ""] : [""];
-  lines.splice(r.start, r.end - r.start, ...replacement);
-  return lines.join("\n");
-}
-var PLUGIN_LOG_LINE = /^- \d{2}:\d{2}\b/;
-function insertLogLine(content, line, opts) {
-  var _a;
-  const lines = content.split("\n");
-  if (lines.some((l) => l.trim() === line.trim())) return content;
-  let anchor = -1;
-  const marker = (_a = opts.marker) == null ? void 0 : _a.trim();
-  if (marker) anchor = lines.findIndex((l) => l.includes(marker));
-  if (anchor === -1) {
-    const heading = opts.heading.trim().toLowerCase().replace(/:$/, "");
-    anchor = lines.findIndex((l) => {
-      const m = l.match(/^#{1,6}\s+(.*?)\s*$/);
-      return !!m && m[1].trim().toLowerCase().replace(/:$/, "") === heading;
-    });
-  }
-  if (anchor === -1) {
-    const trimmed = content.replace(/\n+$/, "");
-    return (trimmed ? trimmed + "\n\n" : "") + `# ${opts.heading.replace(/:$/, "")}
-${line}
-`;
-  }
-  let insertAt = anchor + 1;
-  while (insertAt < lines.length && PLUGIN_LOG_LINE.test(lines[insertAt])) {
-    const existingTime = lines[insertAt].slice(2, 7);
-    if (existingTime > opts.time) break;
-    insertAt++;
-  }
-  lines.splice(insertAt, 0, line);
-  return lines.join("\n");
-}
-function openEditorFor(app, file) {
-  var _a;
-  for (const leaf of app.workspace.getLeavesOfType("markdown")) {
-    const view = leaf.view;
-    if (view instanceof import_obsidian6.MarkdownView && ((_a = view.file) == null ? void 0 : _a.path) === file.path) return view;
-  }
-  return null;
-}
-async function editDailyNote(app, transform, date) {
-  const file = await ensureDailyNote(app, date);
-  const view = openEditorFor(app, file);
-  if (view) {
-    const editor = view.editor;
-    const before = editor.getValue();
-    const after = transform(before);
-    if (after !== before) {
-      const { from, to, text } = minimalDiff(before, after);
-      editor.replaceRange(text, editor.offsetToPos(from), editor.offsetToPos(to));
-    }
-    return;
-  }
-  await app.vault.process(file, transform);
-}
-function minimalDiff(a, b) {
-  let start = 0;
-  const max = Math.min(a.length, b.length);
-  while (start < max && a[start] === b[start]) start++;
-  let endA = a.length;
-  let endB = b.length;
-  while (endA > start && endB > start && a[endA - 1] === b[endB - 1]) {
-    endA--;
-    endB--;
-  }
-  return { from: start, to: endA, text: b.slice(start, endB) };
-}
-async function writeDailyField(app, spec, body) {
-  await editDailyNote(app, (content) => replaceField(content, spec, body));
-}
-async function appendToDailyField(app, spec, text) {
-  const clean = text.trim();
-  if (!clean) return false;
-  const file = getDailyNoteFile(app);
-  if (file) {
-    const raw = await readDailyNoteRaw(app);
-    if (!raw.split("\n").some((l) => spec.anchor.test(l))) return false;
-  }
-  const current = await readDailyField(app, spec);
-  const next = current ? `${current}
-${clean}` : clean;
-  await writeDailyField(app, spec, next);
-  return true;
-}
-async function readDailyField(app, spec) {
-  const file = getDailyNoteFile(app);
-  if (!file) return "";
-  const view = openEditorFor(app, file);
-  const content = view ? view.editor.getValue() : await app.vault.cachedRead(file);
-  return readField(content, spec);
-}
-async function appendDailyLogLine(app, line, opts) {
-  await editDailyNote(app, (content) => insertLogLine(content, line, opts));
-}
-function readHeadingSection(content, heading) {
-  return readField(content, headingField(heading));
-}
-async function readDailyNoteRaw(app, date) {
-  const file = getDailyNoteFile(app, date);
-  if (!file) return "";
-  const view = openEditorFor(app, file);
-  return view ? view.editor.getValue() : app.vault.cachedRead(file);
-}
-function readMarkerLogLines(content, marker, heading) {
-  const lines = content.split("\n");
-  let anchor = lines.findIndex((l) => l.includes(marker));
-  if (anchor === -1 && heading) {
-    const h = heading.trim().toLowerCase().replace(/:$/, "");
-    anchor = lines.findIndex((l) => {
-      const m = l.match(/^#{1,6}\s+(.*?)\s*$/);
-      return !!m && m[1].trim().toLowerCase().replace(/:$/, "") === h;
-    });
-  }
-  if (anchor === -1) return [];
-  const out = [];
-  for (let i = anchor + 1; i < lines.length; i++) {
-    if (HEADING_RE.test(lines[i])) break;
-    if (/^- \d{2}:\d{2}\b/.test(lines[i])) out.push(lines[i]);
-    else if (lines[i].includes("%%") && !lines[i].includes(marker)) break;
-  }
-  return out;
-}
-
-// node_modules/dash-core/src/core/todostore.ts
-var WEEKDAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-function describeRecurrence(r) {
-  var _a, _b, _c;
-  switch (r.type) {
-    case "none":
-      return "One-time";
-    case "daily":
-      return "Every day";
-    case "weekdays":
-      return "Weekdays";
-    case "weekly": {
-      const days = ((_a = r.days) != null ? _a : []).slice().sort((a, b) => a - b).map((d) => WEEKDAY_NAMES[d]);
-      return days.length ? `Weekly \xB7 ${days.join(", ")}` : "Weekly";
-    }
-    case "monthly":
-      return `Monthly \xB7 day ${(_b = r.date) != null ? _b : 1}`;
-    case "everyNDays":
-      return `Every ${(_c = r.n) != null ? _c : 2} days`;
-  }
-}
-function todayStr() {
-  return (0, import_obsidian7.moment)().format("YYYY-MM-DD");
-}
-function nowTime() {
-  return (0, import_obsidian7.moment)().format("HH:mm");
-}
-function weekday(date) {
-  return (0, import_obsidian7.moment)(date, "YYYY-MM-DD").day();
-}
-function dayOfMonth(date) {
-  return (0, import_obsidian7.moment)(date, "YYYY-MM-DD").date();
-}
-function lastDayOfMonth(date) {
-  return (0, import_obsidian7.moment)(date, "YYYY-MM-DD").daysInMonth();
-}
-function daysBetween(a, b) {
-  return (0, import_obsidian7.moment)(b, "YYYY-MM-DD").diff((0, import_obsidian7.moment)(a, "YYYY-MM-DD"), "days");
-}
-var TodoStore = class {
-  constructor(app, getItems, setItems, save, getLogTarget) {
-    this.app = app;
-    this.getItems = getItems;
-    this.setItems = setItems;
-    this.save = save;
-    this.getLogTarget = getLogTarget;
-  }
-  all() {
-    return this.getItems().slice().sort((a, b) => a.order - b.order);
-  }
-  anchorDate(item) {
-    return item.scheduledDate || (0, import_obsidian7.moment)(item.createdAt).format("YYYY-MM-DD");
-  }
-  /** Whether `date` is an occurrence for this item's recurrence. */
-  isOccurrence(item, date) {
-    var _a, _b, _c;
-    const start = item.scheduledDate;
-    if (start && date < start) return false;
-    const r = item.recurrence;
-    switch (r.type) {
-      case "none":
-        return start ? date >= start : true;
-      case "daily":
-        return true;
-      case "weekdays": {
-        const d = weekday(date);
-        return d >= 1 && d <= 5;
-      }
-      case "weekly":
-        return ((_a = r.days) != null ? _a : []).includes(weekday(date));
-      case "monthly": {
-        const target = (_b = r.date) != null ? _b : 1;
-        const dom = dayOfMonth(date);
-        if (dom === target) return true;
-        return target > lastDayOfMonth(date) && dom === lastDayOfMonth(date);
-      }
-      case "everyNDays": {
-        const n = Math.max(1, (_c = r.n) != null ? _c : 2);
-        return daysBetween(this.anchorDate(item), date) % n === 0;
-      }
-    }
-  }
-  /** Latest occurrence strictly before `date`, or null. Bounded scan. */
-  previousOccurrence(item, date) {
-    for (let i = 1; i <= 366; i++) {
-      const d = (0, import_obsidian7.moment)(date, "YYYY-MM-DD").subtract(i, "days").format("YYYY-MM-DD");
-      if (item.scheduledDate && d < item.scheduledDate) return null;
-      if (this.isOccurrence(item, d)) return d;
-    }
-    return null;
-  }
-  isRecurring(item) {
-    return item.recurrence.type !== "none";
-  }
-  isHiddenByTime(item, date) {
-    if (item.scheduledDate && date < item.scheduledDate) return true;
-    if (item.scheduledDate === date && item.scheduledTime) {
-      return nowTime() < item.scheduledTime;
-    }
-    return false;
-  }
-  /** Instances to render for `date` (default today): eligible, not future-hidden. */
-  instancesFor(date = todayStr()) {
-    var _a, _b, _c, _d;
-    const out = [];
-    for (const item of this.all()) {
-      if (this.isHiddenByTime(item, date)) continue;
-      if (this.isRecurring(item)) {
-        if (!this.isOccurrence(item, date)) continue;
-        const done = ((_a = item.completions) != null ? _a : []).includes(date);
-        const skipped = !done && ((_b = item.skips) != null ? _b : []).includes(date);
-        const prev = this.previousOccurrence(item, date);
-        const missed = !done && !skipped && !!prev && !((_c = item.completions) != null ? _c : []).includes(prev) && !((_d = item.skips) != null ? _d : []).includes(prev);
-        out.push({
-          item,
-          recurring: true,
-          done,
-          skipped,
-          flagged: missed,
-          flagLabel: missed ? missedLabel(prev, date) : ""
-        });
-      } else {
-        if (item.completed) {
-          if (item.completedDate === date) {
-            out.push({ item, recurring: false, done: true, skipped: false, flagged: false, flagLabel: "" });
-          }
-          continue;
-        }
-        const carried = !!item.scheduledDate && item.scheduledDate < date;
-        out.push({
-          item,
-          recurring: false,
-          done: false,
-          skipped: false,
-          flagged: carried,
-          flagLabel: carried ? "carried over" : ""
-        });
-      }
-    }
-    return out;
-  }
-  /** Directives to draw on the printed week planner for `date`: opt-in items
-   * that occur on that date (recurring), or whose scheduled/due date is that day
-   * (one-time). Ignores time-of-day hiding and completion — the planner is a
-   * blank-space paper artifact, not the live list. */
-  itemsForWeekPrint(date) {
-    const out = [];
-    for (const item of this.all()) {
-      if (!item.showOnWeekPrint) continue;
-      if (this.isRecurring(item)) {
-        if (this.isOccurrence(item, date)) out.push(item);
-      } else if (item.scheduledDate === date || item.dueDate === date) {
-        out.push(item);
-      }
-    }
-    return out;
-  }
-  /** Count of slipped items for overdue-based weighting. */
-  overdueCount(date = todayStr()) {
-    return this.instancesFor(date).filter((i) => i.flagged && !i.done).length;
-  }
-  /** Count of pending (undone, un-postponed, eligible) items today. */
-  pendingCount(date = todayStr()) {
-    return this.instancesFor(date).filter((i) => !i.done && !i.skipped).length;
-  }
-  /** The top pending instance for `date` in the same order the panel shows —
-   * flagged (slipped) first, then by scheduled time, then stored order. Used by
-   * the `complete-next-directive` command (§1.1). */
-  firstPending(date = todayStr()) {
-    var _a;
-    const active = this.instancesFor(date).filter((i) => !i.done && !i.skipped);
-    active.sort((a, b) => {
-      var _a2, _b;
-      if (a.flagged !== b.flagged) return a.flagged ? -1 : 1;
-      const at = (_a2 = a.item.scheduledTime) != null ? _a2 : "99:99";
-      const bt = (_b = b.item.scheduledTime) != null ? _b : "99:99";
-      if (at !== bt) return at.localeCompare(bt);
-      return a.item.order - b.item.order;
-    });
-    return (_a = active[0]) != null ? _a : null;
-  }
-  // ----------------------------------------------------------- mutations
-  async add(partial) {
-    var _a;
-    const items = this.getItems();
-    const maxOrder = items.reduce((m, i) => Math.max(m, i.order), 0);
-    const item = {
-      id: cryptoId(),
-      text: partial.text.trim(),
-      recurrence: (_a = partial.recurrence) != null ? _a : { type: "none" },
-      createdAt: Date.now(),
-      order: maxOrder + 1,
-      scheduledDate: partial.scheduledDate,
-      scheduledTime: partial.scheduledTime,
-      dueDate: partial.dueDate,
-      showOnWeekPrint: partial.showOnWeekPrint,
-      completions: [],
-      skips: []
-    };
-    items.push(item);
-    this.setItems(items);
-    await this.save();
-  }
-  async update(id, patch) {
-    const items = this.getItems();
-    const item = items.find((i) => i.id === id);
-    if (!item) return;
-    Object.assign(item, patch);
-    this.setItems(items);
-    await this.save();
-  }
-  /** First-class removal (§7.4) — deletes the item and all its recurrence. */
-  async remove(id) {
-    this.setItems(this.getItems().filter((i) => i.id !== id));
-    await this.save();
-  }
-  // ------------------------------------------------- sub-items + note (§1.2)
-  /** Add a sub-task to a directive. */
-  async addSubItem(parentId, text) {
-    var _a;
-    const trimmed = text.trim();
-    if (!trimmed) return;
-    const items = this.getItems();
-    const item = items.find((i) => i.id === parentId);
-    if (!item) return;
-    ((_a = item.subItems) != null ? _a : item.subItems = []).push({ id: cryptoId(), text: trimmed, done: false });
-    this.setItems(items);
-    await this.save();
-  }
-  /** Remove a sub-task, and forget its per-occurrence completion state. */
-  async removeSubItem(parentId, subId) {
-    var _a;
-    const items = this.getItems();
-    const item = items.find((i) => i.id === parentId);
-    if (!item) return;
-    item.subItems = ((_a = item.subItems) != null ? _a : []).filter((s) => s.id !== subId);
-    if (item.subCompletions) {
-      for (const date of Object.keys(item.subCompletions)) {
-        item.subCompletions[date] = item.subCompletions[date].filter((id) => id !== subId);
-        if (item.subCompletions[date].length === 0) delete item.subCompletions[date];
-      }
-    }
-    this.setItems(items);
-    await this.save();
-  }
-  /** Toggle a sub-task's done state for `date`. Recurring parents key the state
-   * by date; non-recurring parents use the flat `SubItem.done`. */
-  async toggleSubItem(parentId, subId, date = todayStr()) {
-    var _a, _b, _c;
-    const items = this.getItems();
-    const item = items.find((i) => i.id === parentId);
-    if (!item) return;
-    const sub = ((_a = item.subItems) != null ? _a : []).find((s) => s.id === subId);
-    if (!sub) return;
-    if (this.isRecurring(item)) {
-      const map = (_b = item.subCompletions) != null ? _b : item.subCompletions = {};
-      const set = new Set((_c = map[date]) != null ? _c : []);
-      if (set.has(subId)) set.delete(subId);
-      else set.add(subId);
-      if (set.size === 0) delete map[date];
-      else map[date] = [...set];
-    } else {
-      sub.done = !sub.done;
-    }
-    this.setItems(items);
-    await this.save();
-  }
-  /** Set (or clear) the directive's single note line. */
-  async setNote(id, text) {
-    const items = this.getItems();
-    const item = items.find((i) => i.id === id);
-    if (!item) return;
-    const trimmed = text.trim();
-    item.note = trimmed || void 0;
-    this.setItems(items);
-    await this.save();
-  }
-  async reorder(orderedIds) {
-    const items = this.getItems();
-    orderedIds.forEach((id, idx) => {
-      const item = items.find((i) => i.id === id);
-      if (item) item.order = idx;
-    });
-    this.setItems(items);
-    await this.save();
-  }
-  /** Toggle completion for `date` (default today). Appends the archive line on
-   * the transition into completed; un-completing does not touch the note. */
-  async toggleComplete(id, date = todayStr()) {
-    var _a, _b, _c;
-    const items = this.getItems();
-    const item = items.find((i) => i.id === id);
-    if (!item) return;
-    let didComplete = false;
-    if (this.isRecurring(item)) {
-      const set = new Set((_a = item.completions) != null ? _a : []);
-      if (set.has(date)) {
-        set.delete(date);
-      } else {
-        set.add(date);
-        (_b = item.skips) != null ? _b : item.skips = [];
-        item.skips = ((_c = item.skips) != null ? _c : []).filter((d) => d !== date);
-        didComplete = true;
-      }
-      item.completions = [...set];
-    } else {
-      if (item.completed && item.completedDate === date) {
-        item.completed = false;
-        item.completedDate = void 0;
-      } else {
-        item.completed = true;
-        item.completedDate = date;
-        didComplete = true;
-      }
-    }
-    this.setItems(items);
-    await this.save();
-    if (didComplete && date === todayStr()) await this.archiveCompletion(item);
-  }
-  /** Dismiss/skip a single occurrence (recurring): leaves today's list, keeps
-   * future recurrence, and does not flag the next occurrence as missed. */
-  async skipInstance(id, date = todayStr()) {
-    var _a, _b;
-    const items = this.getItems();
-    const item = items.find((i) => i.id === id);
-    if (!item) return;
-    if (this.isRecurring(item)) {
-      const set = new Set((_a = item.skips) != null ? _a : []);
-      set.add(date);
-      item.skips = [...set];
-      item.completions = ((_b = item.completions) != null ? _b : []).filter((d) => d !== date);
-    } else {
-      item.completed = true;
-      item.completedDate = date;
-    }
-    this.setItems(items);
-    await this.save();
-  }
-  /** Un-postpone a skipped occurrence — bring it back to the active list. */
-  async unskipInstance(id, date = todayStr()) {
-    var _a;
-    const items = this.getItems();
-    const item = items.find((i) => i.id === id);
-    if (!item) return;
-    if (this.isRecurring(item)) {
-      item.skips = ((_a = item.skips) != null ? _a : []).filter((d) => d !== date);
-    } else if (item.completedDate === date) {
-      item.completed = false;
-      item.completedDate = void 0;
-    }
-    this.setItems(items);
-    await this.save();
-  }
-  async archiveCompletion(item) {
-    const { marker, heading } = this.getLogTarget();
-    const time = nowTime();
-    try {
-      await appendDailyLogLine(this.app, `- ${time} ${item.text}`, { marker, heading, time });
-    } catch (e) {
-      console.error("dash-core: could not archive completed task", e);
-    }
-  }
-};
-function missedLabel(prev, date) {
-  if (!prev) return "missed";
-  const diff = daysBetween(prev, date);
-  if (diff === 1) return "missed yesterday";
-  return `missed ${(0, import_obsidian7.moment)(prev, "YYYY-MM-DD").format("MMM D")}`;
-}
-function cryptoId() {
-  const c = globalThis.crypto;
-  if (c == null ? void 0 : c.randomUUID) return c.randomUUID();
-  return "t-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
-}
-
-// node_modules/dash-core/src/core/subitems.ts
-function isRecurringItem(item) {
-  return item.recurrence.type !== "none";
-}
-function subItemDone(item, subId, date) {
-  var _a, _b, _c, _d;
-  if (isRecurringItem(item)) {
-    return ((_b = (_a = item.subCompletions) == null ? void 0 : _a[date]) != null ? _b : []).includes(subId);
-  }
-  return !!((_d = (_c = item.subItems) == null ? void 0 : _c.find((s) => s.id === subId)) == null ? void 0 : _d.done);
-}
-function subItemsDoneCount(item, date) {
-  var _a;
-  const subs = (_a = item.subItems) != null ? _a : [];
-  return subs.filter((s) => subItemDone(item, s.id, date)).length;
-}
-function allSubItemsDone(item, date) {
-  var _a;
-  const subs = (_a = item.subItems) != null ? _a : [];
-  return subs.length > 0 && subs.every((s) => subItemDone(item, s.id, date));
-}
-
-// node_modules/dash-core/src/core/directivesserde.ts
-var DEFAULT_DIRECTIVES_HEADER = "%% Dashboard \u2014 persistent directives. Managed automatically; edit these in the dashboard, not here. %%";
-function buildMarkdown(items, header = DEFAULT_DIRECTIVES_HEADER) {
-  const json = JSON.stringify({ version: 1, todos: items }, null, 2);
-  return `${header}
-
-\`\`\`json
-${json}
-\`\`\`
-`;
-}
-function parseTodos(raw) {
-  const fenced = raw.match(/```json\s*([\s\S]*?)```/);
-  const candidate = fenced ? fenced[1] : raw;
-  try {
-    const parsed = JSON.parse(candidate);
-    return Array.isArray(parsed == null ? void 0 : parsed.todos) ? parsed.todos : [];
-  } catch (e) {
-    return [];
-  }
-}
-
-// node_modules/dash-core/src/core/directivesstore.ts
-var import_obsidian8 = require("obsidian");
-var DEFAULT_PATH = "Dashboard/Directives.md";
-var DirectivesStore = class {
-  constructor(app, getPath, opts = {}) {
-    this.app = app;
-    this.getPath = getPath;
-    this.opts = opts;
-    __publicField(this, "items", []);
-    /** The exact text we last read from / wrote to disk, so a modify event
-     * caused by our own write reloads to identical content and is ignored. */
-    __publicField(this, "lastSerialized", "");
-  }
-  getItems() {
-    return this.items;
-  }
-  setItems(items) {
-    this.items = items;
-  }
-  /** The Markdown file the directives live in. Any configured extension is
-   * coerced to `.md` so the file always syncs. */
-  path() {
-    const raw = (this.getPath() || this.opts.defaultPath || DEFAULT_PATH).trim();
-    return (0, import_obsidian8.normalizePath)(raw.replace(/\.[^./]+$/, "") + ".md");
-  }
-  /** The pre-1.5.6 `.json` location, for one-time migration. */
-  legacyJsonPath() {
-    return this.path().replace(/\.md$/i, ".json");
-  }
-  isDirectivesPath(path) {
-    return (0, import_obsidian8.normalizePath)(path) === this.path();
-  }
-  /** Load from the Markdown file. Returns true if the file existed. */
-  async load() {
-    const file = this.app.vault.getAbstractFileByPath(this.path());
-    if (!(file instanceof import_obsidian8.TFile)) return false;
-    try {
-      const raw = await this.app.vault.read(file);
-      this.lastSerialized = raw;
-      this.items = parseTodos(raw);
-    } catch (e) {
-      console.error("dash-core: could not read the directives file", e);
-    }
-    return true;
-  }
-  /** Migrate from the old `.json` file if it exists. Returns true if migrated. */
-  async loadLegacyJson() {
-    const file = this.app.vault.getAbstractFileByPath(this.legacyJsonPath());
-    if (!(file instanceof import_obsidian8.TFile)) return false;
-    try {
-      const raw = await this.app.vault.read(file);
-      this.items = parseTodos(raw);
-      this.lastSerialized = "";
-      return true;
-    } catch (e) {
-      console.error("dash-core: could not read the legacy directives file", e);
-      return false;
-    }
-  }
-  /** Write the current list to the Markdown file (creating it and its folder if
-   * needed). No-op when the content is unchanged. */
-  async save() {
-    const body = buildMarkdown(this.items, this.opts.header);
-    if (body === this.lastSerialized) return;
-    this.lastSerialized = body;
-    const path = this.path();
-    const existing = this.app.vault.getAbstractFileByPath(path);
-    if (existing instanceof import_obsidian8.TFile) {
-      await this.app.vault.modify(existing, body);
-    } else {
-      await this.ensureFolder(path);
-      await this.app.vault.create(path, body);
-    }
-  }
-  /** React to a vault change on the directives file (e.g. Obsidian Sync landing
-   * the other device's edit). Returns true if the in-memory list actually
-   * changed — our own writes reload to identical content and return false. */
-  async onExternalChange(path) {
-    if (!this.isDirectivesPath(path)) return false;
-    const before = this.lastSerialized;
-    await this.load();
-    return this.lastSerialized !== before;
-  }
-  async ensureFolder(path) {
-    const dir = path.split("/").slice(0, -1).join("/");
-    if (!dir) return;
-    if (this.app.vault.getAbstractFileByPath(dir) instanceof import_obsidian8.TFolder) return;
-    await this.app.vault.createFolder(dir).catch(() => {
-    });
-  }
-};
-
-// node_modules/dash-core/src/core/library.ts
-var import_obsidian9 = require("obsidian");
-var LibraryStore = class {
-  constructor(app, cfg) {
-    this.app = app;
-    this.cfg = cfg;
-  }
-  root() {
-    return (0, import_obsidian9.normalizePath)((this.cfg().root || "Library").replace(/\/+$/, ""));
-  }
-  /** Folder new/active notes live in. */
-  notesFolder() {
-    var _a;
-    const sub = ((_a = this.cfg().notesSubfolder) != null ? _a : "").trim().replace(/\/+$/, "");
-    return sub ? (0, import_obsidian9.normalizePath)(this.root() + "/" + sub) : this.root();
-  }
-  categoriesFolder() {
-    return (0, import_obsidian9.normalizePath)(this.root() + "/" + (this.cfg().categoriesSubfolder || "Categories"));
-  }
-  archiveFolder() {
-    return (0, import_obsidian9.normalizePath)(this.root() + "/" + (this.cfg().archiveSubfolder || "Archive"));
-  }
-  heading() {
-    return (this.cfg().listHeading || "Notes").trim();
-  }
-  inFolder(file, folder) {
-    return file.path === folder || file.path.startsWith(folder + "/");
-  }
-  /** Active notes. With a notes subfolder, that folder's notes; otherwise
-   * everything under the root except the Archive and Categories subfolders. */
-  listNotes() {
-    var _a;
-    const sub = ((_a = this.cfg().notesSubfolder) != null ? _a : "").trim();
-    const files = this.app.vault.getMarkdownFiles();
-    let active;
-    if (sub) {
-      const notes = this.notesFolder();
-      active = files.filter((f) => this.inFolder(f, notes));
-    } else {
-      const root = this.root();
-      const cats = this.categoriesFolder();
-      const arch = this.archiveFolder();
-      active = files.filter(
-        (f) => this.inFolder(f, root) && !this.inFolder(f, cats) && !this.inFolder(f, arch)
-      );
-    }
-    return active.sort((a, b) => a.basename.localeCompare(b.basename));
-  }
-  listArchived() {
-    const arch = this.archiveFolder();
-    return this.app.vault.getMarkdownFiles().filter((f) => this.inFolder(f, arch)).sort((a, b) => a.basename.localeCompare(b.basename));
-  }
-  listCategories() {
-    const cats = this.categoriesFolder();
-    return this.app.vault.getMarkdownFiles().filter((f) => this.inFolder(f, cats)).map((file) => ({ name: file.basename, file, members: [] })).sort((a, b) => a.name.localeCompare(b.name));
-  }
-  async categoryMembers(file) {
-    const content = await this.app.vault.cachedRead(file);
-    return this.parseMembers(content);
-  }
-  // ----------------------------------------------------------- mutations
-  async ensureFolder(path) {
-    const norm = (0, import_obsidian9.normalizePath)(path);
-    if (!norm || norm === "/") return;
-    if (this.app.vault.getAbstractFileByPath(norm) instanceof import_obsidian9.TFolder) return;
-    const parts = norm.split("/");
-    let cur = "";
-    for (const p of parts) {
-      cur = cur ? cur + "/" + p : p;
-      if (!(this.app.vault.getAbstractFileByPath(cur) instanceof import_obsidian9.TFolder)) {
-        await this.app.vault.createFolder(cur).catch(() => {
-        });
-      }
-    }
-  }
-  sanitize(name) {
-    return name.replace(/[\\/:*?"<>|#^[\]]/g, "-").trim();
-  }
-  uniquePath(folder, base) {
-    let name = base;
-    for (let i = 1; i < 1e3; i++) {
-      const path = (0, import_obsidian9.normalizePath)(`${folder}/${name}.md`);
-      if (!this.app.vault.getAbstractFileByPath(path)) return path;
-      name = `${base} ${i + 1}`;
-    }
-    return (0, import_obsidian9.normalizePath)(`${folder}/${base} ${Date.now()}.md`);
-  }
-  /** Create a category note (with the list heading) if it doesn't exist. */
-  async createCategory(name) {
-    const clean = this.sanitize(name);
-    await this.ensureFolder(this.categoriesFolder());
-    const existing = this.app.vault.getAbstractFileByPath(
-      (0, import_obsidian9.normalizePath)(`${this.categoriesFolder()}/${clean}.md`)
-    );
-    if (existing instanceof import_obsidian9.TFile) return existing;
-    const body = `---
-type: category
----
-
-# ${clean}
-
-## ${this.heading()}
-`;
-    const path = this.uniquePath(this.categoriesFolder(), clean);
-    return this.app.vault.create(path, body);
-  }
-  /** Create a note in the notes folder, optionally assigning a category. */
-  async createNote(title, category) {
-    const clean = this.sanitize(title);
-    await this.ensureFolder(this.notesFolder());
-    const path = this.uniquePath(this.notesFolder(), clean);
-    const file = await this.app.vault.create(path, `# ${clean}
-
-`);
-    if (category) await this.assign(file, category);
-    return file;
-  }
-  /** Delete a note (to the user's configured trash) and delink it from every
-   * category. */
-  async deleteNote(file) {
-    for (const cat of this.listCategories()) {
-      await this.removeMember(cat.file, file.basename);
-    }
-    const fm = this.app.fileManager;
-    if (typeof fm.trashFile === "function") await fm.trashFile(file);
-    else await this.app.vault.trash(file, true);
-  }
-  /** Assign `file` to `category`: write the frontmatter entry AND the
-   * alphabetized wikilink in the category note (creating it if needed). */
-  async assign(file, category) {
-    const catFile = await this.createCategory(category);
-    await this.app.fileManager.processFrontMatter(file, (fm) => {
-      const list = Array.isArray(fm.categories) ? fm.categories.map(String) : fm.categories ? [String(fm.categories)] : [];
-      if (!list.includes(catFile.basename)) list.push(catFile.basename);
-      fm.categories = list;
-    });
-    await this.addMember(catFile, file.basename);
-  }
-  async unassign(file, category) {
-    const catFile = this.app.vault.getAbstractFileByPath(
-      (0, import_obsidian9.normalizePath)(`${this.categoriesFolder()}/${this.sanitize(category)}.md`)
-    );
-    if (catFile instanceof import_obsidian9.TFile) await this.removeMember(catFile, file.basename);
-    await this.app.fileManager.processFrontMatter(file, (fm) => {
-      if (Array.isArray(fm.categories)) {
-        fm.categories = fm.categories.map(String).filter((c) => c !== category);
-      } else if (fm.categories === category) {
-        delete fm.categories;
-      }
-    });
-  }
-  /** Archive a note: remove it from every category list, then move it into the
-   * Archive subfolder (inbound links elsewhere are repointed by Obsidian). */
-  async archiveNote(file) {
-    for (const cat of this.listCategories()) {
-      await this.removeMember(cat.file, file.basename);
-    }
-    await this.ensureFolder(this.archiveFolder());
-    let dest = (0, import_obsidian9.normalizePath)(`${this.archiveFolder()}/${file.name}`);
-    if (this.app.vault.getAbstractFileByPath(dest)) {
-      dest = this.uniquePath(this.archiveFolder(), file.basename);
-    }
-    await this.app.fileManager.renameFile(file, dest);
-    await this.app.fileManager.processFrontMatter(file, (fm) => {
-      fm.archived = true;
-    });
-  }
-  async restoreNote(file) {
-    await this.ensureFolder(this.notesFolder());
-    let dest = (0, import_obsidian9.normalizePath)(`${this.notesFolder()}/${file.name}`);
-    if (this.app.vault.getAbstractFileByPath(dest)) {
-      dest = this.uniquePath(this.notesFolder(), file.basename);
-    }
-    await this.app.fileManager.renameFile(file, dest);
-    await this.app.fileManager.processFrontMatter(file, (fm) => {
-      delete fm.archived;
-    });
-  }
-  // -------------------------------------------------- category list I/O
-  headingRe() {
-    const esc = this.heading().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    return new RegExp(`^#{1,6}\\s+${esc}:?\\s*$`, "i");
-  }
-  parseMembers(content) {
-    const lines = content.split("\n");
-    const start = lines.findIndex((l) => this.headingRe().test(l));
-    if (start === -1) return [];
-    const out = [];
-    for (let i = start + 1; i < lines.length; i++) {
-      if (/^#{1,6}\s/.test(lines[i])) break;
-      const m = lines[i].match(/^\s*-\s+\[\[([^\]|]+)(?:\|[^\]]+)?\]\]\s*$/);
-      if (m) out.push(m[1].trim());
-    }
-    return out;
-  }
-  async writeMembers(file, members) {
-    const sorted = [...new Set(members)].sort(
-      (a, b) => a.localeCompare(b, void 0, { sensitivity: "base" })
-    );
-    await this.app.vault.process(file, (content) => {
-      const lines = content.split("\n");
-      let start = lines.findIndex((l) => this.headingRe().test(l));
-      if (start === -1) {
-        const trimmed = content.replace(/\n+$/, "");
-        const block2 = [`## ${this.heading()}`, "", ...sorted.map((m) => `- [[${m}]]`)].join("\n");
-        return (trimmed ? trimmed + "\n\n" : "") + block2 + "\n";
-      }
-      let end = lines.length;
-      for (let i = start + 1; i < lines.length; i++) {
-        if (/^#{1,6}\s/.test(lines[i])) {
-          end = i;
-          break;
-        }
-      }
-      const block = ["", ...sorted.map((m) => `- [[${m}]]`), ""];
-      lines.splice(start + 1, end - (start + 1), ...block);
-      return lines.join("\n");
-    });
-  }
-  async addMember(file, basename) {
-    const members = await this.categoryMembers(file);
-    if (members.includes(basename)) return;
-    members.push(basename);
-    await this.writeMembers(file, members);
-  }
-  async removeMember(file, basename) {
-    const members = await this.categoryMembers(file);
-    if (!members.includes(basename)) return;
-    await this.writeMembers(
-      file,
-      members.filter((m) => m !== basename)
-    );
-  }
-};
-
-// node_modules/dash-core/src/core/streak.ts
-var DEFAULT_STREAK = { current: 0, longest: 0, lastDayCounted: "" };
-function currentStreakFromDays(counts) {
-  const start = counts[0] ? 0 : 1;
-  let n = 0;
-  for (let i = start; i < counts.length; i++) {
-    if (!counts[i]) break;
-    n++;
-  }
-  return n;
-}
-
-// node_modules/dash-core/src/panels/layout.ts
-var MAX_COLUMNS = 3;
-function clampInt(v, lo, hi) {
-  const n = Math.floor(Number.isFinite(v) ? v : lo);
-  return Math.max(lo, Math.min(hi, n));
-}
-function computeLayout(order, enabled, columns, spans) {
-  const ids = order.filter((id) => enabled[id] !== false);
-  const raw = ids.map((id) => {
-    var _a, _b;
-    return {
-      id,
-      col: clampInt((_a = columns[id]) != null ? _a : 1, 1, MAX_COLUMNS),
-      span: clampInt((_b = spans[id]) != null ? _b : 1, 1, MAX_COLUMNS)
-    };
-  });
-  const configured = raw.some((p) => p.col > 1 || p.span > 1);
-  if (!configured) {
-    return { configured: false, columns: 1, placements: ids.map((id) => ({ id, column: 1, span: 1 })) };
-  }
-  let N = 1;
-  for (const p of raw) N = Math.max(N, p.col + p.span - 1);
-  N = Math.min(MAX_COLUMNS, Math.max(1, N));
-  const placements = raw.map((p) => {
-    const column = p.col > N ? 1 : p.col;
-    const span = Math.max(1, Math.min(p.span, N - column + 1));
-    return { id: p.id, column, span };
-  });
-  return { configured: true, columns: N, placements };
-}
 
 // src/panels/todomodal.ts
 var import_obsidian10 = require("obsidian");
@@ -2430,7 +2436,7 @@ function plural(n, one, many) {
 }
 
 // src/panels/todo.ts
-var TodoPanel = class extends BasePanel {
+var TodoPanel = class extends BasePanel2 {
   constructor() {
     super(...arguments);
     this.id = "todo";
@@ -3070,7 +3076,7 @@ var LocalEventModal = class extends import_obsidian15.Modal {
 };
 
 // src/panels/agenda.ts
-var AgendaPanel = class extends BasePanel {
+var AgendaPanel = class extends BasePanel2 {
   constructor() {
     super(...arguments);
     this.id = "agenda";
@@ -3257,7 +3263,7 @@ var AgendaPanel = class extends BasePanel {
 
 // src/panels/calendar.ts
 var import_obsidian17 = require("obsidian");
-var CalendarPanel = class extends BasePanel {
+var CalendarPanel = class extends BasePanel2 {
   constructor() {
     super(...arguments);
     this.id = "calendar";
@@ -3359,7 +3365,7 @@ var FIELDS = [
   { key: "log-supplemental", label: "Daily log \xB7 Supplemental", spec: LOG_FIELD_SPECS.supplemental },
   { key: "reconsider", label: "Reconsider tomorrow", spec: LOG_FIELD_SPECS.reconsider, stripPlaceholder: true }
 ];
-var JournalPanel = class extends BasePanel {
+var JournalPanel = class extends BasePanel2 {
   constructor() {
     super(...arguments);
     this.id = "journal";
@@ -3464,7 +3470,7 @@ function commandButton(parent, bridge, fullId, label, opts = {}) {
 }
 
 // src/panels/arfid.ts
-var ArfidPanel = class extends BasePanel {
+var ArfidPanel = class extends BasePanel2 {
   constructor() {
     super(...arguments);
     this.id = "arfid";
@@ -3498,7 +3504,7 @@ var ArfidPanel = class extends BasePanel {
 };
 
 // src/panels/spiral.ts
-var SpiralPanel = class extends BasePanel {
+var SpiralPanel = class extends BasePanel2 {
   constructor() {
     super(...arguments);
     this.id = "spiral";
@@ -3532,7 +3538,7 @@ var SpiralPanel = class extends BasePanel {
 
 // src/panels/crm.ts
 var import_obsidian19 = require("obsidian");
-var CrmPanel = class extends BasePanel {
+var CrmPanel = class extends BasePanel2 {
   constructor() {
     super(...arguments);
     this.id = "crm";
@@ -3650,7 +3656,7 @@ var CrmInteractionModal = class extends import_obsidian19.Modal {
 
 // src/panels/meals.ts
 var import_obsidian20 = require("obsidian");
-var MealsPanel = class extends BasePanel {
+var MealsPanel = class extends BasePanel2 {
   constructor() {
     super(...arguments);
     this.id = "meals";
@@ -3766,7 +3772,7 @@ var GROUPS = [
     ]
   }
 ];
-var ActionsPanel = class extends BasePanel {
+var ActionsPanel = class extends BasePanel2 {
   constructor() {
     super(...arguments);
     this.id = "actions";
@@ -3956,7 +3962,7 @@ var CategoryPromptModal = class extends import_obsidian21.Modal {
 
 // src/panels/search.ts
 var BODY_SCAN_CAP = 1e5;
-var SearchPanel = class extends BasePanel {
+var SearchPanel = class extends BasePanel2 {
   constructor() {
     super(...arguments);
     this.id = "search";
@@ -4166,7 +4172,7 @@ function firstMatchingLine(content, needle) {
 
 // src/panels/secondbrain.ts
 var import_obsidian23 = require("obsidian");
-var SecondBrainPanel = class extends BasePanel {
+var SecondBrainPanel = class extends BasePanel2 {
   constructor() {
     super(...arguments);
     this.id = "secondbrain";
@@ -4326,7 +4332,7 @@ var ConfirmModal = class extends import_obsidian23.Modal {
 };
 
 // src/panels/places.ts
-var PlacesPanel = class extends BasePanel {
+var PlacesPanel = class extends BasePanel2 {
   constructor() {
     super(...arguments);
     this.id = "places";
@@ -5126,6 +5132,21 @@ function seedTodos() {
 
 // src/view.ts
 var import_obsidian26 = require("obsidian");
+
+// src/companion.ts
+function meridianCompanion(bridge) {
+  return {
+    spiralEntriesForDate: (date) => bridge.spiralEntriesForDate(date),
+    nourishmentEntriesForDate: async (date) => (await bridge.arfidToday(date)).length
+  };
+}
+
+// src/copy.ts
+var MERIDIAN_COPY = {
+  // Populated as copy-bearing core panels are migrated.
+};
+
+// src/view.ts
 var VIEW_TYPE_MERIDIAN = "meridian-dashboard";
 var MeridianView = class extends import_obsidian26.ItemView {
   constructor(leaf, plugin) {
@@ -5148,6 +5169,9 @@ var MeridianView = class extends import_obsidian26.ItemView {
       plugin: this.plugin,
       bridge: this.plugin.bridge,
       todos: this.plugin.todos,
+      streak: this.plugin.streak,
+      companion: meridianCompanion(this.plugin.bridge),
+      copy: MERIDIAN_COPY,
       runtime: this.plugin.runtime,
       settings: () => this.plugin.settings,
       requestRefresh: (reason = "manual") => void this.refreshPanels(reason),
