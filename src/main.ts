@@ -11,6 +11,7 @@ import {
 import { Bridge } from "./core/bridge";
 import { TodoStore } from "dash-core";
 import { seedTodos, DIRECTIVES_HEADER } from "./seed";
+import { MERIDIAN_TODO_COPY } from "./copy";
 import { DirectivesStore } from "dash-core";
 import { LibraryStore } from "dash-core";
 import { appendToDailyField, getDailyNoteFile, headingField, readDailyNoteRaw, readField, readMarkerLogLines } from "dash-core";
@@ -19,7 +20,7 @@ import { LocalEvent } from "dash-core";
 import { DEFAULT_STREAK, StreakData, currentStreakFromDays } from "dash-core";
 import { MeridianRuntime, RefreshReason } from "./panels/types";
 import { MeridianView, VIEW_TYPE_MERIDIAN } from "./view";
-import { TodoEditModal } from "./panels/todomodal";
+import { TodoEditModal } from "dash-core";
 import { PromptModal } from "dash-core";
 import { WeekReviewModal } from "./panels/weekreview";
 import { LocalEventModal } from "./panels/localeventmodal";
@@ -154,7 +155,7 @@ export default class MeridianDashPlugin extends Plugin {
 		this.addCommand({
 			id: "add-directive",
 			name: "Add a directive",
-			callback: () => new TodoEditModal(this.app, this.todos, undefined, () => this.refreshOpenViews("vault")).open(),
+			callback: () => new TodoEditModal(this.app, this.todos, undefined, () => this.refreshOpenViews("vault"), MERIDIAN_TODO_COPY).open(),
 		});
 		// id (Obsidian prefixes with `meridian-dash:`) → field
 		const logCommands: Array<{ id: string; field: LogField }> = [
@@ -284,7 +285,7 @@ export default class MeridianDashPlugin extends Plugin {
 					this.refreshOpenViews("vault");
 					new Notice(`Directive filed: ${text}.`);
 				} else {
-					new TodoEditModal(this.app, this.todos, undefined, () => this.refreshOpenViews("vault")).open();
+					new TodoEditModal(this.app, this.todos, undefined, () => this.refreshOpenViews("vault"), MERIDIAN_TODO_COPY).open();
 				}
 				return;
 			}

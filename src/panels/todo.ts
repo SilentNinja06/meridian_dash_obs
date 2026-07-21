@@ -2,7 +2,8 @@ import { Notice, moment } from "obsidian";
 import { BasePanel, placard } from "./types";
 import { TodoInstance, describeRecurrence } from "dash-core";
 import { allSubItemsDone, subItemDone, subItemsDoneCount } from "dash-core";
-import { TodoEditModal } from "./todomodal";
+import { TodoEditModal } from "dash-core";
+import { MERIDIAN_TODO_COPY } from "../copy";
 import { WeekReviewModal } from "./weekreview";
 
 /**
@@ -39,7 +40,7 @@ export class TodoPanel extends BasePanel {
 
 		const addBtn = this.el.createEl("button", { cls: "mrd-btn mrd-btn-primary mrd-todo-add", text: "+ New directive" });
 		addBtn.addEventListener("click", () =>
-			new TodoEditModal(this.ctx.app, store, undefined, () => this.after()).open()
+			new TodoEditModal(this.ctx.app, store, undefined, () => this.after(), MERIDIAN_TODO_COPY).open()
 		);
 
 		const list = this.el.createDiv({ cls: "mrd-todo-list" });
@@ -116,7 +117,7 @@ export class TodoPanel extends BasePanel {
 			});
 		}
 		this.iconBtn(actions, "✎", "Edit", false, () => {
-			new TodoEditModal(this.ctx.app, store, item, () => this.after()).open();
+			new TodoEditModal(this.ctx.app, store, item, () => this.after(), MERIDIAN_TODO_COPY).open();
 		});
 		if (inst.skipped) {
 			this.iconBtn(actions, "↩", "Un-postpone", false, async () => {

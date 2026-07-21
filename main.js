@@ -74,7 +74,7 @@ function calendarColor(index) {
 }
 
 // src/panels/clock.ts
-var import_obsidian8 = require("obsidian");
+var import_obsidian9 = require("obsidian");
 
 // node_modules/dash-core/src/core/ics.ts
 var import_obsidian = require("obsidian");
@@ -1625,6 +1625,158 @@ var CalendarPanel = class extends BasePanel {
   }
 };
 
+// node_modules/dash-core/src/panels/todomodal.ts
+var import_obsidian8 = require("obsidian");
+var WEEKDAYS = [
+  { v: 1, label: "Mon" },
+  { v: 2, label: "Tue" },
+  { v: 3, label: "Wed" },
+  { v: 4, label: "Thu" },
+  { v: 5, label: "Fri" },
+  { v: 6, label: "Sat" },
+  { v: 0, label: "Sun" }
+];
+var TodoEditModal = class extends import_obsidian8.Modal {
+  constructor(app, store, existing, onDone, copy, defaults) {
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l;
+    super(app);
+    this.store = store;
+    this.existing = existing;
+    this.onDone = onDone;
+    this.copy = copy;
+    this.defaults = defaults;
+    __publicField(this, "text");
+    __publicField(this, "recType");
+    __publicField(this, "weeklyDays");
+    __publicField(this, "monthlyDate");
+    __publicField(this, "everyN");
+    __publicField(this, "scheduledDate");
+    __publicField(this, "scheduledTime");
+    __publicField(this, "dueDate");
+    __publicField(this, "showOnWeekPrint");
+    const e = existing;
+    this.text = (_b = (_a = e == null ? void 0 : e.text) != null ? _a : defaults == null ? void 0 : defaults.text) != null ? _b : "";
+    this.recType = (_c = e == null ? void 0 : e.recurrence.type) != null ? _c : "none";
+    this.weeklyDays = new Set((_d = e == null ? void 0 : e.recurrence.days) != null ? _d : [(0, import_obsidian8.moment)().day()]);
+    this.monthlyDate = (_e = e == null ? void 0 : e.recurrence.date) != null ? _e : (0, import_obsidian8.moment)().date();
+    this.everyN = (_f = e == null ? void 0 : e.recurrence.n) != null ? _f : 2;
+    this.scheduledDate = (_g = e == null ? void 0 : e.scheduledDate) != null ? _g : "";
+    this.scheduledTime = (_h = e == null ? void 0 : e.scheduledTime) != null ? _h : "";
+    this.dueDate = (_j = (_i = e == null ? void 0 : e.dueDate) != null ? _i : defaults == null ? void 0 : defaults.dueDate) != null ? _j : "";
+    this.showOnWeekPrint = (_l = (_k = e == null ? void 0 : e.showOnWeekPrint) != null ? _k : defaults == null ? void 0 : defaults.showOnWeekPrint) != null ? _l : false;
+  }
+  onOpen() {
+    this.titleEl.setText(this.existing ? this.copy.editTitle : this.copy.newTitle);
+    const { contentEl } = this;
+    new import_obsidian8.Setting(contentEl).setName(this.copy.itemLabel).addText((t) => {
+      t.setPlaceholder("What needs doing").setValue(this.text).onChange((v) => this.text = v);
+      t.inputEl.classList.add("mrd-modal-wide");
+      t.inputEl.focus();
+      t.inputEl.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          this.submit();
+        }
+      });
+    });
+    const dynamic = contentEl.createDiv();
+    new import_obsidian8.Setting(contentEl).setName("Repeat").addDropdown((dd) => {
+      dd.addOptions({
+        none: "One-time",
+        daily: "Daily",
+        weekdays: "Weekdays (Mon\u2013Fri)",
+        weekly: "Weekly",
+        monthly: "Monthly",
+        everyNDays: "Every N days"
+      });
+      dd.setValue(this.recType).onChange((v) => {
+        this.recType = v;
+        this.renderDynamic(dynamic);
+      });
+    });
+    contentEl.appendChild(dynamic);
+    this.renderDynamic(dynamic);
+    new import_obsidian8.Setting(contentEl).setName("Appear on").setDesc("Optional. Hidden until this date (and time). For repeats, the start date.").addText((t) => {
+      t.inputEl.type = "date";
+      t.setValue(this.scheduledDate).onChange((v) => this.scheduledDate = v);
+    }).addText((t) => {
+      t.inputEl.type = "time";
+      t.setValue(this.scheduledTime).onChange((v) => this.scheduledTime = v);
+    });
+    new import_obsidian8.Setting(contentEl).setName("Due").setDesc("Optional soft deadline. Shown as a chip; past-due reads \u201Coverdue\u201D.").addText((t) => {
+      t.inputEl.type = "date";
+      t.setValue(this.dueDate).onChange((v) => this.dueDate = v);
+    });
+    new import_obsidian8.Setting(contentEl).setName("Show on printed week planner").setDesc(this.copy.weekPrintDesc).addToggle((t) => t.setValue(this.showOnWeekPrint).onChange((v) => this.showOnWeekPrint = v));
+    new import_obsidian8.Setting(contentEl).addButton((b) => b.setButtonText("Cancel").onClick(() => this.close())).addButton((b) => b.setButtonText(this.existing ? "Save" : "Add").setCta().onClick(() => this.submit()));
+  }
+  renderDynamic(host) {
+    host.empty();
+    if (this.recType === "weekly") {
+      const s = new import_obsidian8.Setting(host).setName("On days");
+      for (const d of WEEKDAYS) {
+        const btn = s.controlEl.createEl("button", { cls: "mrd-day-toggle", text: d.label });
+        if (this.weeklyDays.has(d.v)) btn.addClass("is-on");
+        btn.addEventListener("click", () => {
+          if (this.weeklyDays.has(d.v)) this.weeklyDays.delete(d.v);
+          else this.weeklyDays.add(d.v);
+          btn.toggleClass("is-on", this.weeklyDays.has(d.v));
+        });
+      }
+    } else if (this.recType === "monthly") {
+      new import_obsidian8.Setting(host).setName("Day of month").addText((t) => {
+        t.inputEl.type = "number";
+        t.inputEl.min = "1";
+        t.inputEl.max = "31";
+        t.setValue(String(this.monthlyDate)).onChange((v) => this.monthlyDate = clamp(Number(v), 1, 31));
+      });
+    } else if (this.recType === "everyNDays") {
+      new import_obsidian8.Setting(host).setName("Every").setDesc("days").addText((t) => {
+        t.inputEl.type = "number";
+        t.inputEl.min = "1";
+        t.setValue(String(this.everyN)).onChange((v) => this.everyN = Math.max(1, Number(v) || 1));
+      });
+    }
+  }
+  buildRecurrence() {
+    switch (this.recType) {
+      case "weekly":
+        return { type: "weekly", days: [...this.weeklyDays].sort((a, b) => a - b) };
+      case "monthly":
+        return { type: "monthly", date: this.monthlyDate };
+      case "everyNDays":
+        return { type: "everyNDays", n: this.everyN };
+      default:
+        return { type: this.recType };
+    }
+  }
+  async submit() {
+    const text = this.text.trim();
+    if (!text) {
+      new import_obsidian8.Notice(this.copy.needsText);
+      return;
+    }
+    const patch = {
+      text,
+      recurrence: this.buildRecurrence(),
+      scheduledDate: this.scheduledDate || void 0,
+      scheduledTime: this.scheduledTime || void 0,
+      dueDate: this.dueDate || void 0,
+      showOnWeekPrint: this.showOnWeekPrint
+    };
+    if (this.existing) await this.store.update(this.existing.id, patch);
+    else await this.store.add(patch);
+    this.close();
+    this.onDone();
+  }
+  onClose() {
+    this.contentEl.empty();
+  }
+};
+function clamp(n, lo, hi) {
+  return Math.max(lo, Math.min(hi, Number.isFinite(n) ? n : lo));
+}
+
 // src/panels/types.ts
 var BasePanel2 = class extends BasePanel {
 };
@@ -1659,7 +1811,7 @@ var ClockPanel = class extends BasePanel2 {
     this.tick();
   }
   tick() {
-    const now = (0, import_obsidian8.moment)();
+    const now = (0, import_obsidian9.moment)();
     if (this.digitsEl) this.digitsEl.setText(now.format("HHmm"));
     if (this.secEl) this.secEl.setText(now.format("ss"));
     if (this.dateEl) this.dateEl.setText(now.format("dddd \xB7 YYYY-MM-DD").toUpperCase());
@@ -1688,7 +1840,7 @@ function humanize(totalSecs) {
 }
 
 // src/panels/qotd.ts
-var import_obsidian9 = require("obsidian");
+var import_obsidian10 = require("obsidian");
 var QUOTES_PATH = "scripts/qotd/quotes.json";
 var QotdPanel = class extends BasePanel2 {
   constructor() {
@@ -1715,7 +1867,7 @@ var QotdPanel = class extends BasePanel2 {
       card.createDiv({ cls: "mrd-muted", text: "The quotation archive is present but empty." });
       return;
     }
-    const m = (0, import_obsidian9.moment)((0, import_obsidian9.moment)().format("YYYY-MM-DD"), "YYYY-MM-DD");
+    const m = (0, import_obsidian10.moment)((0, import_obsidian10.moment)().format("YYYY-MM-DD"), "YYYY-MM-DD");
     const dayNumber = Math.floor(m.valueOf() / 864e5);
     const idx = (dayNumber % n + n) % n;
     const q = quotes[idx];
@@ -1757,11 +1909,11 @@ function parseQuotes(raw) {
 }
 
 // src/panels/meridian.ts
-var import_obsidian11 = require("obsidian");
+var import_obsidian12 = require("obsidian");
 
 // src/panels/linehistory.ts
-var import_obsidian10 = require("obsidian");
-var LineHistoryModal = class extends import_obsidian10.Modal {
+var import_obsidian11 = require("obsidian");
+var LineHistoryModal = class extends import_obsidian11.Modal {
   constructor(app, plugin) {
     super(app);
     this.plugin = plugin;
@@ -1779,7 +1931,7 @@ var LineHistoryModal = class extends import_obsidian10.Modal {
       const entry = history[i];
       const row = list.createDiv({ cls: "mrd-linehist-row" });
       row.createDiv({ cls: "mrd-linehist-line", text: entry.line });
-      row.createDiv({ cls: "mrd-linehist-when", text: (0, import_obsidian10.moment)(entry.at).fromNow() });
+      row.createDiv({ cls: "mrd-linehist-when", text: (0, import_obsidian11.moment)(entry.at).fromNow() });
     }
   }
   onClose() {
@@ -2187,7 +2339,7 @@ var MeridianPanel = class extends BasePanel2 {
     const bag = fresh.length ? fresh : candidates;
     const line = bag[Math.floor(Math.random() * bag.length)];
     if (pool === "milestone") {
-      this.ctx.plugin.milestoneShownDate = (0, import_obsidian11.moment)().format("YYYY-MM-DD");
+      this.ctx.plugin.milestoneShownDate = (0, import_obsidian12.moment)().format("YYYY-MM-DD");
       void this.ctx.plugin.saveData_();
     }
     ring.push(line);
@@ -2202,7 +2354,7 @@ var MeridianPanel = class extends BasePanel2 {
   }
   async weights() {
     const { todos, bridge, runtime, plugin } = this.ctx;
-    const todayStr2 = (0, import_obsidian11.moment)().format("YYYY-MM-DD");
+    const todayStr2 = (0, import_obsidian12.moment)().format("YYYY-MM-DD");
     const pending = todos.pendingCount();
     const overdueTodos = todos.overdueCount();
     const crm = safe(() => bridge.crmContacts(), []);
@@ -2241,7 +2393,7 @@ var MeridianPanel = class extends BasePanel2 {
     const completionsMilestone = doneToday > 0 && doneToday % 5 === 0;
     const streak = this.ctx.plugin.streak;
     const streakSeven = streak.current > 0 && streak.current % 7 === 0;
-    const newRecord = this.ctx.runtime.streakRecordDate === (0, import_obsidian11.moment)().format("YYYY-MM-DD");
+    const newRecord = this.ctx.runtime.streakRecordDate === (0, import_obsidian12.moment)().format("YYYY-MM-DD");
     return completionsMilestone || streakSeven || newRecord;
   }
 };
@@ -2301,147 +2453,17 @@ async function safeAsync(fn, fallback) {
 // src/panels/todo.ts
 var import_obsidian14 = require("obsidian");
 
-// src/panels/todomodal.ts
-var import_obsidian12 = require("obsidian");
-var WEEKDAYS = [
-  { v: 1, label: "Mon" },
-  { v: 2, label: "Tue" },
-  { v: 3, label: "Wed" },
-  { v: 4, label: "Thu" },
-  { v: 5, label: "Fri" },
-  { v: 6, label: "Sat" },
-  { v: 0, label: "Sun" }
-];
-var TodoEditModal = class extends import_obsidian12.Modal {
-  constructor(app, store, existing, onDone, defaults) {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l;
-    super(app);
-    this.store = store;
-    this.existing = existing;
-    this.onDone = onDone;
-    this.defaults = defaults;
-    const e = existing;
-    this.text = (_b = (_a = e == null ? void 0 : e.text) != null ? _a : defaults == null ? void 0 : defaults.text) != null ? _b : "";
-    this.recType = (_c = e == null ? void 0 : e.recurrence.type) != null ? _c : "none";
-    this.weeklyDays = new Set((_d = e == null ? void 0 : e.recurrence.days) != null ? _d : [(0, import_obsidian12.moment)().day()]);
-    this.monthlyDate = (_e = e == null ? void 0 : e.recurrence.date) != null ? _e : (0, import_obsidian12.moment)().date();
-    this.everyN = (_f = e == null ? void 0 : e.recurrence.n) != null ? _f : 2;
-    this.scheduledDate = (_g = e == null ? void 0 : e.scheduledDate) != null ? _g : "";
-    this.scheduledTime = (_h = e == null ? void 0 : e.scheduledTime) != null ? _h : "";
-    this.dueDate = (_j = (_i = e == null ? void 0 : e.dueDate) != null ? _i : defaults == null ? void 0 : defaults.dueDate) != null ? _j : "";
-    this.showOnWeekPrint = (_l = (_k = e == null ? void 0 : e.showOnWeekPrint) != null ? _k : defaults == null ? void 0 : defaults.showOnWeekPrint) != null ? _l : false;
-  }
-  onOpen() {
-    this.titleEl.setText(this.existing ? "Edit directive" : "New directive");
-    const { contentEl } = this;
-    new import_obsidian12.Setting(contentEl).setName("Directive").addText((t) => {
-      t.setPlaceholder("What needs doing").setValue(this.text).onChange((v) => this.text = v);
-      t.inputEl.classList.add("mrd-modal-wide");
-      t.inputEl.focus();
-      t.inputEl.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          this.submit();
-        }
-      });
-    });
-    const dynamic = contentEl.createDiv();
-    new import_obsidian12.Setting(contentEl).setName("Repeat").addDropdown((dd) => {
-      dd.addOptions({
-        none: "One-time",
-        daily: "Daily",
-        weekdays: "Weekdays (Mon\u2013Fri)",
-        weekly: "Weekly",
-        monthly: "Monthly",
-        everyNDays: "Every N days"
-      });
-      dd.setValue(this.recType).onChange((v) => {
-        this.recType = v;
-        this.renderDynamic(dynamic);
-      });
-    });
-    contentEl.appendChild(dynamic);
-    this.renderDynamic(dynamic);
-    new import_obsidian12.Setting(contentEl).setName("Appear on").setDesc("Optional. Hidden until this date (and time). For repeats, the start date.").addText((t) => {
-      t.inputEl.type = "date";
-      t.setValue(this.scheduledDate).onChange((v) => this.scheduledDate = v);
-    }).addText((t) => {
-      t.inputEl.type = "time";
-      t.setValue(this.scheduledTime).onChange((v) => this.scheduledTime = v);
-    });
-    new import_obsidian12.Setting(contentEl).setName("Due").setDesc("Optional soft deadline. Shown as a chip; past-due reads \u201Coverdue\u201D.").addText((t) => {
-      t.inputEl.type = "date";
-      t.setValue(this.dueDate).onChange((v) => this.dueDate = v);
-    });
-    new import_obsidian12.Setting(contentEl).setName("Show on printed week planner").setDesc("Draw this directive on the week-at-a-glance print on its scheduled, due, or recurrence days.").addToggle((t) => t.setValue(this.showOnWeekPrint).onChange((v) => this.showOnWeekPrint = v));
-    new import_obsidian12.Setting(contentEl).addButton((b) => b.setButtonText("Cancel").onClick(() => this.close())).addButton((b) => b.setButtonText(this.existing ? "Save" : "Add").setCta().onClick(() => this.submit()));
-  }
-  renderDynamic(host) {
-    host.empty();
-    if (this.recType === "weekly") {
-      const s = new import_obsidian12.Setting(host).setName("On days");
-      for (const d of WEEKDAYS) {
-        const btn = s.controlEl.createEl("button", { cls: "mrd-day-toggle", text: d.label });
-        if (this.weeklyDays.has(d.v)) btn.addClass("is-on");
-        btn.addEventListener("click", () => {
-          if (this.weeklyDays.has(d.v)) this.weeklyDays.delete(d.v);
-          else this.weeklyDays.add(d.v);
-          btn.toggleClass("is-on", this.weeklyDays.has(d.v));
-        });
-      }
-    } else if (this.recType === "monthly") {
-      new import_obsidian12.Setting(host).setName("Day of month").addText((t) => {
-        t.inputEl.type = "number";
-        t.inputEl.min = "1";
-        t.inputEl.max = "31";
-        t.setValue(String(this.monthlyDate)).onChange((v) => this.monthlyDate = clamp(Number(v), 1, 31));
-      });
-    } else if (this.recType === "everyNDays") {
-      new import_obsidian12.Setting(host).setName("Every").setDesc("days").addText((t) => {
-        t.inputEl.type = "number";
-        t.inputEl.min = "1";
-        t.setValue(String(this.everyN)).onChange((v) => this.everyN = Math.max(1, Number(v) || 1));
-      });
-    }
-  }
-  buildRecurrence() {
-    switch (this.recType) {
-      case "weekly":
-        return { type: "weekly", days: [...this.weeklyDays].sort((a, b) => a - b) };
-      case "monthly":
-        return { type: "monthly", date: this.monthlyDate };
-      case "everyNDays":
-        return { type: "everyNDays", n: this.everyN };
-      default:
-        return { type: this.recType };
-    }
-  }
-  async submit() {
-    const text = this.text.trim();
-    if (!text) {
-      new import_obsidian12.Notice("A directive needs text.");
-      return;
-    }
-    const patch = {
-      text,
-      recurrence: this.buildRecurrence(),
-      scheduledDate: this.scheduledDate || void 0,
-      scheduledTime: this.scheduledTime || void 0,
-      dueDate: this.dueDate || void 0,
-      showOnWeekPrint: this.showOnWeekPrint
-    };
-    if (this.existing) await this.store.update(this.existing.id, patch);
-    else await this.store.add(patch);
-    this.close();
-    this.onDone();
-  }
-  onClose() {
-    this.contentEl.empty();
-  }
+// src/copy.ts
+var MERIDIAN_TODO_COPY = {
+  editTitle: "Edit directive",
+  newTitle: "New directive",
+  itemLabel: "Directive",
+  weekPrintDesc: "Draw this directive on the week-at-a-glance print on its scheduled, due, or recurrence days.",
+  needsText: "A directive needs text."
 };
-function clamp(n, lo, hi) {
-  return Math.max(lo, Math.min(hi, Number.isFinite(n) ? n : lo));
-}
+var MERIDIAN_COPY = {
+  // Populated as copy-bearing core panels are migrated.
+};
 
 // src/panels/weekreview.ts
 var import_obsidian13 = require("obsidian");
@@ -2584,7 +2606,7 @@ var TodoPanel = class extends BasePanel2 {
     const addBtn = this.el.createEl("button", { cls: "mrd-btn mrd-btn-primary mrd-todo-add", text: "+ New directive" });
     addBtn.addEventListener(
       "click",
-      () => new TodoEditModal(this.ctx.app, store, void 0, () => this.after()).open()
+      () => new TodoEditModal(this.ctx.app, store, void 0, () => this.after(), MERIDIAN_TODO_COPY).open()
     );
     const list = this.el.createDiv({ cls: "mrd-todo-list" });
     if (active.length === 0) {
@@ -2653,7 +2675,7 @@ var TodoPanel = class extends BasePanel2 {
       });
     }
     this.iconBtn(actions, "\u270E", "Edit", false, () => {
-      new TodoEditModal(this.ctx.app, store, item, () => this.after()).open();
+      new TodoEditModal(this.ctx.app, store, item, () => this.after(), MERIDIAN_TODO_COPY).open();
     });
     if (inst.skipped) {
       this.iconBtn(actions, "\u21A9", "Un-postpone", false, async () => {
@@ -5192,11 +5214,6 @@ function meridianCompanion(bridge) {
   };
 }
 
-// src/copy.ts
-var MERIDIAN_COPY = {
-  // Populated as copy-bearing core panels are migrated.
-};
-
 // src/view.ts
 var VIEW_TYPE_MERIDIAN = "meridian-dashboard";
 var MeridianView = class extends import_obsidian27.ItemView {
@@ -5475,7 +5492,7 @@ var MeridianDashPlugin = class extends import_obsidian28.Plugin {
     this.addCommand({
       id: "add-directive",
       name: "Add a directive",
-      callback: () => new TodoEditModal(this.app, this.todos, void 0, () => this.refreshOpenViews("vault")).open()
+      callback: () => new TodoEditModal(this.app, this.todos, void 0, () => this.refreshOpenViews("vault"), MERIDIAN_TODO_COPY).open()
     });
     const logCommands = [
       { id: "log-primary", field: "primary" },
@@ -5598,7 +5615,7 @@ var MeridianDashPlugin = class extends import_obsidian28.Plugin {
           this.refreshOpenViews("vault");
           new import_obsidian28.Notice(`Directive filed: ${text}.`);
         } else {
-          new TodoEditModal(this.app, this.todos, void 0, () => this.refreshOpenViews("vault")).open();
+          new TodoEditModal(this.app, this.todos, void 0, () => this.refreshOpenViews("vault"), MERIDIAN_TODO_COPY).open();
         }
         return;
       }

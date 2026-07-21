@@ -1,4 +1,15 @@
-import type { DashCopy } from "dash-core";
+import type { DashCopy, TodoModalCopy } from "dash-core";
+
+/** MERIDIAN's vocabulary for the directive add/edit modal. Exact strings the
+ * dashboard has always shown — friendly injects its own plainer words. */
+export const MERIDIAN_TODO_COPY: TodoModalCopy = {
+	editTitle: "Edit directive",
+	newTitle: "New directive",
+	itemLabel: "Directive",
+	weekPrintDesc:
+		"Draw this directive on the week-at-a-glance print on its scheduled, due, or recurrence days.",
+	needsText: "A directive needs text.",
+};
 
 /**
  * MERIDIAN's user-facing chrome/status copy, injected into core panels so the
