@@ -5079,16 +5079,14 @@ type: category
 
 // src/core/streak.ts
 var DEFAULT_STREAK = { current: 0, longest: 0, lastDayCounted: "" };
-function advanceStreak(prev, todayCounts, today2, yesterday) {
-  if (!todayCounts || prev.lastDayCounted === today2) {
-    return { streak: prev, newRecord: false };
+function currentStreakFromDays(counts) {
+  const start = counts[0] ? 0 : 1;
+  let n = 0;
+  for (let i = start; i < counts.length; i++) {
+    if (!counts[i]) break;
+    n++;
   }
-  const current = prev.lastDayCounted === yesterday ? prev.current + 1 : 1;
-  const longest = Math.max(prev.longest, current);
-  return {
-    streak: { current, longest, lastDayCounted: today2 },
-    newRecord: longest > prev.longest
-  };
+  return n;
 }
 
 // src/view.ts
@@ -5747,19 +5745,35 @@ var MeridianDashPlugin = class extends import_obsidian28.Plugin {
     }
     return false;
   }
-  /** Recompute the streak for today. Idempotent per day; a broken streak is
-   * silent. Records a new-record day in runtime as a milestone trigger. */
+  /** Recompute the streak by scanning the daily notes backward from today, so
+   * the count is correct no matter when this runs (self-healing). Idempotent
+   * per day once today is locked in; a broken streak is silent. Records a
+   * new-record day in runtime as a milestone trigger. */
   async updateStreak() {
     const today2 = (0, import_obsidian28.moment)().format("YYYY-MM-DD");
     if (this.data.streak.lastDayCounted === today2) return;
-    const counts = await this.dayCounts(today2);
-    if (!counts) return;
-    const yesterday = (0, import_obsidian28.moment)().subtract(1, "day").format("YYYY-MM-DD");
-    const { streak, newRecord } = advanceStreak(this.data.streak, counts, today2, yesterday);
-    this.data.streak = streak;
-    if (newRecord) this.runtime.streakRecordDate = today2;
-    await this.saveData_();
-    this.refreshOpenViews("vault");
+    const counts = [];
+    for (let i = 0; i < 366; i++) {
+      const c = await this.dayCounts((0, import_obsidian28.moment)().subtract(i, "day").format("YYYY-MM-DD"));
+      counts.push(c);
+      if (!c && i >= 1) break;
+    }
+    const todayCounts = counts[0];
+    const current = currentStreakFromDays(counts);
+    const prevLongest = this.data.streak.longest;
+    const longest = Math.max(prevLongest, current);
+    const next = {
+      current,
+      longest,
+      lastDayCounted: todayCounts ? today2 : this.data.streak.lastDayCounted
+    };
+    const changed = next.current !== this.data.streak.current || next.longest !== this.data.streak.longest || next.lastDayCounted !== this.data.streak.lastDayCounted;
+    this.data.streak = next;
+    if (todayCounts && current > prevLongest) this.runtime.streakRecordDate = today2;
+    if (changed) {
+      await this.saveData_();
+      this.refreshOpenViews("vault");
+    }
   }
   /** Reschedule a one-shot timer to just after the next local midnight; on fire
    * it recomputes the streak (day rollover) and re-arms. */
@@ -5819,6 +5833,7 @@ var MeridianDashPlugin = class extends import_obsidian28.Plugin {
         return;
       }
       this.refreshOpenViews("vault");
+      void this.updateStreak();
     }, 300);
   }
 };

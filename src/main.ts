@@ -15,7 +15,7 @@ import { LibraryStore } from "./core/library";
 import { appendToDailyField, getDailyNoteFile, headingField, readDailyNoteRaw, readField, readMarkerLogLines } from "./core/dailynote";
 import { LOG_FIELD_LABELS, LOG_FIELD_SPECS, LOG_FIELDS, LogField, isLogField } from "./core/dailyfields";
 import { LocalEvent } from "./core/localevents";
-import { DEFAULT_STREAK, StreakData, advanceStreak } from "./core/streak";
+import { DEFAULT_STREAK, StreakData, currentStreakFromDays } from "./core/streak";
 import { MeridianRuntime, RefreshReason } from "./panels/types";
 import { MeridianView, VIEW_TYPE_MERIDIAN } from "./view";
 import { TodoEditModal } from "./panels/todomodal";
@@ -486,19 +486,44 @@ export default class MeridianDashPlugin extends Plugin {
 		return false;
 	}
 
-	/** Recompute the streak for today. Idempotent per day; a broken streak is
-	 * silent. Records a new-record day in runtime as a milestone trigger. */
+	/** Recompute the streak by scanning the daily notes backward from today, so
+	 * the count is correct no matter when this runs (self-healing). Idempotent
+	 * per day once today is locked in; a broken streak is silent. Records a
+	 * new-record day in runtime as a milestone trigger. */
 	async updateStreak(): Promise<void> {
 		const today = moment().format("YYYY-MM-DD");
-		if (this.data.streak.lastDayCounted === today) return; // already counted
-		const counts = await this.dayCounts(today);
-		if (!counts) return;
-		const yesterday = moment().subtract(1, "day").format("YYYY-MM-DD");
-		const { streak, newRecord } = advanceStreak(this.data.streak, counts, today, yesterday);
-		this.data.streak = streak;
-		if (newRecord) this.runtime.streakRecordDate = today;
-		await this.saveData_();
-		this.refreshOpenViews("vault");
+		if (this.data.streak.lastDayCounted === today) return; // already locked in today
+
+		// Walk backward, collecting whether each day qualifies, stopping at the
+		// first gap once we're past today/yesterday. dayCounts uses cachedRead, so
+		// repeated scans are cheap; the scan runs until today's first activity, then
+		// the lastDayCounted guard above short-circuits it for the rest of the day.
+		const counts: boolean[] = [];
+		for (let i = 0; i < 366; i++) {
+			const c = await this.dayCounts(moment().subtract(i, "day").format("YYYY-MM-DD"));
+			counts.push(c);
+			if (!c && i >= 1) break;
+		}
+
+		const todayCounts = counts[0];
+		const current = currentStreakFromDays(counts);
+		const prevLongest = this.data.streak.longest;
+		const longest = Math.max(prevLongest, current);
+		const next: StreakData = {
+			current,
+			longest,
+			lastDayCounted: todayCounts ? today : this.data.streak.lastDayCounted,
+		};
+		const changed =
+			next.current !== this.data.streak.current ||
+			next.longest !== this.data.streak.longest ||
+			next.lastDayCounted !== this.data.streak.lastDayCounted;
+		this.data.streak = next;
+		if (todayCounts && current > prevLongest) this.runtime.streakRecordDate = today;
+		if (changed) {
+			await this.saveData_();
+			this.refreshOpenViews("vault");
+		}
 	}
 
 	/** Reschedule a one-shot timer to just after the next local midnight; on fire
@@ -569,6 +594,13 @@ export default class MeridianDashPlugin extends Plugin {
 				return;
 			}
 			this.refreshOpenViews("vault");
+			// Recompute the streak when the vault changes — this is the moment
+			// today's note earns its mark (a completed task archived, a journal
+			// save, a marker-log line). Without this the streak only recomputed on
+			// open and at midnight, when today's note is still empty, so a day the
+			// dashboard stayed open through was never counted. Cheap once counted
+			// (guarded on lastDayCounted === today).
+			void this.updateStreak();
 		}, 300);
 	}
 }
