@@ -50,6 +50,9 @@ export class MeridianView extends ItemView {
 			copy: MERIDIAN_COPY,
 			runtime: this.plugin.runtime,
 			settings: () => this.plugin.settings,
+			agendaCache: this.plugin.agendaCache,
+			localEvents: this.plugin.localEvents,
+			persist: () => this.plugin.saveData_(),
 			requestRefresh: (reason: RefreshReason = "manual") => void this.refreshPanels(reason),
 			markFoodFocus: () => {
 				this.plugin.markFoodFocus();

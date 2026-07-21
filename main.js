@@ -3034,6 +3034,458 @@ var WeekReviewModal = class extends import_obsidian18.Modal {
   }
 };
 
+// node_modules/dash-core/src/panels/agenda.ts
+var import_obsidian19 = require("obsidian");
+var AgendaPanel = class extends BasePanel {
+  constructor(copy, calendarColor2, localEventColor, actions) {
+    super();
+    this.copy = copy;
+    this.calendarColor = calendarColor2;
+    this.localEventColor = localEventColor;
+    this.actions = actions;
+    __publicField(this, "id", "agenda");
+    __publicField(this, "title");
+    __publicField(this, "errors", /* @__PURE__ */ new Map());
+    __publicField(this, "fetching", false);
+    __publicField(this, "dayItems", []);
+    __publicField(this, "hadEvents", false);
+    __publicField(this, "countdownEl");
+    this.title = copy.title;
+  }
+  async setup() {
+    const minutes = Math.max(1, this.ctx.settings().agendaRefreshMinutes || 30);
+    this.setInterval(() => void this.fetchAll(), minutes * 60 * 1e3);
+    this.setInterval(() => this.tickCountdown(), 60 * 1e3);
+    void this.fetchAll();
+  }
+  renderBody() {
+    var _a;
+    const s = this.ctx.settings();
+    const head = placard(this.el, this.copy.title);
+    head.createSpan({ cls: "mrd-placard-badge", text: (0, import_obsidian19.moment)().format("YYYY-MM-DD") });
+    const actions = this.el.createDiv({ cls: "mrd-btn-row mrd-agenda-actions" });
+    const addBtn = actions.createEl("button", { cls: "mrd-btn mrd-btn-sm", text: this.copy.addEvent });
+    addBtn.addEventListener("click", () => this.actions.openLocalEvent(void 0, () => this.rerender()));
+    const goalsBtn = actions.createEl("button", { cls: "mrd-btn mrd-btn-sm", text: this.copy.weeklyGoals });
+    goalsBtn.addEventListener("click", () => this.actions.openWeeklyGoals(() => this.rerender()));
+    const printBtn = actions.createEl("button", { cls: "mrd-btn mrd-btn-sm", text: this.copy.printWeek });
+    printBtn.addEventListener("click", () => {
+      void this.fetchAll();
+      this.actions.openWeekPrint();
+    });
+    const today2 = (0, import_obsidian19.moment)().format("YYYY-MM-DD");
+    const localToday = this.ctx.localEvents.filter((e) => e.date === today2);
+    if (s.agendaUrls.length === 0 && localToday.length === 0) {
+      this.el.createDiv({ cls: "mrd-muted", text: this.copy.noCalendars });
+      return;
+    }
+    const rows = [];
+    let anyCache = false;
+    let oldest = Infinity;
+    s.agendaUrls.forEach((cal, i) => {
+      const color = cal.color || this.calendarColor(i);
+      const countdown = cal.countdown !== false;
+      const cache = this.ctx.agendaCache[cal.url];
+      if (cache) {
+        anyCache = true;
+        oldest = Math.min(oldest, cache.fetchedAt);
+        try {
+          for (const item of eventsOnDate(parseICS(cache.text), today2)) {
+            rows.push({ item, color, label: cal.label, countdown });
+          }
+        } catch (e) {
+          this.errors.set(cal.url, "parse error");
+        }
+      }
+    });
+    for (const ev of localToday) {
+      rows.push({ item: localEventToAgendaItem(ev), color: this.localEventColor, label: this.copy.localLabel, countdown: true, local: ev });
+    }
+    const failed = s.agendaUrls.filter((c) => this.errors.has(c.url));
+    if (failed.length) {
+      const box = this.el.createDiv({ cls: "mrd-agenda-alert" });
+      for (const c of failed) {
+        box.createDiv({
+          cls: "mrd-agenda-alert-line",
+          text: this.copy.fetchFailed.replace("{label}", c.label).replace("{error}", (_a = this.errors.get(c.url)) != null ? _a : "")
+        });
+      }
+    }
+    rows.sort((a, b) => a.item.sortKey - b.item.sortKey || a.item.summary.localeCompare(b.item.summary));
+    this.dayItems = rows.filter((r) => r.countdown).map((r) => r.item);
+    this.hadEvents = rows.length > 0;
+    this.countdownEl = this.el.createDiv({ cls: "mrd-agenda-next" });
+    this.renderCountdown();
+    const list = this.el.createDiv({ cls: "mrd-agenda-list" });
+    for (const r of rows) {
+      const row = list.createDiv({ cls: "mrd-agenda-row" });
+      row.createSpan({ cls: "mrd-agenda-swatch" }).style.background = r.color;
+      const time = row.createSpan({ cls: "mrd-agenda-time" });
+      time.setText(r.item.allDay ? this.copy.allDay : r.item.timeLabel);
+      const body = row.createDiv({ cls: "mrd-agenda-body" });
+      const title = body.createDiv({ cls: "mrd-agenda-title" });
+      title.createSpan({ text: r.item.summary });
+      if (r.local) title.createSpan({ cls: "mrd-chip mrd-chip-cold mrd-agenda-local-chip", text: this.copy.localLabel });
+      const sub = [r.local ? "" : r.label, r.item.location].filter(Boolean).join(" \xB7 ");
+      if (sub) body.createDiv({ cls: "mrd-agenda-sub", text: sub });
+      if (r.local) {
+        const ev = r.local;
+        row.addClass("mrd-agenda-row-edit");
+        row.setAttr("title", this.copy.editLocal);
+        row.addEventListener("click", () => this.actions.openLocalEvent(ev, () => this.rerender()));
+      }
+    }
+    if (anyCache && oldest !== Infinity) {
+      const age = Date.now() - oldest;
+      if (age > 90 * 1e3) {
+        this.el.createDiv({
+          cls: "mrd-agenda-age",
+          text: this.copy.staleness.replace("{when}", (0, import_obsidian19.moment)(oldest).fromNow())
+        });
+      }
+    }
+  }
+  /** Draw the NEXT / NOW / clear placard from the cached day items. */
+  renderCountdown() {
+    var _a, _b;
+    const el = this.countdownEl;
+    if (!el) return;
+    el.empty();
+    const state = agendaState(this.dayItems, Date.now());
+    if (state.kind === "clear") {
+      el.addClass("is-clear");
+      el.removeClass("is-now");
+      el.createDiv({
+        cls: "mrd-agenda-next-line",
+        text: this.hadEvents ? this.copy.clearRest : this.copy.clearDay
+      });
+      return;
+    }
+    el.removeClass("is-clear");
+    el.toggleClass("is-now", state.kind === "now");
+    const label = state.kind === "now" ? this.copy.now : this.copy.next;
+    const line = el.createDiv({ cls: "mrd-agenda-next-line" });
+    line.createSpan({ cls: "mrd-agenda-next-label", text: label });
+    line.createSpan({ cls: "mrd-agenda-next-summary", text: (_a = state.summary) != null ? _a : "" });
+    const until = formatGap((_b = state.untilMs) != null ? _b : 0);
+    line.createSpan({
+      cls: "mrd-agenda-next-when",
+      text: state.kind === "now" ? this.copy.endsIn.replace("{t}", until) : this.copy.inT.replace("{t}", until)
+    });
+    if (state.kind === "now") {
+      el.createDiv({
+        cls: "mrd-agenda-gap",
+        text: state.gapMs === void 0 ? this.copy.gapClear : this.copy.gapOpen.replace("{t}", formatGap(state.gapMs))
+      });
+    } else {
+      el.createDiv({ cls: "mrd-agenda-gap", text: this.copy.gapUntil.replace("{t}", until) });
+    }
+  }
+  /** 1-minute tick: recompute the placard only, guarding against unmount. */
+  tickCountdown() {
+    var _a, _b;
+    if (!((_a = this.el) == null ? void 0 : _a.isConnected) || !((_b = this.countdownEl) == null ? void 0 : _b.isConnected)) return;
+    this.renderCountdown();
+  }
+  async fetchAll() {
+    var _a, _b;
+    if (this.fetching) return;
+    const urls = this.ctx.settings().agendaUrls;
+    if (urls.length === 0) return;
+    this.fetching = true;
+    let changed = false;
+    try {
+      for (const cal of urls) {
+        if (!cal.url) continue;
+        try {
+          const text = await fetchICS(cal.url);
+          this.ctx.agendaCache[cal.url] = { text, fetchedAt: Date.now() };
+          this.errors.delete(cal.url);
+          changed = true;
+        } catch (e) {
+          this.errors.set(cal.url, String((_a = e == null ? void 0 : e.message) != null ? _a : e));
+        }
+      }
+      if (changed) await this.ctx.persist();
+    } finally {
+      this.fetching = false;
+    }
+    if ((_b = this.el) == null ? void 0 : _b.isConnected) this.rerender();
+  }
+};
+
+// node_modules/dash-core/src/panels/weekprint.ts
+var import_obsidian20 = require("obsidian");
+var WeekPrintModal = class extends import_obsidian20.Modal {
+  constructor(app, config) {
+    super(app);
+    this.config = config;
+    __publicField(this, "weekStart", (0, import_obsidian20.moment)().startOf("week"));
+    __publicField(this, "sources", []);
+  }
+  onOpen() {
+    this.modalEl.addClass("mrd-week-modal");
+    const cache = this.config.agendaCache;
+    this.sources = this.config.calendars.map((cal, i) => {
+      var _a;
+      return {
+        label: cal.label,
+        color: cal.color || this.config.calendarColor(i),
+        events: safeParse((_a = cache[cal.url]) == null ? void 0 : _a.text)
+      };
+    });
+    this.render();
+  }
+  render() {
+    const { contentEl } = this;
+    const copy = this.config.copy;
+    contentEl.empty();
+    const days = Array.from({ length: 7 }, (_, i) => this.weekStart.clone().add(i, "days"));
+    const range = `${days[0].format("MMM D")} \u2013 ${days[6].format("MMM D, YYYY")}`;
+    const controls = contentEl.createDiv({ cls: "mrd-week-noprint mrd-week-controls" });
+    const nav = controls.createDiv({ cls: "mrd-week-nav" });
+    this.ctrlBtn(nav, copy.prevWeek, () => {
+      this.weekStart = this.weekStart.clone().subtract(1, "week");
+      this.render();
+    });
+    nav.createSpan({ cls: "mrd-week-range", text: range });
+    this.ctrlBtn(nav, copy.nextWeek, () => {
+      this.weekStart = this.weekStart.clone().add(1, "week");
+      this.render();
+    });
+    this.ctrlBtn(nav, copy.thisWeek, () => {
+      this.weekStart = (0, import_obsidian20.moment)().startOf("week");
+      this.render();
+    });
+    this.ctrlBtn(nav, copy.setGoals, () => {
+      new WeeklyGoalsModal(
+        this.app,
+        this.config.weeklyGoals,
+        this.config.todos,
+        weekKeyOf(this.weekStart),
+        () => this.render(),
+        this.config.weeklyGoalsCopy
+      ).open();
+    });
+    const shareBtn = controls.createEl("button", {
+      cls: `mrd-btn ${import_obsidian20.Platform.isMobile ? "mrd-btn-primary" : ""}`.trim(),
+      text: copy.sharePrint
+    });
+    shareBtn.addEventListener("click", () => void this.share());
+    if (!import_obsidian20.Platform.isMobile) {
+      const printBtn = controls.createEl("button", { cls: "mrd-btn mrd-btn-primary", text: copy.print });
+      printBtn.addEventListener("click", () => this.print());
+    }
+    const sheet = contentEl.createDiv({ cls: "mrd-week-print" });
+    const header = sheet.createDiv({ cls: "mrd-week-header" });
+    header.createDiv({ cls: "mrd-week-title", text: copy.title });
+    header.createDiv({ cls: "mrd-week-dates", text: range });
+    this.renderGoals(sheet);
+    if (this.sources.length > 0) {
+      const legend = sheet.createDiv({ cls: "mrd-week-legend" });
+      for (const s of this.sources) {
+        const item = legend.createSpan({ cls: "mrd-week-legend-item" });
+        const sw = item.createSpan({ cls: "mrd-week-swatch" });
+        sw.style.background = s.color;
+        item.createSpan({ text: s.label });
+      }
+    }
+    const grid = sheet.createDiv({ cls: "mrd-week-grid" });
+    for (const day of days) {
+      this.renderDay(grid, day);
+    }
+    const notes = grid.createDiv({ cls: "mrd-week-cell mrd-week-notes" });
+    notes.createDiv({ cls: "mrd-week-cell-head", text: copy.notesHead });
+    notes.createDiv({ cls: "mrd-week-lines" });
+  }
+  /** The week's goals, printed at the top as checkbox lines to work against. */
+  renderGoals(sheet) {
+    const goals = this.config.weeklyGoals.forWeek(weekKeyOf(this.weekStart));
+    if (goals.length === 0) return;
+    const block = sheet.createDiv({ cls: "mrd-week-goals" });
+    block.createDiv({ cls: "mrd-week-goals-head", text: this.config.copy.goalsHead });
+    const list = block.createDiv({ cls: "mrd-week-goals-list" });
+    for (const goal of goals) {
+      const row = list.createDiv({ cls: "mrd-week-goal" });
+      row.createSpan({ cls: "mrd-week-goal-box", text: "\u2610" });
+      row.createSpan({ cls: "mrd-week-goal-text", text: goal.text });
+    }
+  }
+  renderDay(grid, day) {
+    const dateStr = day.format("YYYY-MM-DD");
+    const events = this.eventsForDay(dateStr);
+    const directives = this.config.todos.itemsForWeekPrint(dateStr);
+    const cell = grid.createDiv({ cls: "mrd-week-cell" });
+    const head = cell.createDiv({ cls: "mrd-week-cell-head" });
+    head.createSpan({ cls: "mrd-week-dow", text: day.format("dddd") });
+    head.createSpan({ cls: "mrd-week-date", text: day.format("MMM D") });
+    if (events.length > 0) {
+      const list = cell.createDiv({ cls: "mrd-week-events" });
+      for (const ev of events) {
+        const row = list.createDiv({ cls: "mrd-week-event" });
+        row.style.borderLeftColor = ev.color;
+        const time = ev.item.allDay ? "" : ev.item.timeLabel + " ";
+        row.createSpan({ cls: "mrd-week-ev-text", text: `${time}${ev.item.summary}` });
+      }
+    }
+    if (directives.length > 0) {
+      const list = cell.createDiv({ cls: "mrd-week-directives" });
+      for (const item of directives) {
+        const row = list.createDiv({ cls: "mrd-week-directive" });
+        row.createSpan({ cls: "mrd-week-goal-box", text: "\u2610" });
+        const time = item.scheduledTime ? item.scheduledTime + " " : "";
+        row.createSpan({ cls: "mrd-week-directive-text", text: `${time}${item.text}` });
+      }
+    }
+    cell.createDiv({ cls: "mrd-week-lines" });
+  }
+  eventsForDay(dateStr) {
+    const out = [];
+    for (const s of this.sources) {
+      try {
+        for (const item of eventsOnDate(s.events, dateStr)) {
+          out.push({ item, label: s.label, color: s.color });
+        }
+      } catch (e) {
+      }
+    }
+    out.sort((a, b) => a.item.sortKey - b.item.sortKey || a.item.summary.localeCompare(b.item.summary));
+    return out;
+  }
+  ctrlBtn(parent, text, onClick) {
+    const b = parent.createEl("button", { cls: "mrd-btn mrd-btn-sm", text });
+    b.addEventListener("click", onClick);
+  }
+  /**
+   * Print the planner by rendering it into an isolated off-screen iframe and
+   * printing *that* document. This sidesteps Obsidian's own print CSS and the
+   * modal's containing block entirely. The sheet's inline styles (swatch/event
+   * colours) carry over in the serialized HTML; the class styles are copied from
+   * the loaded stylesheet.
+   */
+  print() {
+    const sheet = this.contentEl.querySelector(".mrd-week-print");
+    if (!sheet) {
+      window.print();
+      return;
+    }
+    const iframe = document.body.createEl("iframe", { cls: "mrd-week-print-frame" });
+    iframe.setAttribute("aria-hidden", "true");
+    const doc = iframe.contentDocument;
+    const win = iframe.contentWindow;
+    if (!doc || !win) {
+      iframe.remove();
+      return;
+    }
+    doc.open();
+    doc.write(this.plannerDocument(sheet));
+    doc.close();
+    let done = false;
+    const cleanup = () => {
+      if (done) return;
+      done = true;
+      iframe.remove();
+    };
+    win.addEventListener("afterprint", cleanup);
+    window.setTimeout(() => {
+      try {
+        win.focus();
+        win.print();
+      } catch (e) {
+        console.error("dash-core: week print failed", e);
+      }
+      window.setTimeout(cleanup, 6e4);
+    }, 150);
+  }
+  /** The complete, self-contained planner document — the same HTML the iframe
+   * prints, reused for the mobile share/export route. US Letter landscape. */
+  plannerDocument(sheet) {
+    const css = `@page { size: 11in 8.5in; margin: 0.5in; }
+html, body { margin: 0; padding: 0; background: #fff; }
+${collectWeekPrintCss()}`;
+    return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${this.config.copy.title}</title><style>${css}</style></head><body>${sheet.outerHTML}</body></html>`;
+  }
+  /**
+   * Hand the planner to the OS. On mobile (and desktop Chrome) this opens the
+   * native share sheet with the planner as an HTML file. Falls back to a plain
+   * file download where the Web Share API is unavailable.
+   */
+  async share() {
+    const sheet = this.contentEl.querySelector(".mrd-week-print");
+    if (!sheet) return;
+    const html = this.plannerDocument(sheet);
+    const name = `Week planner ${this.weekStart.format("YYYY-MM-DD")}.html`;
+    const nav = navigator;
+    try {
+      const file = new File([html], name, { type: "text/html" });
+      if (typeof nav.share === "function" && (typeof nav.canShare !== "function" || nav.canShare({ files: [file] }))) {
+        await nav.share({ files: [file], title: this.config.copy.title });
+        return;
+      }
+    } catch (e) {
+      if ((e == null ? void 0 : e.name) === "AbortError") return;
+      console.error("dash-core: share failed, falling back to download", e);
+    }
+    this.downloadHtml(name, html);
+  }
+  downloadHtml(name, html) {
+    const url = URL.createObjectURL(new Blob([html], { type: "text/html" }));
+    const a = document.body.createEl("a", { attr: { href: url, download: name } });
+    a.click();
+    a.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1e4);
+    new import_obsidian20.Notice(this.config.copy.savedNotice.replace("{name}", name));
+  }
+  onClose() {
+    this.contentEl.empty();
+  }
+};
+function collectWeekPrintCss() {
+  const parts = [];
+  for (const ss of Array.from(document.styleSheets)) {
+    let rules = null;
+    try {
+      rules = ss.cssRules;
+    } catch (e) {
+      continue;
+    }
+    if (!rules) continue;
+    for (const rule of Array.from(rules)) {
+      if (rule.cssText.includes("mrd-week")) parts.push(rule.cssText);
+    }
+  }
+  return parts.length ? parts.join("\n") : WEEK_PRINT_FALLBACK_CSS;
+}
+var WEEK_PRINT_FALLBACK_CSS = `
+.mrd-week-print { background:#fff; color:#16140f; padding:16px 18px; font-family:"Inter",system-ui,sans-serif; }
+.mrd-week-header { display:flex; justify-content:space-between; border-bottom:2px solid #16140f; padding-bottom:6px; margin-bottom:8px; }
+.mrd-week-title { font-weight:600; letter-spacing:0.14em; text-transform:uppercase; font-size:1.15rem; }
+.mrd-week-dates { font-size:0.85rem; color:#444; }
+.mrd-week-legend { display:flex; flex-wrap:wrap; gap:12px; margin-bottom:10px; font-size:0.72rem; color:#333; }
+.mrd-week-legend-item { display:inline-flex; align-items:center; gap:5px; }
+.mrd-week-swatch { width:11px; height:11px; border-radius:2px; display:inline-block; }
+.mrd-week-goals { border:1px solid #999; border-radius:4px; padding:6px 8px; margin-bottom:10px; }
+.mrd-week-goals-head { font-weight:700; font-size:0.78rem; margin-bottom:4px; }
+.mrd-week-goal, .mrd-week-directive { display:flex; align-items:baseline; gap:6px; font-size:0.72rem; color:#16140f; }
+.mrd-week-goal-box { color:#444; }
+.mrd-week-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; }
+.mrd-week-cell { border:1px solid #999; border-radius:4px; padding:5px 7px; min-height:5.6cm; display:flex; flex-direction:column; }
+.mrd-week-cell-head { display:flex; justify-content:space-between; border-bottom:1px solid #ccc; padding-bottom:3px; margin-bottom:4px; }
+.mrd-week-dow { font-weight:700; font-size:0.82rem; }
+.mrd-week-date { font-size:0.7rem; color:#666; }
+.mrd-week-event, .mrd-week-directive-text { font-size:0.68rem; color:#16140f; }
+.mrd-week-event { border-left:4px solid #999; padding-left:5px; }
+.mrd-week-lines { flex:1; min-height:1.6cm; background-image:repeating-linear-gradient(to bottom, transparent 0, transparent 0.56cm, #d8d8d8 0.56cm, #d8d8d8 calc(0.56cm + 1px)); }
+`;
+function safeParse(text) {
+  if (!text) return [];
+  try {
+    return parseICS(text);
+  } catch (e) {
+    return [];
+  }
+}
+
 // src/core/dailyfields.ts
 var SUPPLEMENTAL_STOP = /^\s*-\s+Supplemental\s*:?\s*$/i;
 var SPIRAL_MARKER = /%%\s*spiral-log\s*%%/i;
@@ -3055,6 +3507,39 @@ function isLogField(v) {
 }
 
 // src/copy.ts
+var MERIDIAN_AGENDA_COPY = {
+  title: "Today's Agenda",
+  addEvent: "+ Event",
+  weeklyGoals: "Weekly goals",
+  printWeek: "Print week",
+  noCalendars: "No calendars are on file. Add Proton Calendar share links (public .ics URLs) in settings, or add a local event with \u201C+ Event\u201D, and today's schedule will appear here.",
+  localLabel: "LOCAL",
+  fetchFailed: "{label}: this calendar could not be reached ({error}). A share link can go quiet on Proton's side \u2014 this one may need renewing.",
+  allDay: "ALL DAY",
+  editLocal: "Edit this local event",
+  staleness: "Serving the last successful read from {when}. Proton can take up to eight hours to propagate a change; a fresh read is on its way.",
+  clearRest: "Clear for the rest of the day. The remaining hours are unclaimed.",
+  clearDay: "The day's agenda is clear. This is a reading, not an absence.",
+  now: "NOW",
+  next: "NEXT",
+  endsIn: "ends in {t}",
+  inT: "in {t}",
+  gapClear: "Then clear for the rest of the day.",
+  gapOpen: "Then open for {t} before the next.",
+  gapUntil: "Open until then \u2014 {t} free."
+};
+var MERIDIAN_WEEKPRINT_COPY = {
+  title: "Week at a Glance",
+  prevWeek: "\u2039 Prev week",
+  nextWeek: "Next week \u203A",
+  thisWeek: "This week",
+  setGoals: "Set goals",
+  sharePrint: "Share / Print",
+  print: "Print",
+  goalsHead: "Goals for the week",
+  notesHead: "Notes / To-do",
+  savedNotice: "Saved \u201C{name}\u201D. Open it in a browser to print."
+};
 var MERIDIAN_TODO_PANEL_COPY = {
   title: "Directives",
   addNew: "+ New directive",
@@ -3130,8 +3615,110 @@ var MERIDIAN_COPY = {
   // Populated as copy-bearing core panels are migrated.
 };
 
+// src/localevents.ts
+function meridianLocalEvents(plugin) {
+  return {
+    add: (patch) => plugin.addLocalEvent(patch),
+    update: (id, patch) => plugin.updateLocalEvent(id, patch),
+    remove: (id) => plugin.removeLocalEvent(id)
+  };
+}
+
+// src/weeklygoals.ts
+function meridianWeeklyGoals(plugin) {
+  return {
+    forWeek: (weekKey) => plugin.weeklyGoalsFor(weekKey),
+    add: (weekKey, text) => plugin.addWeeklyGoal(weekKey, text),
+    remove: (weekKey, id) => plugin.removeWeeklyGoal(weekKey, id)
+  };
+}
+
+// src/weekreview.ts
+var import_obsidian21 = require("obsidian");
+function meridianWeekReviewConfig(plugin) {
+  return {
+    title: "Weekly review",
+    compilingText: "Compiling the record\u2026",
+    compile: () => compile(plugin)
+  };
+}
+async function compile(plugin) {
+  const s = plugin.settings;
+  const bridge = plugin.bridge;
+  const days = [];
+  for (let i = 6; i >= 0; i--) days.push((0, import_obsidian21.moment)().subtract(i, "days").format("YYYY-MM-DD"));
+  const dayStats = [];
+  let totalCompleted = 0;
+  let contactLines = 0;
+  const contacts = /* @__PURE__ */ new Set();
+  let mealsDays = 0;
+  let regulationEntries = 0;
+  let nourishmentEntries = 0;
+  for (const date of days) {
+    const raw = await readDailyNoteRaw(plugin.app, date);
+    const completed = countBullets(readField(raw, headingField(s.completedTasksHeading)));
+    totalCompleted += completed;
+    dayStats.push({ date, completed });
+    const crm = readMarkerLogLines(raw, s.crmLogMarker || "%% crm-log %%", s.crmLogHeading);
+    contactLines += crm.length;
+    for (const line of crm) {
+      const name = contactName(line);
+      if (name) contacts.add(name);
+    }
+    if (readHeadingSection(raw, "Meals").trim().length > 0) mealsDays++;
+    nourishmentEntries += readMarkerLogLines(raw, "%% arfid-log %%", "Miscellaneous notes").length;
+    regulationEntries += await bridge.spiralEntriesForDate(date);
+  }
+  const sortedContacts = [...contacts].sort((a, b) => a.localeCompare(b));
+  const streak = plugin.streak;
+  const streakLine = streak.current > 0 ? `RECORD \u2014 ${streak.current} consecutive ${plural(streak.current, "day", "days")} observed${streak.longest > streak.current ? ` \xB7 longest ${streak.longest}` : ""}.` : void 0;
+  const blocks = [
+    {
+      head: "Directives completed",
+      figure: String(totalCompleted),
+      bars: dayStats.map((d) => ({ label: (0, import_obsidian21.moment)(d.date, "YYYY-MM-DD").format("dd")[0], count: d.completed }))
+    },
+    {
+      head: "Contacts reached",
+      line: `${contactLines} ${plural(contactLines, "interaction", "interactions")} \xB7 ${sortedContacts.length} distinct.`,
+      chips: sortedContacts.length > 0 ? sortedContacts : void 0
+    },
+    { head: "Meals planned", line: `${mealsDays} of 7 ${plural(mealsDays, "day", "days")}.` },
+    { head: "Nourishment log", line: `${nourishmentEntries} ${plural(nourishmentEntries, "entry", "entries")} this week.` }
+  ];
+  if (regulationEntries > 0) {
+    blocks.push({ head: "Regulation log", line: `${regulationEntries} ${plural(regulationEntries, "entry", "entries")} this week.` });
+  }
+  return { header: "OBSERVATION SUMMARY \u2014 7-day window. The record is complete.", streakLine, blocks };
+}
+function countBullets(body) {
+  return body.split("\n").filter((l) => /^\s*-\s+\S/.test(l)).length;
+}
+function contactName(line) {
+  var _a;
+  const m = line.match(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/);
+  if (!m) return "";
+  return ((_a = m[2]) != null ? _a : m[1]).trim();
+}
+function plural(n, one, many) {
+  return n === 1 ? one : many;
+}
+
+// src/weekprint.ts
+function meridianWeekPrintConfig(plugin) {
+  return {
+    agendaCache: plugin.agendaCache,
+    calendars: plugin.settings.agendaUrls,
+    calendarColor,
+    weeklyGoals: meridianWeeklyGoals(plugin),
+    weeklyGoalsCopy: MERIDIAN_WEEKLYGOALS_COPY,
+    todos: plugin.todos,
+    copy: MERIDIAN_WEEKPRINT_COPY
+  };
+}
+
 // src/panels/qotd.ts
-var import_obsidian19 = require("obsidian");
+var import_obsidian22 = require("obsidian");
 
 // src/panels/types.ts
 var BasePanel2 = class extends BasePanel {
@@ -3164,7 +3751,7 @@ var QotdPanel = class extends BasePanel2 {
       card.createDiv({ cls: "mrd-muted", text: "The quotation archive is present but empty." });
       return;
     }
-    const m = (0, import_obsidian19.moment)((0, import_obsidian19.moment)().format("YYYY-MM-DD"), "YYYY-MM-DD");
+    const m = (0, import_obsidian22.moment)((0, import_obsidian22.moment)().format("YYYY-MM-DD"), "YYYY-MM-DD");
     const dayNumber = Math.floor(m.valueOf() / 864e5);
     const idx = (dayNumber % n + n) % n;
     const q = quotes[idx];
@@ -3206,11 +3793,11 @@ function parseQuotes(raw) {
 }
 
 // src/panels/meridian.ts
-var import_obsidian21 = require("obsidian");
+var import_obsidian24 = require("obsidian");
 
 // src/panels/linehistory.ts
-var import_obsidian20 = require("obsidian");
-var LineHistoryModal = class extends import_obsidian20.Modal {
+var import_obsidian23 = require("obsidian");
+var LineHistoryModal = class extends import_obsidian23.Modal {
   constructor(app, plugin) {
     super(app);
     this.plugin = plugin;
@@ -3228,7 +3815,7 @@ var LineHistoryModal = class extends import_obsidian20.Modal {
       const entry = history[i];
       const row = list.createDiv({ cls: "mrd-linehist-row" });
       row.createDiv({ cls: "mrd-linehist-line", text: entry.line });
-      row.createDiv({ cls: "mrd-linehist-when", text: (0, import_obsidian20.moment)(entry.at).fromNow() });
+      row.createDiv({ cls: "mrd-linehist-when", text: (0, import_obsidian23.moment)(entry.at).fromNow() });
     }
   }
   onClose() {
@@ -3636,7 +4223,7 @@ var MeridianPanel = class extends BasePanel2 {
     const bag = fresh.length ? fresh : candidates;
     const line = bag[Math.floor(Math.random() * bag.length)];
     if (pool === "milestone") {
-      this.ctx.plugin.milestoneShownDate = (0, import_obsidian21.moment)().format("YYYY-MM-DD");
+      this.ctx.plugin.milestoneShownDate = (0, import_obsidian24.moment)().format("YYYY-MM-DD");
       void this.ctx.plugin.saveData_();
     }
     ring.push(line);
@@ -3651,7 +4238,7 @@ var MeridianPanel = class extends BasePanel2 {
   }
   async weights() {
     const { todos, bridge, runtime, plugin } = this.ctx;
-    const todayStr2 = (0, import_obsidian21.moment)().format("YYYY-MM-DD");
+    const todayStr2 = (0, import_obsidian24.moment)().format("YYYY-MM-DD");
     const pending = todos.pendingCount();
     const overdueTodos = todos.overdueCount();
     const crm = safe(() => bridge.crmContacts(), []);
@@ -3690,7 +4277,7 @@ var MeridianPanel = class extends BasePanel2 {
     const completionsMilestone = doneToday > 0 && doneToday % 5 === 0;
     const streak = this.ctx.plugin.streak;
     const streakSeven = streak.current > 0 && streak.current % 7 === 0;
-    const newRecord = this.ctx.runtime.streakRecordDate === (0, import_obsidian21.moment)().format("YYYY-MM-DD");
+    const newRecord = this.ctx.runtime.streakRecordDate === (0, import_obsidian24.moment)().format("YYYY-MM-DD");
     return completionsMilestone || streakSeven || newRecord;
   }
 };
@@ -3745,552 +4332,6 @@ async function safeAsync(fn, fallback) {
   } catch (e) {
     return fallback;
   }
-}
-
-// src/panels/agenda.ts
-var import_obsidian23 = require("obsidian");
-
-// src/panels/weekprint.ts
-var import_obsidian22 = require("obsidian");
-
-// src/weeklygoals.ts
-function meridianWeeklyGoals(plugin) {
-  return {
-    forWeek: (weekKey) => plugin.weeklyGoalsFor(weekKey),
-    add: (weekKey, text) => plugin.addWeeklyGoal(weekKey, text),
-    remove: (weekKey, id) => plugin.removeWeeklyGoal(weekKey, id)
-  };
-}
-
-// src/panels/weekprint.ts
-var WeekPrintModal = class extends import_obsidian22.Modal {
-  constructor(app, plugin) {
-    super(app);
-    this.plugin = plugin;
-    this.weekStart = (0, import_obsidian22.moment)().startOf("week");
-    this.sources = [];
-  }
-  onOpen() {
-    this.modalEl.addClass("mrd-week-modal");
-    const cache = this.plugin.agendaCache;
-    this.sources = this.plugin.settings.agendaUrls.map((cal, i) => {
-      var _a;
-      return {
-        label: cal.label,
-        color: cal.color || calendarColor(i),
-        events: safeParse((_a = cache[cal.url]) == null ? void 0 : _a.text)
-      };
-    });
-    this.render();
-  }
-  render() {
-    const { contentEl } = this;
-    contentEl.empty();
-    const days = Array.from({ length: 7 }, (_, i) => this.weekStart.clone().add(i, "days"));
-    const range = `${days[0].format("MMM D")} \u2013 ${days[6].format("MMM D, YYYY")}`;
-    const controls = contentEl.createDiv({ cls: "mrd-week-noprint mrd-week-controls" });
-    const nav = controls.createDiv({ cls: "mrd-week-nav" });
-    this.ctrlBtn(nav, "\u2039 Prev week", () => {
-      this.weekStart = this.weekStart.clone().subtract(1, "week");
-      this.render();
-    });
-    nav.createSpan({ cls: "mrd-week-range", text: range });
-    this.ctrlBtn(nav, "Next week \u203A", () => {
-      this.weekStart = this.weekStart.clone().add(1, "week");
-      this.render();
-    });
-    this.ctrlBtn(nav, "This week", () => {
-      this.weekStart = (0, import_obsidian22.moment)().startOf("week");
-      this.render();
-    });
-    this.ctrlBtn(nav, "Set goals", () => {
-      new WeeklyGoalsModal(this.app, meridianWeeklyGoals(this.plugin), this.plugin.todos, weekKeyOf(this.weekStart), () => this.render(), MERIDIAN_WEEKLYGOALS_COPY).open();
-    });
-    const shareBtn = controls.createEl("button", {
-      cls: `mrd-btn ${import_obsidian22.Platform.isMobile ? "mrd-btn-primary" : ""}`.trim(),
-      text: "Share / Print"
-    });
-    shareBtn.addEventListener("click", () => void this.share());
-    if (!import_obsidian22.Platform.isMobile) {
-      const printBtn = controls.createEl("button", { cls: "mrd-btn mrd-btn-primary", text: "Print" });
-      printBtn.addEventListener("click", () => this.print());
-    }
-    const sheet = contentEl.createDiv({ cls: "mrd-week-print" });
-    const header = sheet.createDiv({ cls: "mrd-week-header" });
-    header.createDiv({ cls: "mrd-week-title", text: "Week at a Glance" });
-    header.createDiv({ cls: "mrd-week-dates", text: range });
-    this.renderGoals(sheet);
-    if (this.sources.length > 0) {
-      const legend = sheet.createDiv({ cls: "mrd-week-legend" });
-      for (const s of this.sources) {
-        const item = legend.createSpan({ cls: "mrd-week-legend-item" });
-        const sw = item.createSpan({ cls: "mrd-week-swatch" });
-        sw.style.background = s.color;
-        item.createSpan({ text: s.label });
-      }
-    }
-    const grid = sheet.createDiv({ cls: "mrd-week-grid" });
-    for (const day of days) {
-      this.renderDay(grid, day);
-    }
-    const notes = grid.createDiv({ cls: "mrd-week-cell mrd-week-notes" });
-    notes.createDiv({ cls: "mrd-week-cell-head", text: "Notes / To-do" });
-    notes.createDiv({ cls: "mrd-week-lines" });
-  }
-  /** The week's goals, printed at the top as checkbox lines to work against. */
-  renderGoals(sheet) {
-    const goals = this.plugin.weeklyGoalsFor(weekKeyOf(this.weekStart));
-    if (goals.length === 0) return;
-    const block = sheet.createDiv({ cls: "mrd-week-goals" });
-    block.createDiv({ cls: "mrd-week-goals-head", text: "Goals for the week" });
-    const list = block.createDiv({ cls: "mrd-week-goals-list" });
-    for (const goal of goals) {
-      const row = list.createDiv({ cls: "mrd-week-goal" });
-      row.createSpan({ cls: "mrd-week-goal-box", text: "\u2610" });
-      row.createSpan({ cls: "mrd-week-goal-text", text: goal.text });
-    }
-  }
-  renderDay(grid, day) {
-    const dateStr = day.format("YYYY-MM-DD");
-    const events = this.eventsForDay(dateStr);
-    const directives = this.plugin.todos.itemsForWeekPrint(dateStr);
-    const cell = grid.createDiv({ cls: "mrd-week-cell" });
-    const head = cell.createDiv({ cls: "mrd-week-cell-head" });
-    head.createSpan({ cls: "mrd-week-dow", text: day.format("dddd") });
-    head.createSpan({ cls: "mrd-week-date", text: day.format("MMM D") });
-    if (events.length > 0) {
-      const list = cell.createDiv({ cls: "mrd-week-events" });
-      for (const ev of events) {
-        const row = list.createDiv({ cls: "mrd-week-event" });
-        row.style.borderLeftColor = ev.color;
-        const time = ev.item.allDay ? "" : ev.item.timeLabel + " ";
-        row.createSpan({ cls: "mrd-week-ev-text", text: `${time}${ev.item.summary}` });
-      }
-    }
-    if (directives.length > 0) {
-      const list = cell.createDiv({ cls: "mrd-week-directives" });
-      for (const item of directives) {
-        const row = list.createDiv({ cls: "mrd-week-directive" });
-        row.createSpan({ cls: "mrd-week-goal-box", text: "\u2610" });
-        const time = item.scheduledTime ? item.scheduledTime + " " : "";
-        row.createSpan({ cls: "mrd-week-directive-text", text: `${time}${item.text}` });
-      }
-    }
-    cell.createDiv({ cls: "mrd-week-lines" });
-  }
-  eventsForDay(dateStr) {
-    const out = [];
-    for (const s of this.sources) {
-      try {
-        for (const item of eventsOnDate(s.events, dateStr)) {
-          out.push({ item, label: s.label, color: s.color });
-        }
-      } catch (e) {
-      }
-    }
-    out.sort((a, b) => a.item.sortKey - b.item.sortKey || a.item.summary.localeCompare(b.item.summary));
-    return out;
-  }
-  ctrlBtn(parent, text, onClick) {
-    const b = parent.createEl("button", { cls: "mrd-btn mrd-btn-sm", text });
-    b.addEventListener("click", onClick);
-  }
-  /**
-   * Print the planner by rendering it into an isolated off-screen iframe and
-   * printing *that* document. This sidesteps Obsidian's own print CSS and the
-   * modal's containing block entirely — the earlier body-visibility approach
-   * printed blank on some setups. The sheet's inline styles (swatch/event
-   * colours) carry over in the serialized HTML; the class styles are copied from
-   * the loaded stylesheet.
-   */
-  print() {
-    const sheet = this.contentEl.querySelector(".mrd-week-print");
-    if (!sheet) {
-      window.print();
-      return;
-    }
-    const iframe = document.body.createEl("iframe", { cls: "mrd-week-print-frame" });
-    iframe.setAttribute("aria-hidden", "true");
-    const doc = iframe.contentDocument;
-    const win = iframe.contentWindow;
-    if (!doc || !win) {
-      iframe.remove();
-      return;
-    }
-    doc.open();
-    doc.write(this.plannerDocument(sheet));
-    doc.close();
-    let done = false;
-    const cleanup = () => {
-      if (done) return;
-      done = true;
-      iframe.remove();
-    };
-    win.addEventListener("afterprint", cleanup);
-    window.setTimeout(() => {
-      try {
-        win.focus();
-        win.print();
-      } catch (e) {
-        console.error("MERIDIAN: week print failed", e);
-      }
-      window.setTimeout(cleanup, 6e4);
-    }, 150);
-  }
-  /** The complete, self-contained planner document — the same HTML the iframe
-   * prints, reused for the mobile share/export route. US Letter landscape. */
-  plannerDocument(sheet) {
-    const css = `@page { size: 11in 8.5in; margin: 0.5in; }
-html, body { margin: 0; padding: 0; background: #fff; }
-${collectWeekPrintCss()}`;
-    return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Week at a Glance</title><style>${css}</style></head><body>${sheet.outerHTML}</body></html>`;
-  }
-  /**
-   * Hand the planner to the OS. On mobile (and desktop Chrome) this opens the
-   * native share sheet with the planner as an HTML file — from there the
-   * operator taps Print / AirPrint, Save to Files, or opens it in a browser.
-   * Falls back to a plain file download where the Web Share API is unavailable.
-   */
-  async share() {
-    const sheet = this.contentEl.querySelector(".mrd-week-print");
-    if (!sheet) return;
-    const html = this.plannerDocument(sheet);
-    const name = `Week planner ${this.weekStart.format("YYYY-MM-DD")}.html`;
-    const nav = navigator;
-    try {
-      const file = new File([html], name, { type: "text/html" });
-      if (typeof nav.share === "function" && (typeof nav.canShare !== "function" || nav.canShare({ files: [file] }))) {
-        await nav.share({ files: [file], title: "Week at a Glance" });
-        return;
-      }
-    } catch (e) {
-      if ((e == null ? void 0 : e.name) === "AbortError") return;
-      console.error("MERIDIAN: share failed, falling back to download", e);
-    }
-    this.downloadHtml(name, html);
-  }
-  downloadHtml(name, html) {
-    const url = URL.createObjectURL(new Blob([html], { type: "text/html" }));
-    const a = document.body.createEl("a", { attr: { href: url, download: name } });
-    a.click();
-    a.remove();
-    window.setTimeout(() => URL.revokeObjectURL(url), 1e4);
-    new import_obsidian22.Notice(`Saved \u201C${name}\u201D. Open it in a browser to print.`);
-  }
-  onClose() {
-    this.contentEl.empty();
-  }
-};
-function collectWeekPrintCss() {
-  const parts = [];
-  for (const ss of Array.from(document.styleSheets)) {
-    let rules = null;
-    try {
-      rules = ss.cssRules;
-    } catch (e) {
-      continue;
-    }
-    if (!rules) continue;
-    for (const rule of Array.from(rules)) {
-      if (rule.cssText.includes("mrd-week")) parts.push(rule.cssText);
-    }
-  }
-  return parts.length ? parts.join("\n") : WEEK_PRINT_FALLBACK_CSS;
-}
-var WEEK_PRINT_FALLBACK_CSS = `
-.mrd-week-print { background:#fff; color:#16140f; padding:16px 18px; font-family:"Inter",system-ui,sans-serif; }
-.mrd-week-header { display:flex; justify-content:space-between; border-bottom:2px solid #16140f; padding-bottom:6px; margin-bottom:8px; }
-.mrd-week-title { font-weight:600; letter-spacing:0.14em; text-transform:uppercase; font-size:1.15rem; }
-.mrd-week-dates { font-size:0.85rem; color:#444; }
-.mrd-week-legend { display:flex; flex-wrap:wrap; gap:12px; margin-bottom:10px; font-size:0.72rem; color:#333; }
-.mrd-week-legend-item { display:inline-flex; align-items:center; gap:5px; }
-.mrd-week-swatch { width:11px; height:11px; border-radius:2px; display:inline-block; }
-.mrd-week-goals { border:1px solid #999; border-radius:4px; padding:6px 8px; margin-bottom:10px; }
-.mrd-week-goals-head { font-weight:700; font-size:0.78rem; margin-bottom:4px; }
-.mrd-week-goal, .mrd-week-directive { display:flex; align-items:baseline; gap:6px; font-size:0.72rem; color:#16140f; }
-.mrd-week-goal-box { color:#444; }
-.mrd-week-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; }
-.mrd-week-cell { border:1px solid #999; border-radius:4px; padding:5px 7px; min-height:5.6cm; display:flex; flex-direction:column; }
-.mrd-week-cell-head { display:flex; justify-content:space-between; border-bottom:1px solid #ccc; padding-bottom:3px; margin-bottom:4px; }
-.mrd-week-dow { font-weight:700; font-size:0.82rem; }
-.mrd-week-date { font-size:0.7rem; color:#666; }
-.mrd-week-event, .mrd-week-directive-text { font-size:0.68rem; color:#16140f; }
-.mrd-week-event { border-left:4px solid #999; padding-left:5px; }
-.mrd-week-lines { flex:1; min-height:1.6cm; background-image:repeating-linear-gradient(to bottom, transparent 0, transparent 0.56cm, #d8d8d8 0.56cm, #d8d8d8 calc(0.56cm + 1px)); }
-`;
-function safeParse(text) {
-  if (!text) return [];
-  try {
-    return parseICS(text);
-  } catch (e) {
-    return [];
-  }
-}
-
-// src/localevents.ts
-function meridianLocalEvents(plugin) {
-  return {
-    add: (patch) => plugin.addLocalEvent(patch),
-    update: (id, patch) => plugin.updateLocalEvent(id, patch),
-    remove: (id) => plugin.removeLocalEvent(id)
-  };
-}
-
-// src/panels/agenda.ts
-var AgendaPanel = class extends BasePanel2 {
-  constructor() {
-    super(...arguments);
-    this.id = "agenda";
-    this.title = "Today's Agenda";
-    this.errors = /* @__PURE__ */ new Map();
-    this.fetching = false;
-    /** Today's merged, sorted items — kept so the 1-minute countdown tick can
-     * recompute from the cached parse without re-fetching (§1.3). */
-    this.dayItems = [];
-    this.hadEvents = false;
-  }
-  async setup() {
-    const minutes = Math.max(1, this.ctx.settings().agendaRefreshMinutes || 30);
-    this.setInterval(() => void this.fetchAll(), minutes * 60 * 1e3);
-    this.setInterval(() => this.tickCountdown(), 60 * 1e3);
-    void this.fetchAll();
-  }
-  renderBody() {
-    const s = this.ctx.settings();
-    const head = placard(this.el, "Today's Agenda");
-    head.createSpan({ cls: "mrd-placard-badge", text: (0, import_obsidian23.moment)().format("YYYY-MM-DD") });
-    const actions = this.el.createDiv({ cls: "mrd-btn-row mrd-agenda-actions" });
-    const addBtn = actions.createEl("button", { cls: "mrd-btn mrd-btn-sm", text: "+ Event" });
-    addBtn.addEventListener(
-      "click",
-      () => new LocalEventModal(this.ctx.app, meridianLocalEvents(this.ctx.plugin), void 0, () => this.rerender()).open()
-    );
-    const goalsBtn = actions.createEl("button", { cls: "mrd-btn mrd-btn-sm", text: "Weekly goals" });
-    goalsBtn.addEventListener(
-      "click",
-      () => new WeeklyGoalsModal(this.ctx.app, meridianWeeklyGoals(this.ctx.plugin), this.ctx.todos, currentWeekKey(), () => this.rerender(), MERIDIAN_WEEKLYGOALS_COPY).open()
-    );
-    const printBtn = actions.createEl("button", { cls: "mrd-btn mrd-btn-sm", text: "Print week" });
-    printBtn.addEventListener("click", () => {
-      void this.fetchAll();
-      new WeekPrintModal(this.ctx.app, this.ctx.plugin).open();
-    });
-    const today2 = (0, import_obsidian23.moment)().format("YYYY-MM-DD");
-    const localToday = this.ctx.plugin.localEvents.filter((e) => e.date === today2);
-    if (s.agendaUrls.length === 0 && localToday.length === 0) {
-      this.el.createDiv({
-        cls: "mrd-muted",
-        text: "No calendars are on file. Add Proton Calendar share links (public .ics URLs) in settings, or add a local event with \u201C+ Event\u201D, and today's schedule will appear here."
-      });
-      return;
-    }
-    const rows = [];
-    let anyCache = false;
-    let oldest = Infinity;
-    s.agendaUrls.forEach((cal, i) => {
-      const color = cal.color || calendarColor(i);
-      const countdown = cal.countdown !== false;
-      const cache = this.ctx.plugin.agendaCache[cal.url];
-      if (cache) {
-        anyCache = true;
-        oldest = Math.min(oldest, cache.fetchedAt);
-        try {
-          for (const item of eventsOnDate(parseICS(cache.text), today2)) {
-            rows.push({ item, color, label: cal.label, countdown });
-          }
-        } catch (e) {
-          this.errors.set(cal.url, "parse error");
-        }
-      }
-    });
-    for (const ev of localToday) {
-      rows.push({ item: localEventToAgendaItem(ev), color: "var(--mrd-cal-local)", label: "LOCAL", countdown: true, local: ev });
-    }
-    const failed = s.agendaUrls.filter((c) => this.errors.has(c.url));
-    if (failed.length) {
-      const box = this.el.createDiv({ cls: "mrd-agenda-alert" });
-      for (const c of failed) {
-        box.createDiv({
-          cls: "mrd-agenda-alert-line",
-          text: `${c.label}: this calendar could not be reached (${this.errors.get(c.url)}). A share link can go quiet on Proton's side \u2014 this one may need renewing.`
-        });
-      }
-    }
-    rows.sort((a, b) => a.item.sortKey - b.item.sortKey || a.item.summary.localeCompare(b.item.summary));
-    this.dayItems = rows.filter((r) => r.countdown).map((r) => r.item);
-    this.hadEvents = rows.length > 0;
-    this.countdownEl = this.el.createDiv({ cls: "mrd-agenda-next" });
-    this.renderCountdown();
-    const list = this.el.createDiv({ cls: "mrd-agenda-list" });
-    for (const r of rows) {
-      const row = list.createDiv({ cls: "mrd-agenda-row" });
-      row.createSpan({ cls: "mrd-agenda-swatch" }).style.background = r.color;
-      const time = row.createSpan({ cls: "mrd-agenda-time" });
-      time.setText(r.item.allDay ? "ALL DAY" : r.item.timeLabel);
-      const body = row.createDiv({ cls: "mrd-agenda-body" });
-      const title = body.createDiv({ cls: "mrd-agenda-title" });
-      title.createSpan({ text: r.item.summary });
-      if (r.local) title.createSpan({ cls: "mrd-chip mrd-chip-cold mrd-agenda-local-chip", text: "LOCAL" });
-      const sub = [r.local ? "" : r.label, r.item.location].filter(Boolean).join(" \xB7 ");
-      if (sub) body.createDiv({ cls: "mrd-agenda-sub", text: sub });
-      if (r.local) {
-        const ev = r.local;
-        row.addClass("mrd-agenda-row-edit");
-        row.setAttr("title", "Edit this local event");
-        row.addEventListener(
-          "click",
-          () => new LocalEventModal(this.ctx.app, meridianLocalEvents(this.ctx.plugin), ev, () => this.rerender()).open()
-        );
-      }
-    }
-    if (anyCache && oldest !== Infinity) {
-      const age = Date.now() - oldest;
-      if (age > 90 * 1e3) {
-        this.el.createDiv({
-          cls: "mrd-agenda-age",
-          text: `Serving the last successful read from ${(0, import_obsidian23.moment)(oldest).fromNow()}. Proton can take up to eight hours to propagate a change; a fresh read is on its way.`
-        });
-      }
-    }
-  }
-  /** Draw the NEXT / NOW / clear placard from the cached day items. */
-  renderCountdown() {
-    var _a, _b;
-    const el = this.countdownEl;
-    if (!el) return;
-    el.empty();
-    const state = agendaState(this.dayItems, Date.now());
-    if (state.kind === "clear") {
-      el.addClass("is-clear");
-      el.removeClass("is-now");
-      el.createDiv({
-        cls: "mrd-agenda-next-line",
-        text: this.hadEvents ? "Clear for the rest of the day. The remaining hours are unclaimed." : "The day's agenda is clear. This is a reading, not an absence."
-      });
-      return;
-    }
-    el.removeClass("is-clear");
-    el.toggleClass("is-now", state.kind === "now");
-    const label = state.kind === "now" ? "NOW" : "NEXT";
-    const line = el.createDiv({ cls: "mrd-agenda-next-line" });
-    line.createSpan({ cls: "mrd-agenda-next-label", text: label });
-    line.createSpan({ cls: "mrd-agenda-next-summary", text: (_a = state.summary) != null ? _a : "" });
-    const until = formatGap((_b = state.untilMs) != null ? _b : 0);
-    line.createSpan({
-      cls: "mrd-agenda-next-when",
-      text: state.kind === "now" ? `ends in ${until}` : `in ${until}`
-    });
-    if (state.kind === "now") {
-      el.createDiv({
-        cls: "mrd-agenda-gap",
-        text: state.gapMs === void 0 ? "Then clear for the rest of the day." : `Then open for ${formatGap(state.gapMs)} before the next.`
-      });
-    } else {
-      el.createDiv({ cls: "mrd-agenda-gap", text: `Open until then \u2014 ${until} free.` });
-    }
-  }
-  /** 1-minute tick: recompute the placard only, guarding against unmount. */
-  tickCountdown() {
-    var _a, _b;
-    if (!((_a = this.el) == null ? void 0 : _a.isConnected) || !((_b = this.countdownEl) == null ? void 0 : _b.isConnected)) return;
-    this.renderCountdown();
-  }
-  async fetchAll() {
-    var _a, _b;
-    if (this.fetching) return;
-    const urls = this.ctx.settings().agendaUrls;
-    if (urls.length === 0) return;
-    this.fetching = true;
-    let changed = false;
-    try {
-      for (const cal of urls) {
-        if (!cal.url) continue;
-        try {
-          const text = await fetchICS(cal.url);
-          this.ctx.plugin.agendaCache[cal.url] = { text, fetchedAt: Date.now() };
-          this.errors.delete(cal.url);
-          changed = true;
-        } catch (e) {
-          this.errors.set(cal.url, String((_a = e == null ? void 0 : e.message) != null ? _a : e));
-        }
-      }
-      if (changed) await this.ctx.plugin.saveData_();
-    } finally {
-      this.fetching = false;
-    }
-    if ((_b = this.el) == null ? void 0 : _b.isConnected) this.rerender();
-  }
-};
-
-// src/weekreview.ts
-var import_obsidian24 = require("obsidian");
-function meridianWeekReviewConfig(plugin) {
-  return {
-    title: "Weekly review",
-    compilingText: "Compiling the record\u2026",
-    compile: () => compile(plugin)
-  };
-}
-async function compile(plugin) {
-  const s = plugin.settings;
-  const bridge = plugin.bridge;
-  const days = [];
-  for (let i = 6; i >= 0; i--) days.push((0, import_obsidian24.moment)().subtract(i, "days").format("YYYY-MM-DD"));
-  const dayStats = [];
-  let totalCompleted = 0;
-  let contactLines = 0;
-  const contacts = /* @__PURE__ */ new Set();
-  let mealsDays = 0;
-  let regulationEntries = 0;
-  let nourishmentEntries = 0;
-  for (const date of days) {
-    const raw = await readDailyNoteRaw(plugin.app, date);
-    const completed = countBullets(readField(raw, headingField(s.completedTasksHeading)));
-    totalCompleted += completed;
-    dayStats.push({ date, completed });
-    const crm = readMarkerLogLines(raw, s.crmLogMarker || "%% crm-log %%", s.crmLogHeading);
-    contactLines += crm.length;
-    for (const line of crm) {
-      const name = contactName(line);
-      if (name) contacts.add(name);
-    }
-    if (readHeadingSection(raw, "Meals").trim().length > 0) mealsDays++;
-    nourishmentEntries += readMarkerLogLines(raw, "%% arfid-log %%", "Miscellaneous notes").length;
-    regulationEntries += await bridge.spiralEntriesForDate(date);
-  }
-  const sortedContacts = [...contacts].sort((a, b) => a.localeCompare(b));
-  const streak = plugin.streak;
-  const streakLine = streak.current > 0 ? `RECORD \u2014 ${streak.current} consecutive ${plural(streak.current, "day", "days")} observed${streak.longest > streak.current ? ` \xB7 longest ${streak.longest}` : ""}.` : void 0;
-  const blocks = [
-    {
-      head: "Directives completed",
-      figure: String(totalCompleted),
-      bars: dayStats.map((d) => ({ label: (0, import_obsidian24.moment)(d.date, "YYYY-MM-DD").format("dd")[0], count: d.completed }))
-    },
-    {
-      head: "Contacts reached",
-      line: `${contactLines} ${plural(contactLines, "interaction", "interactions")} \xB7 ${sortedContacts.length} distinct.`,
-      chips: sortedContacts.length > 0 ? sortedContacts : void 0
-    },
-    { head: "Meals planned", line: `${mealsDays} of 7 ${plural(mealsDays, "day", "days")}.` },
-    { head: "Nourishment log", line: `${nourishmentEntries} ${plural(nourishmentEntries, "entry", "entries")} this week.` }
-  ];
-  if (regulationEntries > 0) {
-    blocks.push({ head: "Regulation log", line: `${regulationEntries} ${plural(regulationEntries, "entry", "entries")} this week.` });
-  }
-  return { header: "OBSERVATION SUMMARY \u2014 7-day window. The record is complete.", streakLine, blocks };
-}
-function countBullets(body) {
-  return body.split("\n").filter((l) => /^\s*-\s+\S/.test(l)).length;
-}
-function contactName(line) {
-  var _a;
-  const m = line.match(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/);
-  if (!m) return "";
-  return ((_a = m[2]) != null ? _a : m[1]).trim();
-}
-function plural(n, one, many) {
-  return n === 1 ? one : many;
 }
 
 // src/panels/util.ts
@@ -4600,7 +4641,11 @@ function createPanels(order, enabled, plugin) {
     clock: () => new ClockPanel(MERIDIAN_CLOCK_COPY),
     meridian: () => new MeridianPanel(),
     todo: () => new TodoPanel(MERIDIAN_TODO_PANEL_COPY, MERIDIAN_TODO_COPY, () => new WeekReviewModal(plugin.app, meridianWeekReviewConfig(plugin)).open()),
-    agenda: () => new AgendaPanel(),
+    agenda: () => new AgendaPanel(MERIDIAN_AGENDA_COPY, calendarColor, "var(--mrd-cal-local)", {
+      openLocalEvent: (existing, onDone) => new LocalEventModal(plugin.app, meridianLocalEvents(plugin), existing, onDone).open(),
+      openWeeklyGoals: (onDone) => new WeeklyGoalsModal(plugin.app, meridianWeeklyGoals(plugin), plugin.todos, currentWeekKey(), onDone, MERIDIAN_WEEKLYGOALS_COPY).open(),
+      openWeekPrint: () => new WeekPrintModal(plugin.app, meridianWeekPrintConfig(plugin)).open()
+    }),
     calendar: () => new CalendarPanel(),
     actions: () => new ActionsPanel(),
     qotd: () => new QotdPanel(),
@@ -5375,6 +5420,9 @@ var MeridianView = class extends import_obsidian28.ItemView {
       copy: MERIDIAN_COPY,
       runtime: this.plugin.runtime,
       settings: () => this.plugin.settings,
+      agendaCache: this.plugin.agendaCache,
+      localEvents: this.plugin.localEvents,
+      persist: () => this.plugin.saveData_(),
       requestRefresh: (reason = "manual") => void this.refreshPanels(reason),
       markFoodFocus: () => {
         this.plugin.markFoodFocus();

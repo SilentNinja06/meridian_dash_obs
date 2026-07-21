@@ -1,4 +1,44 @@
-import type { DashCopy, TodoModalCopy, ClockCopy, MealsCopy, JournalCopy, WeeklyGoalsCopy, TodoCopy } from "dash-core";
+import type { DashCopy, TodoModalCopy, ClockCopy, MealsCopy, JournalCopy, WeeklyGoalsCopy, TodoCopy, AgendaCopy, WeekPrintCopy } from "dash-core";
+
+/** MERIDIAN's copy for today's agenda — Proton-specific voice + countdown states. */
+export const MERIDIAN_AGENDA_COPY: AgendaCopy = {
+	title: "Today's Agenda",
+	addEvent: "+ Event",
+	weeklyGoals: "Weekly goals",
+	printWeek: "Print week",
+	noCalendars:
+		"No calendars are on file. Add Proton Calendar share links (public .ics URLs) in settings, or add a local event with “+ Event”, and today's schedule will appear here.",
+	localLabel: "LOCAL",
+	fetchFailed:
+		"{label}: this calendar could not be reached ({error}). A share link can go quiet on Proton's side — this one may need renewing.",
+	allDay: "ALL DAY",
+	editLocal: "Edit this local event",
+	staleness:
+		"Serving the last successful read from {when}. Proton can take up to eight hours to propagate a change; a fresh read is on its way.",
+	clearRest: "Clear for the rest of the day. The remaining hours are unclaimed.",
+	clearDay: "The day's agenda is clear. This is a reading, not an absence.",
+	now: "NOW",
+	next: "NEXT",
+	endsIn: "ends in {t}",
+	inT: "in {t}",
+	gapClear: "Then clear for the rest of the day.",
+	gapOpen: "Then open for {t} before the next.",
+	gapUntil: "Open until then — {t} free.",
+};
+
+/** MERIDIAN's copy for the printable week planner (neutral planner chrome). */
+export const MERIDIAN_WEEKPRINT_COPY: WeekPrintCopy = {
+	title: "Week at a Glance",
+	prevWeek: "‹ Prev week",
+	nextWeek: "Next week ›",
+	thisWeek: "This week",
+	setGoals: "Set goals",
+	sharePrint: "Share / Print",
+	print: "Print",
+	goalsHead: "Goals for the week",
+	notesHead: "Notes / To-do",
+	savedNotice: "Saved “{name}”. Open it in a browser to print.",
+};
 
 /** MERIDIAN's copy for the Directives panel (the "directive" vocabulary + the
  * in-voice empty state). */

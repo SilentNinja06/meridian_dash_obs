@@ -1,6 +1,21 @@
 import { Panel } from "./types";
 import type MeridianDashPlugin from "../main";
-import { ClockPanel, JournalPanel, MealsPanel, PlacesPanel, CalendarPanel, SearchPanel, SecondBrainPanel, TodoPanel } from "dash-core";
+import {
+	ClockPanel,
+	JournalPanel,
+	MealsPanel,
+	PlacesPanel,
+	CalendarPanel,
+	SearchPanel,
+	SecondBrainPanel,
+	TodoPanel,
+	AgendaPanel,
+	WeekReviewModal,
+	WeekPrintModal,
+	LocalEventModal,
+	WeeklyGoalsModal,
+	currentWeekKey,
+} from "dash-core";
 import {
 	MERIDIAN_CLOCK_COPY,
 	MERIDIAN_JOURNAL_COPY,
@@ -8,12 +23,16 @@ import {
 	MERIDIAN_PLACES_COPY,
 	MERIDIAN_TODO_PANEL_COPY,
 	MERIDIAN_TODO_COPY,
+	MERIDIAN_AGENDA_COPY,
+	MERIDIAN_WEEKLYGOALS_COPY,
 } from "../copy";
+import { calendarColor } from "../core/tokens";
+import { meridianLocalEvents } from "../localevents";
+import { meridianWeeklyGoals } from "../weeklygoals";
+import { meridianWeekReviewConfig } from "../weekreview";
+import { meridianWeekPrintConfig } from "../weekprint";
 import { QotdPanel } from "./qotd";
 import { MeridianPanel } from "./meridian";
-import { AgendaPanel } from "./agenda";
-import { WeekReviewModal } from "dash-core";
-import { meridianWeekReviewConfig } from "../weekreview";
 import { ArfidPanel } from "./arfid";
 import { SpiralPanel } from "./spiral";
 import { CrmPanel } from "./crm";
@@ -67,7 +86,14 @@ export function createPanels(order: string[], enabled: Record<string, boolean>, 
 		clock: () => new ClockPanel(MERIDIAN_CLOCK_COPY),
 		meridian: () => new MeridianPanel(),
 		todo: () => new TodoPanel(MERIDIAN_TODO_PANEL_COPY, MERIDIAN_TODO_COPY, () => new WeekReviewModal(plugin.app, meridianWeekReviewConfig(plugin)).open()),
-		agenda: () => new AgendaPanel(),
+		agenda: () =>
+			new AgendaPanel(MERIDIAN_AGENDA_COPY, calendarColor, "var(--mrd-cal-local)", {
+				openLocalEvent: (existing, onDone) =>
+					new LocalEventModal(plugin.app, meridianLocalEvents(plugin), existing, onDone).open(),
+				openWeeklyGoals: (onDone) =>
+					new WeeklyGoalsModal(plugin.app, meridianWeeklyGoals(plugin), plugin.todos, currentWeekKey(), onDone, MERIDIAN_WEEKLYGOALS_COPY).open(),
+				openWeekPrint: () => new WeekPrintModal(plugin.app, meridianWeekPrintConfig(plugin)).open(),
+			}),
 		calendar: () => new CalendarPanel(),
 		actions: () => new ActionsPanel(),
 		qotd: () => new QotdPanel(),
