@@ -1,6 +1,6 @@
 import { TFile, prepareFuzzySearch } from "obsidian";
 import { BasePanel, placard } from "./types";
-import { NewCategoryModal, NewNoteModal, runAssignFlow } from "./categorymodals";
+import { NewCategoryModal, NewNoteModal, runAssignFlow } from "dash-core";
 
 /**
  * Knowledge-base search (§7.12). Fuzzy search scoped to the configured folder

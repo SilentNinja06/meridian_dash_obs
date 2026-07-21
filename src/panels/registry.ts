@@ -1,5 +1,6 @@
 import { Panel } from "./types";
-import { ClockPanel } from "./clock";
+import { ClockPanel } from "dash-core";
+import { MERIDIAN_CLOCK_COPY } from "../copy";
 import { QotdPanel } from "./qotd";
 import { MeridianPanel } from "./meridian";
 import { TodoPanel } from "./todo";
@@ -57,7 +58,7 @@ export const PANEL_TITLES: Record<string, string> = {
 type PanelFactory = () => Panel;
 
 const FACTORIES: Record<string, PanelFactory> = {
-	clock: () => new ClockPanel(),
+	clock: () => new ClockPanel(MERIDIAN_CLOCK_COPY),
 	meridian: () => new MeridianPanel(),
 	todo: () => new TodoPanel(),
 	agenda: () => new AgendaPanel(),
