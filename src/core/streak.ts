@@ -1,47 +1,35 @@
 /**
  * Observation streak (§2.2): a genuine longevity metric and honest milestone
- * trigger. The transition logic is pure (date strings passed in) so it can be
- * unit-tested for the consecutive / broken / idempotent-per-day cases.
+ * trigger. The current streak is derived by scanning the daily notes backward
+ * from today (see MeridianDashPlugin.updateStreak) rather than accumulated
+ * incrementally — that makes it self-healing and robust to *when* it recomputes.
  *
- * A broken streak is silent — it just resets `current` to 1 and produces no
- * negative copy anywhere. Only positive milestones speak, via the canon pool.
+ * `currentStreakFromDays` is the pure counting rule, unit-tested for the
+ * consecutive / broken / today-in-progress cases. A broken streak is silent —
+ * it just yields a smaller number and produces no negative copy anywhere.
  */
 export interface StreakData {
 	current: number;
 	longest: number;
-	/** YYYY-MM-DD of the most recent day counted, or "" if none yet. */
+	/** YYYY-MM-DD of the day the streak was last locked in (today, once today has
+	 * earned its mark), or "" if none yet. Guards the once-per-day recompute. */
 	lastDayCounted: string;
 }
 
 export const DEFAULT_STREAK: StreakData = { current: 0, longest: 0, lastDayCounted: "" };
 
-export interface StreakResult {
-	streak: StreakData;
-	/** True when this advance set a new all-time record (a fresh `longest`). */
-	newRecord: boolean;
-}
-
 /**
- * Advance the streak given whether today counts and the today/yesterday dates.
- *  - today doesn't count yet → unchanged (we never break a streak on a day that
- *    simply hasn't earned its mark).
- *  - already counted today → unchanged (idempotent per day).
- *  - lastDayCounted was yesterday → current + 1.
- *  - lastDayCounted older than yesterday (or empty) → current = 1 (streak broke).
+ * Count the current streak from a backward day-count array where index 0 is
+ * today, index 1 yesterday, and so on. A not-yet-qualified today does not break
+ * a live streak: if today hasn't counted, the run is measured from yesterday, so
+ * the display stays correct between midnight and the day's first logged activity.
  */
-export function advanceStreak(
-	prev: StreakData,
-	todayCounts: boolean,
-	today: string,
-	yesterday: string
-): StreakResult {
-	if (!todayCounts || prev.lastDayCounted === today) {
-		return { streak: prev, newRecord: false };
+export function currentStreakFromDays(counts: boolean[]): number {
+	const start = counts[0] ? 0 : 1;
+	let n = 0;
+	for (let i = start; i < counts.length; i++) {
+		if (!counts[i]) break;
+		n++;
 	}
-	const current = prev.lastDayCounted === yesterday ? prev.current + 1 : 1;
-	const longest = Math.max(prev.longest, current);
-	return {
-		streak: { current, longest, lastDayCounted: today },
-		newRecord: longest > prev.longest,
-	};
+	return n;
 }
