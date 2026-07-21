@@ -11,5 +11,10 @@ export function meridianCompanion(bridge: Bridge): CompanionData {
 	return {
 		spiralEntriesForDate: (date: string) => bridge.spiralEntriesForDate(date),
 		nourishmentEntriesForDate: async (date: string) => (await bridge.arfidToday(date)).length,
+		// Recipe Manager companion (drives the meals panel).
+		recipesAvailable: () => bridge.recipesAvailable(),
+		plannedMeals: (date?: string) => bridge.plannedMeals(date),
+		groceryList: () => bridge.groceryList(),
+		toggleGroceryItem: (line: number) => bridge.toggleGroceryItem(line),
 	};
 }

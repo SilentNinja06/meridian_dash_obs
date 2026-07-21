@@ -1,4 +1,26 @@
-import type { DashCopy, TodoModalCopy, ClockCopy } from "dash-core";
+import type { DashCopy, TodoModalCopy, ClockCopy, MealsCopy } from "dash-core";
+
+/** MERIDIAN's copy for the meals & provisioning panel — exact strings and the
+ * Recipe Manager command buttons the dashboard has always shown. */
+export const MERIDIAN_MEALS_COPY: MealsCopy = {
+	title: "Meals & Provisioning",
+	offline: "The provisioning subsystem is offline. Enable Recipe Manager to bring it online.",
+	plannedHeading: "Planned today",
+	noMeals: "No meals planned today.",
+	openRecipe: "Open recipe →",
+	groceryHeading: "Grocery list",
+	noGroceryAt: "No grocery list at {path}. Build one below.",
+	groceryEmpty: "The grocery list is present but has no items.",
+	remaining: "{remaining} of {total} remaining",
+	commandOffline: "This subsystem is offline. Its plugin is not currently enabled.",
+	commands: [
+		{ id: "recipe-manager:meal-plan", label: "Plan a meal", cls: "mrd-btn-primary", food: true },
+		{ id: "recipe-manager:grocery-list", label: "Build grocery list", food: true },
+		{ id: "recipe-manager:open-recipe", label: "Open recipe", food: true },
+		{ id: "recipe-manager:new-recipe", label: "New recipe", food: true },
+		{ id: "recipe-manager:recipe-index", label: "Recipe index", food: true },
+	],
+};
 
 /** MERIDIAN's clock register — the exact voice the dashboard has always shown.
  * Friendly injects its own warm, plain equivalents. */

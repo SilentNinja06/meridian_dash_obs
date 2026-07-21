@@ -10,7 +10,8 @@ import { JournalPanel } from "./journal";
 import { ArfidPanel } from "./arfid";
 import { SpiralPanel } from "./spiral";
 import { CrmPanel } from "./crm";
-import { MealsPanel } from "./meals";
+import { MealsPanel } from "dash-core";
+import { MERIDIAN_MEALS_COPY } from "../copy";
 import { ActionsPanel } from "./actions";
 import { SearchPanel } from "./search";
 import { SecondBrainPanel } from "./secondbrain";
@@ -67,7 +68,7 @@ const FACTORIES: Record<string, PanelFactory> = {
 	actions: () => new ActionsPanel(),
 	qotd: () => new QotdPanel(),
 	journal: () => new JournalPanel(),
-	meals: () => new MealsPanel(),
+	meals: () => new MealsPanel(MERIDIAN_MEALS_COPY),
 	arfid: () => new ArfidPanel(),
 	spiral: () => new SpiralPanel(),
 	crm: () => new CrmPanel(),

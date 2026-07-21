@@ -28,24 +28,9 @@ export interface CrmRow {
 	dueToday: boolean;
 }
 
-export interface Meal {
-	name: string;
-	link: string;
-}
-
-export interface GroceryItem {
-	name: string;
-	checked: boolean;
-	/** 0-based line index in the grocery file (for inline toggling). */
-	line: number;
-}
-
-export interface GroceryList {
-	path: string;
-	items: GroceryItem[];
-	/** Non-checkbox lines (headings, notes) preserved for context, with their line index. */
-	exists: boolean;
-}
+// Meal / grocery shapes are shared with core (the meals panel consumes them).
+export type { Meal, GroceryItem, GroceryList } from "dash-core";
+import type { Meal, GroceryItem, GroceryList } from "dash-core";
 
 const PRIORITY_RANK: Record<string, number> = { high: 0, medium: 1, low: 2, "": 3 };
 
