@@ -7,6 +7,7 @@ var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
 var __export = (target, all) => {
   for (var name in all)
     __defProp(target, name, { get: all[name], enumerable: true });
@@ -20,6 +21,7 @@ var __copyProps = (to, from, except, desc) => {
   return to;
 };
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
 
 // src/main.ts
 var main_exports = {};
@@ -795,7 +797,7 @@ async function safeAsync(fn, fallback) {
 // src/panels/todo.ts
 var import_obsidian12 = require("obsidian");
 
-// vendor/dash-core/src/core/ics.ts
+// node_modules/dash-core/src/core/ics.ts
 var import_obsidian5 = require("obsidian");
 function tzOffsetMinutes(tz, utcMs) {
   try {
@@ -1093,7 +1095,7 @@ async function fetchICS(url) {
   return res.text;
 }
 
-// vendor/dash-core/src/core/agendamath.ts
+// node_modules/dash-core/src/core/agendamath.ts
 function agendaState(items, now) {
   const timed = items.filter((i) => !i.allDay).sort((a, b) => a.startMs - b.startMs);
   const inProgress = timed.filter((i) => i.endMs !== void 0 && i.startMs <= now && i.endMs > now).sort((a, b) => a.endMs - b.endMs)[0];
@@ -1127,7 +1129,7 @@ function formatGap(ms) {
   return `${m}m`;
 }
 
-// vendor/dash-core/src/core/localevents.ts
+// node_modules/dash-core/src/core/localevents.ts
 function localEventToAgendaItem(ev) {
   const [y, mo, d] = ev.date.split("-").map(Number);
   if (!ev.start) {
@@ -1160,10 +1162,10 @@ function localEventToAgendaItem(ev) {
   };
 }
 
-// vendor/dash-core/src/core/todostore.ts
+// node_modules/dash-core/src/core/todostore.ts
 var import_obsidian7 = require("obsidian");
 
-// vendor/dash-core/src/core/dailynote.ts
+// node_modules/dash-core/src/core/dailynote.ts
 var import_obsidian6 = require("obsidian");
 function getDailyNotesOptions(app) {
   var _a, _b, _c, _d;
@@ -1379,7 +1381,7 @@ function readMarkerLogLines(content, marker, heading) {
   return out;
 }
 
-// vendor/dash-core/src/core/todostore.ts
+// node_modules/dash-core/src/core/todostore.ts
 var WEEKDAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 function describeRecurrence(r) {
   var _a, _b, _c;
@@ -1754,7 +1756,7 @@ function cryptoId() {
   return "t-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
 }
 
-// vendor/dash-core/src/core/subitems.ts
+// node_modules/dash-core/src/core/subitems.ts
 function isRecurringItem(item) {
   return item.recurrence.type !== "none";
 }
@@ -1776,7 +1778,7 @@ function allSubItemsDone(item, date) {
   return subs.length > 0 && subs.every((s) => subItemDone(item, s.id, date));
 }
 
-// vendor/dash-core/src/core/directivesserde.ts
+// node_modules/dash-core/src/core/directivesserde.ts
 var DEFAULT_DIRECTIVES_HEADER = "%% Dashboard \u2014 persistent directives. Managed automatically; edit these in the dashboard, not here. %%";
 function buildMarkdown(items, header = DEFAULT_DIRECTIVES_HEADER) {
   const json = JSON.stringify({ version: 1, todos: items }, null, 2);
@@ -1798,7 +1800,7 @@ function parseTodos(raw) {
   }
 }
 
-// vendor/dash-core/src/core/directivesstore.ts
+// node_modules/dash-core/src/core/directivesstore.ts
 var import_obsidian8 = require("obsidian");
 var DEFAULT_PATH = "Dashboard/Directives.md";
 var DirectivesStore = class {
@@ -1806,10 +1808,10 @@ var DirectivesStore = class {
     this.app = app;
     this.getPath = getPath;
     this.opts = opts;
-    this.items = [];
+    __publicField(this, "items", []);
     /** The exact text we last read from / wrote to disk, so a modify event
      * caused by our own write reloads to identical content and is ignored. */
-    this.lastSerialized = "";
+    __publicField(this, "lastSerialized", "");
   }
   getItems() {
     return this.items;
@@ -1890,7 +1892,7 @@ var DirectivesStore = class {
   }
 };
 
-// vendor/dash-core/src/core/library.ts
+// node_modules/dash-core/src/core/library.ts
 var import_obsidian9 = require("obsidian");
 var LibraryStore = class {
   constructor(app, cfg) {
@@ -2125,7 +2127,7 @@ type: category
   }
 };
 
-// vendor/dash-core/src/core/streak.ts
+// node_modules/dash-core/src/core/streak.ts
 var DEFAULT_STREAK = { current: 0, longest: 0, lastDayCounted: "" };
 function currentStreakFromDays(counts) {
   const start = counts[0] ? 0 : 1;
