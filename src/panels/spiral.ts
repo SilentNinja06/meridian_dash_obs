@@ -13,30 +13,30 @@ export class SpiralPanel extends BasePanel {
 	title = "Regulation Log";
 
 	protected async renderBody(): Promise<void> {
-		const { bridge } = this.ctx;
+		const { bridge, app } = this.ctx;
 		placard(this.el, "Regulation Log");
 
 		if (!bridge.spiralAvailable()) {
-			this.el.createDiv({ cls: "mrd-muted", text: "The regulation subsystem is offline. Enable the Spiral & Shutdown Logger to bring it online." });
+			this.el.createDiv({ cls: "dash-muted", text: "The regulation subsystem is offline. Enable the Spiral & Shutdown Logger to bring it online." });
 			return;
 		}
 
 		const entries = await bridge.spiralToday();
-		const card = this.el.createDiv({ cls: "mrd-spiral" });
+		const card = this.el.createDiv({ cls: "dash-spiral" });
 		if (entries.length === 0) {
-			card.createDiv({ cls: "mrd-muted", text: "Nothing logged today. That is simply the reading; it is not a target." });
+			card.createDiv({ cls: "dash-muted", text: "Nothing logged today. That is simply the reading; it is not a target." });
 		} else {
-			card.createDiv({ cls: "mrd-spiral-held", text: "Logged today. The record is holding it." });
-			const list = card.createDiv({ cls: "mrd-loglist" });
+			card.createDiv({ cls: "dash-spiral-held", text: "Logged today. The record is holding it." });
+			const list = card.createDiv({ cls: "dash-loglist" });
 			for (const e of entries) {
-				const row = list.createDiv({ cls: "mrd-logrow" });
-				row.createSpan({ cls: "mrd-logrow-time", text: e.time });
-				row.createSpan({ cls: "mrd-logrow-label", text: e.label });
+				const row = list.createDiv({ cls: "dash-logrow" });
+				row.createSpan({ cls: "dash-logrow-time", text: e.time });
+				row.createSpan({ cls: "dash-logrow-label", text: e.label });
 			}
 		}
 
-		const actions = this.el.createDiv({ cls: "mrd-btn-row" });
-		commandButton(actions, bridge, "spiral-shutdown-logger:quick-capture", "Log an entry", { cls: "mrd-btn-cold" });
-		commandButton(actions, bridge, "spiral-shutdown-logger:thought-capture", "Jot a thought", {});
+		const actions = this.el.createDiv({ cls: "dash-btn-row" });
+		commandButton(actions, app, "spiral-shutdown-logger:quick-capture", "Log an entry", { cls: "dash-btn-cold" });
+		commandButton(actions, app, "spiral-shutdown-logger:thought-capture", "Jot a thought", {});
 	}
 }

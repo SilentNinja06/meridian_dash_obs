@@ -12,31 +12,31 @@ export class ArfidPanel extends BasePanel {
 	title = "Nourishment Log";
 
 	protected async renderBody(): Promise<void> {
-		const { bridge } = this.ctx;
+		const { bridge, app } = this.ctx;
 		placard(this.el, "Nourishment Log");
 
 		if (!bridge.arfidAvailable()) {
-			this.el.createDiv({ cls: "mrd-muted", text: "The nourishment subsystem is offline. Enable ARFID Tracker to bring it online." });
+			this.el.createDiv({ cls: "dash-muted", text: "The nourishment subsystem is offline. Enable ARFID Tracker to bring it online." });
 			return;
 		}
 
 		const entries = await bridge.arfidToday();
-		const list = this.el.createDiv({ cls: "mrd-loglist" });
+		const list = this.el.createDiv({ cls: "dash-loglist" });
 		if (entries.length === 0) {
-			list.createDiv({ cls: "mrd-muted", text: "No entries logged today. The log is open whenever you are." });
+			list.createDiv({ cls: "dash-muted", text: "No entries logged today. The log is open whenever you are." });
 		} else {
 			for (const e of entries) {
-				const row = list.createDiv({ cls: "mrd-logrow" });
-				row.createSpan({ cls: "mrd-logrow-time", text: e.time });
-				row.createSpan({ cls: "mrd-logrow-label", text: e.label });
+				const row = list.createDiv({ cls: "dash-logrow" });
+				row.createSpan({ cls: "dash-logrow-time", text: e.time });
+				row.createSpan({ cls: "dash-logrow-label", text: e.label });
 			}
 		}
 
-		const actions = this.el.createDiv({ cls: "mrd-btn-row" });
+		const actions = this.el.createDiv({ cls: "dash-btn-row" });
 		const nudge = () => this.ctx.markFoodFocus();
-		commandButton(actions, bridge, "arfid-tracker:quick-log", "Log a food", { cls: "mrd-btn-primary", onRun: nudge });
-		commandButton(actions, bridge, "arfid-tracker:struggling", "I'm struggling", { cls: "mrd-btn-cold", onRun: nudge });
-		commandButton(actions, bridge, "arfid-tracker:log-exposure", "Exposure", { onRun: nudge });
-		commandButton(actions, bridge, "arfid-tracker:log-symptoms", "Symptoms", { onRun: nudge });
+		commandButton(actions, app, "arfid-tracker:quick-log", "Log a food", { cls: "dash-btn-primary", onRun: nudge });
+		commandButton(actions, app, "arfid-tracker:struggling", "I'm struggling", { cls: "dash-btn-cold", onRun: nudge });
+		commandButton(actions, app, "arfid-tracker:log-exposure", "Exposure", { onRun: nudge });
+		commandButton(actions, app, "arfid-tracker:log-symptoms", "Symptoms", { onRun: nudge });
 	}
 }

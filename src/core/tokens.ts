@@ -1,6 +1,6 @@
 /**
  * Design tokens — the Halcyon Systems palette (§5). The canonical source of
- * these values for styling is `styles.css` (as `--mrd-*` custom properties);
+ * these values for styling is `styles.css` (as `--dash-*` custom properties);
  * this module mirrors the hexes for the few places JavaScript needs a literal
  * colour (per-calendar swatches, inline SVG marks). Keep the two in sync.
  */

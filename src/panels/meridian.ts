@@ -64,15 +64,15 @@ export class MeridianPanel extends BasePanel {
 	protected async renderBody(): Promise<void> {
 		if (!this.currentLine) this.currentLine = await this.pick();
 		const head = placard(this.el, "MERIDIAN");
-		head.createSpan({ cls: "mrd-placard-badge", text: "OBSERVING" });
+		head.createSpan({ cls: "dash-placard-badge", text: "OBSERVING" });
 		const histBtn = head.createEl("button", {
-			cls: "mrd-icon-btn mrd-meridian-hist",
+			cls: "dash-icon-btn dash-meridian-hist",
 			text: "❯",
 			attr: { "aria-label": "Recent lines", title: "Recent lines" },
 		});
 		histBtn.addEventListener("click", () => new LineHistoryModal(this.ctx.app, this.ctx.plugin).open());
-		const card = this.el.createDiv({ cls: "mrd-meridian" });
-		card.createDiv({ cls: "mrd-meridian-line", text: this.currentLine });
+		const card = this.el.createDiv({ cls: "dash-meridian" });
+		card.createDiv({ cls: "dash-meridian-line", text: this.currentLine });
 	}
 
 	// --------------------------------------------------------- selection

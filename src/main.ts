@@ -9,21 +9,27 @@ import {
 	mergeSettings,
 } from "./settings";
 import { Bridge } from "./core/bridge";
-import { TodoStore, seedTodos } from "./core/todostore";
-import { DirectivesStore } from "./core/directivesstore";
-import { LibraryStore } from "./core/library";
-import { appendToDailyField, getDailyNoteFile, headingField, readDailyNoteRaw, readField, readMarkerLogLines } from "./core/dailynote";
+import { TodoStore } from "dash-core";
+import { seedTodos, DIRECTIVES_HEADER } from "./seed";
+import { MERIDIAN_TODO_COPY } from "./copy";
+import { DirectivesStore } from "dash-core";
+import { LibraryStore } from "dash-core";
+import { appendToDailyField, getDailyNoteFile, headingField, readDailyNoteRaw, readField, readMarkerLogLines } from "dash-core";
 import { LOG_FIELD_LABELS, LOG_FIELD_SPECS, LOG_FIELDS, LogField, isLogField } from "./core/dailyfields";
-import { LocalEvent } from "./core/localevents";
-import { DEFAULT_STREAK, StreakData, currentStreakFromDays } from "./core/streak";
+import { LocalEvent } from "dash-core";
+import { DEFAULT_STREAK, StreakData, currentStreakFromDays } from "dash-core";
 import { MeridianRuntime, RefreshReason } from "./panels/types";
 import { MeridianView, VIEW_TYPE_MERIDIAN } from "./view";
-import { TodoEditModal } from "./panels/todomodal";
-import { PromptModal } from "./panels/promptmodal";
-import { WeekReviewModal } from "./panels/weekreview";
-import { LocalEventModal } from "./panels/localeventmodal";
+import { TodoEditModal } from "dash-core";
+import { PromptModal } from "dash-core";
+import { WeekReviewModal } from "dash-core";
+import { meridianWeekReviewConfig } from "./weekreview";
+import { LocalEventModal } from "dash-core";
+import { meridianLocalEvents } from "./localevents";
 import { LineHistoryModal } from "./panels/linehistory";
-import { WeeklyGoalsModal, currentWeekKey } from "./panels/weeklygoals";
+import { WeeklyGoalsModal, currentWeekKey } from "dash-core";
+import { meridianWeeklyGoals } from "./weeklygoals";
+import { MERIDIAN_WEEKLYGOALS_COPY } from "./copy";
 import { anyCanonLine } from "./panels/meridian";
 
 export default class MeridianDashPlugin extends Plugin {
@@ -70,7 +76,10 @@ export default class MeridianDashPlugin extends Plugin {
 			archiveSubfolder: this.settings.kbArchiveSubfolder,
 			listHeading: this.settings.kbListHeading,
 		}));
-		this.directives = new DirectivesStore(this.app, () => this.settings.directivesPath);
+		this.directives = new DirectivesStore(this.app, () => this.settings.directivesPath, {
+			header: DIRECTIVES_HEADER,
+			defaultPath: "MERIDIAN/Directives.md",
+		});
 		this.todos = new TodoStore(
 			this.app,
 			() => this.directives.getItems(),
@@ -150,7 +159,7 @@ export default class MeridianDashPlugin extends Plugin {
 		this.addCommand({
 			id: "add-directive",
 			name: "Add a directive",
-			callback: () => new TodoEditModal(this.app, this.todos, undefined, () => this.refreshOpenViews("vault")).open(),
+			callback: () => new TodoEditModal(this.app, this.todos, undefined, () => this.refreshOpenViews("vault"), MERIDIAN_TODO_COPY).open(),
 		});
 		// id (Obsidian prefixes with `meridian-dash:`) → field
 		const logCommands: Array<{ id: string; field: LogField }> = [
@@ -179,17 +188,17 @@ export default class MeridianDashPlugin extends Plugin {
 		this.addCommand({
 			id: "add-event",
 			name: "Add an event",
-			callback: () => new LocalEventModal(this.app, this, undefined, () => this.refreshOpenViews("vault")).open(),
+			callback: () => new LocalEventModal(this.app, meridianLocalEvents(this), undefined, () => this.refreshOpenViews("vault")).open(),
 		});
 		this.addCommand({
 			id: "weekly-review",
 			name: "Weekly review",
-			callback: () => new WeekReviewModal(this.app, this).open(),
+			callback: () => new WeekReviewModal(this.app, meridianWeekReviewConfig(this)).open(),
 		});
 		this.addCommand({
 			id: "weekly-goals",
 			name: "Set weekly goals",
-			callback: () => new WeeklyGoalsModal(this.app, this, currentWeekKey(), () => this.refreshOpenViews("vault")).open(),
+			callback: () => new WeeklyGoalsModal(this.app, meridianWeeklyGoals(this), this.todos, currentWeekKey(), () => this.refreshOpenViews("vault"), MERIDIAN_WEEKLYGOALS_COPY).open(),
 		});
 		this.addCommand({
 			id: "refresh",
@@ -280,7 +289,7 @@ export default class MeridianDashPlugin extends Plugin {
 					this.refreshOpenViews("vault");
 					new Notice(`Directive filed: ${text}.`);
 				} else {
-					new TodoEditModal(this.app, this.todos, undefined, () => this.refreshOpenViews("vault")).open();
+					new TodoEditModal(this.app, this.todos, undefined, () => this.refreshOpenViews("vault"), MERIDIAN_TODO_COPY).open();
 				}
 				return;
 			}
@@ -303,7 +312,7 @@ export default class MeridianDashPlugin extends Plugin {
 					await this.addLocalEvent({ summary, date, start, end: start && params.end ? params.end : undefined });
 					new Notice(`Event filed: ${summary}.`);
 				} else {
-					new LocalEventModal(this.app, this, undefined, () => this.refreshOpenViews("vault")).open();
+					new LocalEventModal(this.app, meridianLocalEvents(this), undefined, () => this.refreshOpenViews("vault")).open();
 				}
 				return;
 			}

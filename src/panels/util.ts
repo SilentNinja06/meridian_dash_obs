@@ -1,25 +1,18 @@
-import { Bridge } from "../core/bridge";
+import { App } from "obsidian";
+import { commandButton as coreCommandButton } from "dash-core";
+import { MERIDIAN_COMMAND_OFFLINE } from "../copy";
 
-/** A button wired to an Obsidian command. If the command is missing (plugin
- * disabled), the button is disabled with an in-voice tooltip — never a crash
- * (§7.11). */
+/**
+ * Host-bound command button: MERIDIAN's disabled-command tooltip is injected so
+ * the call sites (spiral, actions, arfid, crm, meals) stay unchanged apart from
+ * passing `app` instead of the bridge. The generic button lives in dash-core.
+ */
 export function commandButton(
 	parent: HTMLElement,
-	bridge: Bridge,
+	app: App,
 	fullId: string,
 	label: string,
 	opts: { cls?: string; onRun?: () => void } = {}
 ): HTMLButtonElement {
-	const btn = parent.createEl("button", { cls: `mrd-btn ${opts.cls ?? ""}`.trim(), text: label });
-	if (!bridge.commandExists(fullId)) {
-		btn.setAttr("disabled", "true");
-		btn.addClass("is-unavailable");
-		btn.setAttr("title", "This subsystem is offline. Its plugin is not currently enabled.");
-		return btn;
-	}
-	btn.addEventListener("click", () => {
-		bridge.runCommand(fullId);
-		opts.onRun?.();
-	});
-	return btn;
+	return coreCommandButton(parent, app, fullId, label, { ...opts, offlineText: MERIDIAN_COMMAND_OFFLINE });
 }
