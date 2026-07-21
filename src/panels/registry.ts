@@ -1,23 +1,20 @@
 import { Panel } from "./types";
-import { ClockPanel } from "dash-core";
-import { MERIDIAN_CLOCK_COPY } from "../copy";
+import type MeridianDashPlugin from "../main";
+import { ClockPanel, JournalPanel, MealsPanel, PlacesPanel, CalendarPanel, SearchPanel, SecondBrainPanel } from "dash-core";
+import {
+	MERIDIAN_CLOCK_COPY,
+	MERIDIAN_JOURNAL_COPY,
+	MERIDIAN_MEALS_COPY,
+	MERIDIAN_PLACES_COPY,
+} from "../copy";
 import { QotdPanel } from "./qotd";
 import { MeridianPanel } from "./meridian";
 import { TodoPanel } from "./todo";
 import { AgendaPanel } from "./agenda";
-import { CalendarPanel } from "dash-core";
-import { JournalPanel } from "dash-core";
-import { MERIDIAN_JOURNAL_COPY } from "../copy";
 import { ArfidPanel } from "./arfid";
 import { SpiralPanel } from "./spiral";
 import { CrmPanel } from "./crm";
-import { MealsPanel } from "dash-core";
-import { MERIDIAN_MEALS_COPY } from "../copy";
 import { ActionsPanel } from "./actions";
-import { SearchPanel } from "./search";
-import { SecondBrainPanel } from "./secondbrain";
-import { PlacesPanel } from "dash-core";
-import { MERIDIAN_PLACES_COPY } from "../copy";
 
 /** Registration order = default panel order (§4, §11.2). Everything ships
  * enabled; the layout is responsive (single column on mobile, grid on desktop),
@@ -60,33 +57,34 @@ export const PANEL_TITLES: Record<string, string> = {
 
 type PanelFactory = () => Panel;
 
-const FACTORIES: Record<string, PanelFactory> = {
-	clock: () => new ClockPanel(MERIDIAN_CLOCK_COPY),
-	meridian: () => new MeridianPanel(),
-	todo: () => new TodoPanel(),
-	agenda: () => new AgendaPanel(),
-	calendar: () => new CalendarPanel(),
-	actions: () => new ActionsPanel(),
-	qotd: () => new QotdPanel(),
-	journal: () => new JournalPanel(MERIDIAN_JOURNAL_COPY),
-	meals: () => new MealsPanel(MERIDIAN_MEALS_COPY),
-	arfid: () => new ArfidPanel(),
-	spiral: () => new SpiralPanel(),
-	crm: () => new CrmPanel(),
-	search: () => new SearchPanel(),
-	secondbrain: () => new SecondBrainPanel(),
-	places: () => new PlacesPanel(MERIDIAN_PLACES_COPY),
-};
+/** Build the enabled panels in the configured order. Factories close over the
+ * plugin so core panels can be constructed with the host stores/copy they need. */
+export function createPanels(order: string[], enabled: Record<string, boolean>, plugin: MeridianDashPlugin): Panel[] {
+	const factories: Record<string, PanelFactory> = {
+		clock: () => new ClockPanel(MERIDIAN_CLOCK_COPY),
+		meridian: () => new MeridianPanel(),
+		todo: () => new TodoPanel(),
+		agenda: () => new AgendaPanel(),
+		calendar: () => new CalendarPanel(),
+		actions: () => new ActionsPanel(),
+		qotd: () => new QotdPanel(),
+		journal: () => new JournalPanel(MERIDIAN_JOURNAL_COPY),
+		meals: () => new MealsPanel(MERIDIAN_MEALS_COPY),
+		arfid: () => new ArfidPanel(),
+		spiral: () => new SpiralPanel(),
+		crm: () => new CrmPanel(),
+		search: () => new SearchPanel(plugin.knowledgeBase),
+		secondbrain: () => new SecondBrainPanel(plugin.secondBrain),
+		places: () => new PlacesPanel(MERIDIAN_PLACES_COPY),
+	};
 
-/** Build the enabled panels in the configured order. */
-export function createPanels(order: string[], enabled: Record<string, boolean>): Panel[] {
 	const seen = new Set<string>();
 	const panels: Panel[] = [];
 	for (const id of order) {
 		if (seen.has(id)) continue;
 		seen.add(id);
 		if (enabled[id] === false) continue;
-		const factory = FACTORIES[id];
+		const factory = factories[id];
 		if (factory) panels.push(factory());
 	}
 	return panels;

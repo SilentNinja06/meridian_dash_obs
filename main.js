@@ -2395,6 +2395,379 @@ var WeeklyGoalsModal = class extends import_obsidian14.Modal {
   }
 };
 
+// node_modules/dash-core/src/panels/secondbrain.ts
+var import_obsidian15 = require("obsidian");
+var SecondBrainPanel = class extends BasePanel {
+  constructor(store) {
+    super();
+    this.store = store;
+    __publicField(this, "id", "secondbrain");
+    __publicField(this, "title", "Second Brain");
+    __publicField(this, "query", "");
+  }
+  renderBody() {
+    const head = placard(this.el, "Second Brain");
+    const notes = this.store.listNotes();
+    head.createSpan({ cls: "mrd-placard-badge", text: `${notes.length} active` });
+    const actions = this.el.createDiv({ cls: "mrd-btn-row" });
+    const add = actions.createEl("button", { cls: "mrd-btn mrd-btn-primary", text: "+ Note" });
+    add.addEventListener("click", () => new NewNoteModal2(this.ctx.app, this.store, () => this.rerender()).open());
+    const input = this.el.createEl("input", {
+      cls: "mrd-search-input",
+      attr: { type: "search", placeholder: "Search the Second Brain\u2026" }
+    });
+    input.value = this.query;
+    const results = this.el.createDiv({ cls: "mrd-sb-results" });
+    const render = () => {
+      results.empty();
+      const q = this.query.trim();
+      const list = q ? this.fuzzy(notes, q) : notes.slice(0, 12);
+      if (list.length === 0) {
+        results.createDiv({ cls: "mrd-muted", text: q ? "No matches." : "No active notes yet." });
+        return;
+      }
+      for (const file of list) this.renderNoteRow(results, file);
+      if (!q && notes.length > 12) {
+        results.createDiv({ cls: "mrd-muted", text: `+${notes.length - 12} more \u2014 type to search.` });
+      }
+    };
+    input.addEventListener("input", () => {
+      this.query = input.value;
+      render();
+    });
+    render();
+    const archived = this.store.listArchived();
+    if (archived.length > 0) {
+      const arch = this.el.createEl("details", { cls: "mrd-sb-archived" });
+      arch.createEl("summary", { text: `Archive \xB7 ${archived.length}` });
+      const list = arch.createDiv();
+      for (const file of archived) {
+        const row = list.createDiv({ cls: "mrd-sb-member" });
+        const link = row.createEl("a", { cls: "mrd-sb-link", text: file.basename });
+        link.addEventListener("click", (e) => {
+          e.preventDefault();
+          void this.ctx.app.workspace.getLeaf(false).openFile(file);
+        });
+        this.iconBtn(row, "\u293A", "Unarchive", async () => {
+          await this.store.restoreNote(file);
+          new import_obsidian15.Notice(`Restored ${file.basename}.`);
+          this.rerender();
+        });
+      }
+    }
+  }
+  renderNoteRow(parent, file) {
+    const row = parent.createDiv({ cls: "mrd-sb-row" });
+    const link = row.createEl("a", { cls: "mrd-sb-link", text: file.basename });
+    link.addEventListener("click", (e) => {
+      e.preventDefault();
+      void this.ctx.app.workspace.getLeaf(false).openFile(file);
+    });
+    this.iconBtn(row, "\u{1F5C4}", "Archive", async () => {
+      await this.store.archiveNote(file);
+      new import_obsidian15.Notice(`Archived ${file.basename}.`);
+      this.rerender();
+    });
+    this.iconBtn(row, "\u{1F5D1}", "Delete", () => {
+      new ConfirmModal(this.ctx.app, `Delete \u201C${file.basename}\u201D?`, "It goes to your configured trash and is removed from any category.", async () => {
+        await this.store.deleteNote(file);
+        new import_obsidian15.Notice(`Deleted ${file.basename}.`);
+        this.rerender();
+      }).open();
+    });
+  }
+  iconBtn(parent, glyph, label, onClick) {
+    const b = parent.createEl("button", { cls: "mrd-icon-btn mrd-sb-icon", text: glyph, attr: { title: label, "aria-label": label } });
+    b.addEventListener("click", onClick);
+  }
+  fuzzy(files, query) {
+    var _a;
+    const search = (0, import_obsidian15.prepareFuzzySearch)(query);
+    const scored = [];
+    for (const file of files) {
+      let best = search(file.basename);
+      const cache = this.ctx.app.metadataCache.getFileCache(file);
+      for (const h of (_a = cache == null ? void 0 : cache.headings) != null ? _a : []) {
+        const r = search(h.heading);
+        if (r && (!best || r.score > best.score)) best = r;
+      }
+      if (best) scored.push({ file, score: best.score });
+    }
+    return scored.sort((a, b) => b.score - a.score).slice(0, 20).map((s) => s.file);
+  }
+};
+var NewNoteModal2 = class extends import_obsidian15.Modal {
+  constructor(app, store, onDone) {
+    super(app);
+    this.store = store;
+    this.onDone = onDone;
+    __publicField(this, "title", "");
+  }
+  onOpen() {
+    this.titleEl.setText("New note");
+    new import_obsidian15.Setting(this.contentEl).setName("Title").addText((t) => {
+      t.setPlaceholder("Note title").onChange((v) => this.title = v);
+      t.inputEl.focus();
+      t.inputEl.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          void this.submit();
+        }
+      });
+    });
+    new import_obsidian15.Setting(this.contentEl).addButton((b) => b.setButtonText("Cancel").onClick(() => this.close())).addButton((b) => b.setButtonText("Create").setCta().onClick(() => void this.submit()));
+  }
+  async submit() {
+    const title = this.title.trim();
+    if (!title) {
+      new import_obsidian15.Notice("A note needs a title.");
+      return;
+    }
+    const file = await this.store.createNote(title);
+    this.close();
+    this.onDone();
+    await this.app.workspace.getLeaf(false).openFile(file);
+  }
+  onClose() {
+    this.contentEl.empty();
+  }
+};
+var ConfirmModal = class extends import_obsidian15.Modal {
+  constructor(app, heading, body, onConfirm) {
+    super(app);
+    this.heading = heading;
+    this.body = body;
+    this.onConfirm = onConfirm;
+  }
+  onOpen() {
+    this.titleEl.setText(this.heading);
+    this.contentEl.createEl("p", { text: this.body });
+    new import_obsidian15.Setting(this.contentEl).addButton((b) => b.setButtonText("Cancel").onClick(() => this.close())).addButton(
+      (b) => b.setButtonText("Delete").setWarning().onClick(() => {
+        this.close();
+        this.onConfirm();
+      })
+    );
+  }
+  onClose() {
+    this.contentEl.empty();
+  }
+};
+
+// node_modules/dash-core/src/panels/search.ts
+var import_obsidian16 = require("obsidian");
+var BODY_SCAN_CAP = 1e5;
+var SearchPanel = class extends BasePanel {
+  constructor(store) {
+    super();
+    this.store = store;
+    __publicField(this, "id", "search");
+    __publicField(this, "title", "Knowledge Base");
+    __publicField(this, "index", []);
+    __publicField(this, "selected", 0);
+    __publicField(this, "hits", []);
+    __publicField(this, "resultsEl");
+    __publicField(this, "inputEl");
+    __publicField(this, "debounce", null);
+    /** Bumped per query so a slow body scan from a stale query is discarded. */
+    __publicField(this, "queryToken", 0);
+    __publicField(this, "showingRecent", true);
+  }
+  async setup() {
+    this.buildIndex();
+    this.onCleanup(() => {
+      if (this.debounce !== null) window.clearTimeout(this.debounce);
+    });
+  }
+  buildIndex() {
+    var _a, _b;
+    const path = normalizeFolder((_a = this.ctx.settings().kbSearchPath) != null ? _a : "");
+    this.index = [];
+    for (const file of this.ctx.app.vault.getMarkdownFiles()) {
+      if (path && !file.path.startsWith(path)) continue;
+      const cache = this.ctx.app.metadataCache.getFileCache(file);
+      const headings = ((_b = cache == null ? void 0 : cache.headings) != null ? _b : []).map((h) => h.heading);
+      this.index.push({ file, basename: file.basename, headings, mtime: file.stat.mtime, size: file.stat.size });
+    }
+  }
+  renderBody() {
+    this.buildIndex();
+    placard(this.el, "Knowledge Base");
+    const store = this.store;
+    const actions = this.el.createDiv({ cls: "mrd-btn-row" });
+    const note = actions.createEl("button", { cls: "mrd-btn mrd-btn-primary", text: "+ Note" });
+    note.addEventListener("click", () => new NewNoteModal(this.ctx.app, store, () => this.rerender()).open());
+    const cat = actions.createEl("button", { cls: "mrd-btn", text: "+ Category" });
+    cat.addEventListener("click", () => new NewCategoryModal(this.ctx.app, store, () => this.rerender()).open());
+    const assign2 = actions.createEl("button", { cls: "mrd-btn", text: "Assign to category" });
+    assign2.addEventListener("click", () => runAssignFlow(this.ctx.app, store, () => this.rerender()));
+    const input = this.el.createEl("input", {
+      cls: "mrd-search-input",
+      attr: { type: "search", placeholder: "Search the knowledge base\u2026", enterkeyhint: "search" }
+    });
+    this.inputEl = input;
+    this.resultsEl = this.el.createDiv({ cls: "mrd-search-results" });
+    input.addEventListener("input", () => this.scheduleQuery(input.value));
+    input.addEventListener("keydown", (e) => this.onKey(e));
+    void this.runQuery("");
+    this.renderCategories();
+  }
+  /** Debounce body-scanning input ~150ms; empty query resolves immediately. */
+  scheduleQuery(query) {
+    if (this.debounce !== null) window.clearTimeout(this.debounce);
+    if (!query.trim()) {
+      void this.runQuery(query);
+      return;
+    }
+    this.debounce = window.setTimeout(() => {
+      this.debounce = null;
+      void this.runQuery(query);
+    }, 150);
+  }
+  renderCategories() {
+    const store = this.store;
+    const cats = store.listCategories();
+    const section = this.el.createDiv({ cls: "mrd-sb-cats" });
+    section.createDiv({ cls: "mrd-subhead", text: `Categories \xB7 ${cats.length}` });
+    if (cats.length === 0) {
+      section.createDiv({ cls: "mrd-muted", text: "No categories yet. Create one to start organizing." });
+      return;
+    }
+    const listEl = section.createDiv();
+    void (async () => {
+      const withMembers = await Promise.all(
+        cats.map(async (c) => ({ cat: c, members: await store.categoryMembers(c.file) }))
+      );
+      if (!listEl.isConnected) return;
+      for (const { cat, members } of withMembers) {
+        const details = listEl.createEl("details", { cls: "mrd-sb-cat" });
+        const summary = details.createEl("summary");
+        summary.createSpan({ cls: "mrd-sb-cat-name", text: cat.name });
+        summary.createSpan({ cls: "mrd-chip mrd-chip-cold", text: String(members.length) });
+        const body = details.createDiv({ cls: "mrd-sb-cat-body" });
+        if (members.length === 0) body.createDiv({ cls: "mrd-muted", text: "Empty." });
+        for (const m of members) {
+          const row = body.createDiv({ cls: "mrd-sb-member" });
+          const link = row.createEl("a", { cls: "mrd-sb-link", text: m });
+          link.addEventListener("click", (e) => {
+            e.preventDefault();
+            void this.ctx.app.workspace.openLinkText(m, cat.file.path, false);
+          });
+        }
+      }
+    })();
+  }
+  async runQuery(query) {
+    var _a;
+    const q = query.trim();
+    const token = ++this.queryToken;
+    this.selected = 0;
+    if (!q) {
+      this.showingRecent = true;
+      const n = Math.max(0, (_a = this.ctx.settings().kbRecentCount) != null ? _a : 8);
+      this.hits = this.index.slice().sort((a, b) => b.mtime - a.mtime).slice(0, n).map((c) => ({ file: c.file, title: c.basename, context: "", score: 0, body: false }));
+      this.renderResults();
+      return;
+    }
+    this.showingRecent = false;
+    const search = (0, import_obsidian16.prepareFuzzySearch)(q);
+    const nameHits = [];
+    for (const cand of this.index) {
+      let best = search(cand.basename);
+      let context = "";
+      for (const h of cand.headings) {
+        const r = search(h);
+        if (r && (!best || r.score > best.score)) {
+          best = r;
+          context = h;
+        }
+      }
+      if (best) nameHits.push({ file: cand.file, title: cand.basename, context, score: best.score, body: false });
+    }
+    nameHits.sort((a, b) => b.score - a.score);
+    this.hits = nameHits.slice(0, 20);
+    this.renderResults();
+    if (!this.ctx.settings().kbSearchBody) return;
+    const already = new Set(nameHits.map((h) => h.file.path));
+    const needle = q.toLowerCase();
+    const bodyHits = [];
+    for (const cand of this.index) {
+      if (already.has(cand.file.path)) continue;
+      if (cand.size > BODY_SCAN_CAP) continue;
+      let content;
+      try {
+        content = await this.ctx.app.vault.cachedRead(cand.file);
+      } catch (e) {
+        continue;
+      }
+      if (token !== this.queryToken) return;
+      const snippet = firstMatchingLine(content, needle);
+      if (snippet) bodyHits.push({ file: cand.file, title: cand.basename, context: snippet, score: 0, body: true });
+    }
+    if (token !== this.queryToken) return;
+    this.hits = [...nameHits, ...bodyHits].slice(0, 30);
+    this.renderResults();
+  }
+  renderResults() {
+    const el = this.resultsEl;
+    if (!el) return;
+    el.empty();
+    if (this.showingRecent) {
+      if (this.hits.length === 0) {
+        el.createDiv({ cls: "mrd-muted", text: "No notes in the knowledge-base scope yet." });
+        return;
+      }
+      el.createDiv({ cls: "mrd-subhead", text: `Recently modified \xB7 ${this.hits.length}` });
+    } else if (this.hits.length === 0) {
+      el.createDiv({ cls: "mrd-muted", text: "No matches in the knowledge base." });
+      return;
+    }
+    this.hits.forEach((hit, i) => {
+      const row = el.createDiv({ cls: "mrd-search-row" });
+      if (i === this.selected) row.addClass("is-selected");
+      row.createDiv({ cls: "mrd-search-title", text: hit.title });
+      if (hit.context && hit.context !== hit.title) {
+        const ctx = row.createDiv({ cls: "mrd-search-context", text: hit.context });
+        if (hit.body) ctx.addClass("is-body");
+      }
+      row.addEventListener("click", () => this.open(hit.file));
+    });
+  }
+  onKey(e) {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      this.selected = Math.min(this.hits.length - 1, this.selected + 1);
+      this.renderResults();
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      this.selected = Math.max(0, this.selected - 1);
+      this.renderResults();
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      const hit = this.hits[this.selected];
+      if (hit) this.open(hit.file);
+    }
+  }
+  open(file) {
+    void this.ctx.app.workspace.getLeaf(false).openFile(file);
+  }
+};
+function normalizeFolder(path) {
+  const p = path.trim().replace(/^\/+/, "");
+  if (!p) return "";
+  return p.endsWith("/") ? p : p + "/";
+}
+function firstMatchingLine(content, needle) {
+  for (const raw of content.split("\n")) {
+    const line = raw.trim();
+    if (!line || line.startsWith("#")) continue;
+    if (line.toLowerCase().includes(needle)) {
+      return line.length > 120 ? line.slice(0, 117) + "\u2026" : line;
+    }
+  }
+  return "";
+}
+
 // src/core/dailyfields.ts
 var SUPPLEMENTAL_STOP = /^\s*-\s+Supplemental\s*:?\s*$/i;
 var SPIRAL_MARKER = /%%\s*spiral-log\s*%%/i;
@@ -2487,7 +2860,7 @@ var MERIDIAN_COPY = {
 };
 
 // src/panels/qotd.ts
-var import_obsidian15 = require("obsidian");
+var import_obsidian17 = require("obsidian");
 
 // src/panels/types.ts
 var BasePanel2 = class extends BasePanel {
@@ -2520,7 +2893,7 @@ var QotdPanel = class extends BasePanel2 {
       card.createDiv({ cls: "mrd-muted", text: "The quotation archive is present but empty." });
       return;
     }
-    const m = (0, import_obsidian15.moment)((0, import_obsidian15.moment)().format("YYYY-MM-DD"), "YYYY-MM-DD");
+    const m = (0, import_obsidian17.moment)((0, import_obsidian17.moment)().format("YYYY-MM-DD"), "YYYY-MM-DD");
     const dayNumber = Math.floor(m.valueOf() / 864e5);
     const idx = (dayNumber % n + n) % n;
     const q = quotes[idx];
@@ -2562,11 +2935,11 @@ function parseQuotes(raw) {
 }
 
 // src/panels/meridian.ts
-var import_obsidian17 = require("obsidian");
+var import_obsidian19 = require("obsidian");
 
 // src/panels/linehistory.ts
-var import_obsidian16 = require("obsidian");
-var LineHistoryModal = class extends import_obsidian16.Modal {
+var import_obsidian18 = require("obsidian");
+var LineHistoryModal = class extends import_obsidian18.Modal {
   constructor(app, plugin) {
     super(app);
     this.plugin = plugin;
@@ -2584,7 +2957,7 @@ var LineHistoryModal = class extends import_obsidian16.Modal {
       const entry = history[i];
       const row = list.createDiv({ cls: "mrd-linehist-row" });
       row.createDiv({ cls: "mrd-linehist-line", text: entry.line });
-      row.createDiv({ cls: "mrd-linehist-when", text: (0, import_obsidian16.moment)(entry.at).fromNow() });
+      row.createDiv({ cls: "mrd-linehist-when", text: (0, import_obsidian18.moment)(entry.at).fromNow() });
     }
   }
   onClose() {
@@ -2992,7 +3365,7 @@ var MeridianPanel = class extends BasePanel2 {
     const bag = fresh.length ? fresh : candidates;
     const line = bag[Math.floor(Math.random() * bag.length)];
     if (pool === "milestone") {
-      this.ctx.plugin.milestoneShownDate = (0, import_obsidian17.moment)().format("YYYY-MM-DD");
+      this.ctx.plugin.milestoneShownDate = (0, import_obsidian19.moment)().format("YYYY-MM-DD");
       void this.ctx.plugin.saveData_();
     }
     ring.push(line);
@@ -3007,7 +3380,7 @@ var MeridianPanel = class extends BasePanel2 {
   }
   async weights() {
     const { todos, bridge, runtime, plugin } = this.ctx;
-    const todayStr2 = (0, import_obsidian17.moment)().format("YYYY-MM-DD");
+    const todayStr2 = (0, import_obsidian19.moment)().format("YYYY-MM-DD");
     const pending = todos.pendingCount();
     const overdueTodos = todos.overdueCount();
     const crm = safe(() => bridge.crmContacts(), []);
@@ -3046,7 +3419,7 @@ var MeridianPanel = class extends BasePanel2 {
     const completionsMilestone = doneToday > 0 && doneToday % 5 === 0;
     const streak = this.ctx.plugin.streak;
     const streakSeven = streak.current > 0 && streak.current % 7 === 0;
-    const newRecord = this.ctx.runtime.streakRecordDate === (0, import_obsidian17.moment)().format("YYYY-MM-DD");
+    const newRecord = this.ctx.runtime.streakRecordDate === (0, import_obsidian19.moment)().format("YYYY-MM-DD");
     return completionsMilestone || streakSeven || newRecord;
   }
 };
@@ -3104,11 +3477,11 @@ async function safeAsync(fn, fallback) {
 }
 
 // src/panels/todo.ts
-var import_obsidian19 = require("obsidian");
+var import_obsidian21 = require("obsidian");
 
 // src/panels/weekreview.ts
-var import_obsidian18 = require("obsidian");
-var WeekReviewModal = class extends import_obsidian18.Modal {
+var import_obsidian20 = require("obsidian");
+var WeekReviewModal = class extends import_obsidian20.Modal {
   constructor(app, plugin) {
     super(app);
     this.plugin = plugin;
@@ -3127,7 +3500,7 @@ var WeekReviewModal = class extends import_obsidian18.Modal {
     const s = this.plugin.settings;
     const bridge = this.plugin.bridge;
     const days = [];
-    for (let i = 6; i >= 0; i--) days.push((0, import_obsidian18.moment)().subtract(i, "days").format("YYYY-MM-DD"));
+    for (let i = 6; i >= 0; i--) days.push((0, import_obsidian20.moment)().subtract(i, "days").format("YYYY-MM-DD"));
     const dayStats = [];
     let totalCompleted = 0;
     let contactLines = 0;
@@ -3181,7 +3554,7 @@ var WeekReviewModal = class extends import_obsidian18.Modal {
       const fill = track.createDiv({ cls: "mrd-review-bar-fill" });
       fill.style.height = `${Math.round(d.completed / max * 100)}%`;
       if (d.completed === 0) fill.addClass("is-empty");
-      cell.createDiv({ cls: "mrd-review-bar-day", text: (0, import_obsidian18.moment)(d.date, "YYYY-MM-DD").format("dd")[0] });
+      cell.createDiv({ cls: "mrd-review-bar-day", text: (0, import_obsidian20.moment)(d.date, "YYYY-MM-DD").format("dd")[0] });
       cell.createDiv({ cls: "mrd-review-bar-count", text: String(d.completed) });
     }
     const crm = host.createDiv({ cls: "mrd-review-block" });
@@ -3271,7 +3644,7 @@ var TodoPanel = class extends BasePanel2 {
     var _a;
     const store = this.ctx.todos;
     const item = inst.item;
-    const today2 = (0, import_obsidian19.moment)().format("YYYY-MM-DD");
+    const today2 = (0, import_obsidian21.moment)().format("YYYY-MM-DD");
     const wrap = parent.createDiv({ cls: "mrd-todo-item" });
     const row = wrap.createDiv({ cls: "mrd-todo-row" });
     if (inst.flagged) row.addClass("is-flagged");
@@ -3326,7 +3699,7 @@ var TodoPanel = class extends BasePanel2 {
     } else if (inst.recurring && !inst.done) {
       this.iconBtn(actions, "\u293C", "Postpone for today", false, async () => {
         await store.skipInstance(item.id);
-        new import_obsidian19.Notice("Postponed for today. It returns on the next occurrence.");
+        new import_obsidian21.Notice("Postponed for today. It returns on the next occurrence.");
         this.after();
       });
     }
@@ -3420,9 +3793,9 @@ var TodoPanel = class extends BasePanel2 {
   }
 };
 function dueLabel(due, today2) {
-  if (due < today2) return `overdue \xB7 ${(0, import_obsidian19.moment)(due, "YYYY-MM-DD").format("MMM D")}`;
+  if (due < today2) return `overdue \xB7 ${(0, import_obsidian21.moment)(due, "YYYY-MM-DD").format("MMM D")}`;
   if (due === today2) return "due today";
-  return `due ${(0, import_obsidian19.moment)(due, "YYYY-MM-DD").format("MMM D")}`;
+  return `due ${(0, import_obsidian21.moment)(due, "YYYY-MM-DD").format("MMM D")}`;
 }
 function activeSort(a, b) {
   var _a, _b;
@@ -3434,10 +3807,10 @@ function activeSort(a, b) {
 }
 
 // src/panels/agenda.ts
-var import_obsidian21 = require("obsidian");
+var import_obsidian23 = require("obsidian");
 
 // src/panels/weekprint.ts
-var import_obsidian20 = require("obsidian");
+var import_obsidian22 = require("obsidian");
 
 // src/weeklygoals.ts
 function meridianWeeklyGoals(plugin) {
@@ -3449,11 +3822,11 @@ function meridianWeeklyGoals(plugin) {
 }
 
 // src/panels/weekprint.ts
-var WeekPrintModal = class extends import_obsidian20.Modal {
+var WeekPrintModal = class extends import_obsidian22.Modal {
   constructor(app, plugin) {
     super(app);
     this.plugin = plugin;
-    this.weekStart = (0, import_obsidian20.moment)().startOf("week");
+    this.weekStart = (0, import_obsidian22.moment)().startOf("week");
     this.sources = [];
   }
   onOpen() {
@@ -3486,18 +3859,18 @@ var WeekPrintModal = class extends import_obsidian20.Modal {
       this.render();
     });
     this.ctrlBtn(nav, "This week", () => {
-      this.weekStart = (0, import_obsidian20.moment)().startOf("week");
+      this.weekStart = (0, import_obsidian22.moment)().startOf("week");
       this.render();
     });
     this.ctrlBtn(nav, "Set goals", () => {
       new WeeklyGoalsModal(this.app, meridianWeeklyGoals(this.plugin), this.plugin.todos, weekKeyOf(this.weekStart), () => this.render(), MERIDIAN_WEEKLYGOALS_COPY).open();
     });
     const shareBtn = controls.createEl("button", {
-      cls: `mrd-btn ${import_obsidian20.Platform.isMobile ? "mrd-btn-primary" : ""}`.trim(),
+      cls: `mrd-btn ${import_obsidian22.Platform.isMobile ? "mrd-btn-primary" : ""}`.trim(),
       text: "Share / Print"
     });
     shareBtn.addEventListener("click", () => void this.share());
-    if (!import_obsidian20.Platform.isMobile) {
+    if (!import_obsidian22.Platform.isMobile) {
       const printBtn = controls.createEl("button", { cls: "mrd-btn mrd-btn-primary", text: "Print" });
       printBtn.addEventListener("click", () => this.print());
     }
@@ -3661,7 +4034,7 @@ ${collectWeekPrintCss()}`;
     a.click();
     a.remove();
     window.setTimeout(() => URL.revokeObjectURL(url), 1e4);
-    new import_obsidian20.Notice(`Saved \u201C${name}\u201D. Open it in a browser to print.`);
+    new import_obsidian22.Notice(`Saved \u201C${name}\u201D. Open it in a browser to print.`);
   }
   onClose() {
     this.contentEl.empty();
@@ -3744,7 +4117,7 @@ var AgendaPanel = class extends BasePanel2 {
   renderBody() {
     const s = this.ctx.settings();
     const head = placard(this.el, "Today's Agenda");
-    head.createSpan({ cls: "mrd-placard-badge", text: (0, import_obsidian21.moment)().format("YYYY-MM-DD") });
+    head.createSpan({ cls: "mrd-placard-badge", text: (0, import_obsidian23.moment)().format("YYYY-MM-DD") });
     const actions = this.el.createDiv({ cls: "mrd-btn-row mrd-agenda-actions" });
     const addBtn = actions.createEl("button", { cls: "mrd-btn mrd-btn-sm", text: "+ Event" });
     addBtn.addEventListener(
@@ -3761,7 +4134,7 @@ var AgendaPanel = class extends BasePanel2 {
       void this.fetchAll();
       new WeekPrintModal(this.ctx.app, this.ctx.plugin).open();
     });
-    const today2 = (0, import_obsidian21.moment)().format("YYYY-MM-DD");
+    const today2 = (0, import_obsidian23.moment)().format("YYYY-MM-DD");
     const localToday = this.ctx.plugin.localEvents.filter((e) => e.date === today2);
     if (s.agendaUrls.length === 0 && localToday.length === 0) {
       this.el.createDiv({
@@ -3834,7 +4207,7 @@ var AgendaPanel = class extends BasePanel2 {
       if (age > 90 * 1e3) {
         this.el.createDiv({
           cls: "mrd-agenda-age",
-          text: `Serving the last successful read from ${(0, import_obsidian21.moment)(oldest).fromNow()}. Proton can take up to eight hours to propagate a change; a fresh read is on its way.`
+          text: `Serving the last successful read from ${(0, import_obsidian23.moment)(oldest).fromNow()}. Proton can take up to eight hours to propagate a change; a fresh read is on its way.`
         });
       }
     }
@@ -3981,7 +4354,7 @@ var SpiralPanel = class extends BasePanel2 {
 };
 
 // src/panels/crm.ts
-var import_obsidian22 = require("obsidian");
+var import_obsidian24 = require("obsidian");
 var CrmPanel = class extends BasePanel2 {
   constructor() {
     super(...arguments);
@@ -4021,7 +4394,7 @@ var CrmPanel = class extends BasePanel2 {
     name.addEventListener("click", (e) => {
       e.preventDefault();
       const file = this.ctx.app.vault.getAbstractFileByPath(c.path);
-      if (file instanceof import_obsidian22.TFile) void this.ctx.app.workspace.getLeaf(false).openFile(file);
+      if (file instanceof import_obsidian24.TFile) void this.ctx.app.workspace.getLeaf(false).openFile(file);
     });
     const meta = main.createDiv({ cls: "mrd-crm-meta" });
     if (c.priority) meta.createSpan({ cls: `mrd-chip mrd-prio-${c.priority}`, text: c.priority });
@@ -4033,10 +4406,10 @@ var CrmPanel = class extends BasePanel2 {
       new CrmInteractionModal(this.ctx.app, c.name, async (text) => {
         const ok = await this.ctx.bridge.crmWriteInteraction(c.path, text);
         if (ok) {
-          new import_obsidian22.Notice(`Logged interaction with ${c.name}.`);
+          new import_obsidian24.Notice(`Logged interaction with ${c.name}.`);
           this.ctx.requestRefresh("manual");
         } else {
-          new import_obsidian22.Notice("Could not log the interaction.");
+          new import_obsidian24.Notice("Could not log the interaction.");
         }
       }).open();
     });
@@ -4049,7 +4422,7 @@ var CrmPanel = class extends BasePanel2 {
       const lines = await this.ctx.bridge.crmReconcileLines();
       if (lines.length === 0) return;
       const s = this.ctx.settings();
-      const time = (0, import_obsidian22.moment)().format("HH:mm");
+      const time = (0, import_obsidian24.moment)().format("HH:mm");
       for (const tail of lines) {
         await appendDailyLogLine(this.ctx.app, `- ${time} ${tail}`, {
           marker: s.crmLogMarker,
@@ -4062,7 +4435,7 @@ var CrmPanel = class extends BasePanel2 {
     }
   }
 };
-var CrmInteractionModal = class extends import_obsidian22.Modal {
+var CrmInteractionModal = class extends import_obsidian24.Modal {
   constructor(app, contactName2, onSubmit) {
     super(app);
     this.contactName = contactName2;
@@ -4071,7 +4444,7 @@ var CrmInteractionModal = class extends import_obsidian22.Modal {
   }
   onOpen() {
     this.titleEl.setText(`Log interaction \u2014 ${this.contactName}`);
-    new import_obsidian22.Setting(this.contentEl).setName("Interaction note").addText((t) => {
+    new import_obsidian24.Setting(this.contentEl).setName("Interaction note").addText((t) => {
       t.setPlaceholder("e.g. Called re: contract renewal").onChange((v) => this.note = v);
       t.inputEl.classList.add("mrd-modal-wide");
       t.inputEl.focus();
@@ -4082,12 +4455,12 @@ var CrmInteractionModal = class extends import_obsidian22.Modal {
         }
       });
     });
-    new import_obsidian22.Setting(this.contentEl).addButton((b) => b.setButtonText("Cancel").onClick(() => this.close())).addButton((b) => b.setButtonText("Log interaction").setCta().onClick(() => this.submit()));
+    new import_obsidian24.Setting(this.contentEl).addButton((b) => b.setButtonText("Cancel").onClick(() => this.close())).addButton((b) => b.setButtonText("Log interaction").setCta().onClick(() => this.submit()));
   }
   submit() {
     const note = this.note.trim();
     if (!note) {
-      new import_obsidian22.Notice("Please enter an interaction note.");
+      new import_obsidian24.Notice("Please enter an interaction note.");
       return;
     }
     this.onSubmit(note);
@@ -4175,378 +4548,6 @@ var ActionsPanel = class extends BasePanel2 {
   }
 };
 
-// src/panels/search.ts
-var import_obsidian23 = require("obsidian");
-var BODY_SCAN_CAP = 1e5;
-var SearchPanel = class extends BasePanel2 {
-  constructor() {
-    super(...arguments);
-    this.id = "search";
-    this.title = "Knowledge Base";
-    this.index = [];
-    this.selected = 0;
-    this.hits = [];
-    this.debounce = null;
-    /** Bumped per query so a slow body scan from a stale query is discarded. */
-    this.queryToken = 0;
-    this.showingRecent = true;
-  }
-  async setup() {
-    this.buildIndex();
-    this.onCleanup(() => {
-      if (this.debounce !== null) window.clearTimeout(this.debounce);
-    });
-  }
-  buildIndex() {
-    var _a;
-    const path = normalizeFolder(this.ctx.settings().kbSearchPath);
-    this.index = [];
-    for (const file of this.ctx.app.vault.getMarkdownFiles()) {
-      if (path && !file.path.startsWith(path)) continue;
-      const cache = this.ctx.app.metadataCache.getFileCache(file);
-      const headings = ((_a = cache == null ? void 0 : cache.headings) != null ? _a : []).map((h) => h.heading);
-      this.index.push({ file, basename: file.basename, headings, mtime: file.stat.mtime, size: file.stat.size });
-    }
-  }
-  renderBody() {
-    this.buildIndex();
-    placard(this.el, "Knowledge Base");
-    const store = this.ctx.plugin.knowledgeBase;
-    const actions = this.el.createDiv({ cls: "mrd-btn-row" });
-    const note = actions.createEl("button", { cls: "mrd-btn mrd-btn-primary", text: "+ Note" });
-    note.addEventListener("click", () => new NewNoteModal(this.ctx.app, store, () => this.rerender()).open());
-    const cat = actions.createEl("button", { cls: "mrd-btn", text: "+ Category" });
-    cat.addEventListener("click", () => new NewCategoryModal(this.ctx.app, store, () => this.rerender()).open());
-    const assign2 = actions.createEl("button", { cls: "mrd-btn", text: "Assign to category" });
-    assign2.addEventListener("click", () => runAssignFlow(this.ctx.app, store, () => this.rerender()));
-    const input = this.el.createEl("input", {
-      cls: "mrd-search-input",
-      attr: { type: "search", placeholder: "Search the knowledge base\u2026", enterkeyhint: "search" }
-    });
-    this.inputEl = input;
-    this.resultsEl = this.el.createDiv({ cls: "mrd-search-results" });
-    input.addEventListener("input", () => this.scheduleQuery(input.value));
-    input.addEventListener("keydown", (e) => this.onKey(e));
-    void this.runQuery("");
-    this.renderCategories();
-  }
-  /** Debounce body-scanning input ~150ms; empty query resolves immediately. */
-  scheduleQuery(query) {
-    if (this.debounce !== null) window.clearTimeout(this.debounce);
-    if (!query.trim()) {
-      void this.runQuery(query);
-      return;
-    }
-    this.debounce = window.setTimeout(() => {
-      this.debounce = null;
-      void this.runQuery(query);
-    }, 150);
-  }
-  renderCategories() {
-    const store = this.ctx.plugin.knowledgeBase;
-    const cats = store.listCategories();
-    const section = this.el.createDiv({ cls: "mrd-sb-cats" });
-    section.createDiv({ cls: "mrd-subhead", text: `Categories \xB7 ${cats.length}` });
-    if (cats.length === 0) {
-      section.createDiv({ cls: "mrd-muted", text: "No categories yet. Create one to start organizing." });
-      return;
-    }
-    const listEl = section.createDiv();
-    void (async () => {
-      const withMembers = await Promise.all(
-        cats.map(async (c) => ({ cat: c, members: await store.categoryMembers(c.file) }))
-      );
-      if (!listEl.isConnected) return;
-      for (const { cat, members } of withMembers) {
-        const details = listEl.createEl("details", { cls: "mrd-sb-cat" });
-        const summary = details.createEl("summary");
-        summary.createSpan({ cls: "mrd-sb-cat-name", text: cat.name });
-        summary.createSpan({ cls: "mrd-chip mrd-chip-cold", text: String(members.length) });
-        const body = details.createDiv({ cls: "mrd-sb-cat-body" });
-        if (members.length === 0) body.createDiv({ cls: "mrd-muted", text: "Empty." });
-        for (const m of members) {
-          const row = body.createDiv({ cls: "mrd-sb-member" });
-          const link = row.createEl("a", { cls: "mrd-sb-link", text: m });
-          link.addEventListener("click", (e) => {
-            e.preventDefault();
-            void this.ctx.app.workspace.openLinkText(m, cat.file.path, false);
-          });
-        }
-      }
-    })();
-  }
-  async runQuery(query) {
-    var _a;
-    const q = query.trim();
-    const token = ++this.queryToken;
-    this.selected = 0;
-    if (!q) {
-      this.showingRecent = true;
-      const n = Math.max(0, (_a = this.ctx.settings().kbRecentCount) != null ? _a : 8);
-      this.hits = this.index.slice().sort((a, b) => b.mtime - a.mtime).slice(0, n).map((c) => ({ file: c.file, title: c.basename, context: "", score: 0, body: false }));
-      this.renderResults();
-      return;
-    }
-    this.showingRecent = false;
-    const search = (0, import_obsidian23.prepareFuzzySearch)(q);
-    const nameHits = [];
-    for (const cand of this.index) {
-      let best = search(cand.basename);
-      let context = "";
-      for (const h of cand.headings) {
-        const r = search(h);
-        if (r && (!best || r.score > best.score)) {
-          best = r;
-          context = h;
-        }
-      }
-      if (best) nameHits.push({ file: cand.file, title: cand.basename, context, score: best.score, body: false });
-    }
-    nameHits.sort((a, b) => b.score - a.score);
-    this.hits = nameHits.slice(0, 20);
-    this.renderResults();
-    if (!this.ctx.settings().kbSearchBody) return;
-    const already = new Set(nameHits.map((h) => h.file.path));
-    const needle = q.toLowerCase();
-    const bodyHits = [];
-    for (const cand of this.index) {
-      if (already.has(cand.file.path)) continue;
-      if (cand.size > BODY_SCAN_CAP) continue;
-      let content;
-      try {
-        content = await this.ctx.app.vault.cachedRead(cand.file);
-      } catch (e) {
-        continue;
-      }
-      if (token !== this.queryToken) return;
-      const snippet = firstMatchingLine(content, needle);
-      if (snippet) bodyHits.push({ file: cand.file, title: cand.basename, context: snippet, score: 0, body: true });
-    }
-    if (token !== this.queryToken) return;
-    this.hits = [...nameHits, ...bodyHits].slice(0, 30);
-    this.renderResults();
-  }
-  renderResults() {
-    const el = this.resultsEl;
-    if (!el) return;
-    el.empty();
-    if (this.showingRecent) {
-      if (this.hits.length === 0) {
-        el.createDiv({ cls: "mrd-muted", text: "No notes in the knowledge-base scope yet." });
-        return;
-      }
-      el.createDiv({ cls: "mrd-subhead", text: `Recently modified \xB7 ${this.hits.length}` });
-    } else if (this.hits.length === 0) {
-      el.createDiv({ cls: "mrd-muted", text: "No matches in the knowledge base." });
-      return;
-    }
-    this.hits.forEach((hit, i) => {
-      const row = el.createDiv({ cls: "mrd-search-row" });
-      if (i === this.selected) row.addClass("is-selected");
-      row.createDiv({ cls: "mrd-search-title", text: hit.title });
-      if (hit.context && hit.context !== hit.title) {
-        const ctx = row.createDiv({ cls: "mrd-search-context", text: hit.context });
-        if (hit.body) ctx.addClass("is-body");
-      }
-      row.addEventListener("click", () => this.open(hit.file));
-    });
-  }
-  onKey(e) {
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      this.selected = Math.min(this.hits.length - 1, this.selected + 1);
-      this.renderResults();
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault();
-      this.selected = Math.max(0, this.selected - 1);
-      this.renderResults();
-    } else if (e.key === "Enter") {
-      e.preventDefault();
-      const hit = this.hits[this.selected];
-      if (hit) this.open(hit.file);
-    }
-  }
-  open(file) {
-    void this.ctx.app.workspace.getLeaf(false).openFile(file);
-  }
-};
-function normalizeFolder(path) {
-  const p = path.trim().replace(/^\/+/, "");
-  if (!p) return "";
-  return p.endsWith("/") ? p : p + "/";
-}
-function firstMatchingLine(content, needle) {
-  for (const raw of content.split("\n")) {
-    const line = raw.trim();
-    if (!line || line.startsWith("#")) continue;
-    if (line.toLowerCase().includes(needle)) {
-      return line.length > 120 ? line.slice(0, 117) + "\u2026" : line;
-    }
-  }
-  return "";
-}
-
-// src/panels/secondbrain.ts
-var import_obsidian24 = require("obsidian");
-var SecondBrainPanel = class extends BasePanel2 {
-  constructor() {
-    super(...arguments);
-    this.id = "secondbrain";
-    this.title = "Second Brain";
-    this.query = "";
-  }
-  get store() {
-    return this.ctx.plugin.secondBrain;
-  }
-  renderBody() {
-    const head = placard(this.el, "Second Brain");
-    const notes = this.store.listNotes();
-    head.createSpan({ cls: "mrd-placard-badge", text: `${notes.length} active` });
-    const actions = this.el.createDiv({ cls: "mrd-btn-row" });
-    const add = actions.createEl("button", { cls: "mrd-btn mrd-btn-primary", text: "+ Note" });
-    add.addEventListener("click", () => new NewNoteModal2(this.ctx.app, this.store, () => this.rerender()).open());
-    const input = this.el.createEl("input", {
-      cls: "mrd-search-input",
-      attr: { type: "search", placeholder: "Search the Second Brain\u2026" }
-    });
-    input.value = this.query;
-    const results = this.el.createDiv({ cls: "mrd-sb-results" });
-    const render = () => {
-      results.empty();
-      const q = this.query.trim();
-      const list = q ? this.fuzzy(notes, q) : notes.slice(0, 12);
-      if (list.length === 0) {
-        results.createDiv({ cls: "mrd-muted", text: q ? "No matches." : "No active notes yet." });
-        return;
-      }
-      for (const file of list) this.renderNoteRow(results, file);
-      if (!q && notes.length > 12) {
-        results.createDiv({ cls: "mrd-muted", text: `+${notes.length - 12} more \u2014 type to search.` });
-      }
-    };
-    input.addEventListener("input", () => {
-      this.query = input.value;
-      render();
-    });
-    render();
-    const archived = this.store.listArchived();
-    if (archived.length > 0) {
-      const arch = this.el.createEl("details", { cls: "mrd-sb-archived" });
-      arch.createEl("summary", { text: `Archive \xB7 ${archived.length}` });
-      const list = arch.createDiv();
-      for (const file of archived) {
-        const row = list.createDiv({ cls: "mrd-sb-member" });
-        const link = row.createEl("a", { cls: "mrd-sb-link", text: file.basename });
-        link.addEventListener("click", (e) => {
-          e.preventDefault();
-          void this.ctx.app.workspace.getLeaf(false).openFile(file);
-        });
-        this.iconBtn(row, "\u293A", "Unarchive", async () => {
-          await this.store.restoreNote(file);
-          new import_obsidian24.Notice(`Restored ${file.basename}.`);
-          this.rerender();
-        });
-      }
-    }
-  }
-  renderNoteRow(parent, file) {
-    const row = parent.createDiv({ cls: "mrd-sb-row" });
-    const link = row.createEl("a", { cls: "mrd-sb-link", text: file.basename });
-    link.addEventListener("click", (e) => {
-      e.preventDefault();
-      void this.ctx.app.workspace.getLeaf(false).openFile(file);
-    });
-    this.iconBtn(row, "\u{1F5C4}", "Archive", async () => {
-      await this.store.archiveNote(file);
-      new import_obsidian24.Notice(`Archived ${file.basename}.`);
-      this.rerender();
-    });
-    this.iconBtn(row, "\u{1F5D1}", "Delete", () => {
-      new ConfirmModal(this.ctx.app, `Delete \u201C${file.basename}\u201D?`, "It goes to your configured trash and is removed from any category.", async () => {
-        await this.store.deleteNote(file);
-        new import_obsidian24.Notice(`Deleted ${file.basename}.`);
-        this.rerender();
-      }).open();
-    });
-  }
-  iconBtn(parent, glyph, label, onClick) {
-    const b = parent.createEl("button", { cls: "mrd-icon-btn mrd-sb-icon", text: glyph, attr: { title: label, "aria-label": label } });
-    b.addEventListener("click", onClick);
-  }
-  fuzzy(files, query) {
-    var _a;
-    const search = (0, import_obsidian24.prepareFuzzySearch)(query);
-    const scored = [];
-    for (const file of files) {
-      let best = search(file.basename);
-      const cache = this.ctx.app.metadataCache.getFileCache(file);
-      for (const h of (_a = cache == null ? void 0 : cache.headings) != null ? _a : []) {
-        const r = search(h.heading);
-        if (r && (!best || r.score > best.score)) best = r;
-      }
-      if (best) scored.push({ file, score: best.score });
-    }
-    return scored.sort((a, b) => b.score - a.score).slice(0, 20).map((s) => s.file);
-  }
-};
-var NewNoteModal2 = class extends import_obsidian24.Modal {
-  constructor(app, store, onDone) {
-    super(app);
-    this.store = store;
-    this.onDone = onDone;
-    this.title = "";
-  }
-  onOpen() {
-    this.titleEl.setText("New note");
-    new import_obsidian24.Setting(this.contentEl).setName("Title").addText((t) => {
-      t.setPlaceholder("Note title").onChange((v) => this.title = v);
-      t.inputEl.focus();
-      t.inputEl.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          void this.submit();
-        }
-      });
-    });
-    new import_obsidian24.Setting(this.contentEl).addButton((b) => b.setButtonText("Cancel").onClick(() => this.close())).addButton((b) => b.setButtonText("Create").setCta().onClick(() => void this.submit()));
-  }
-  async submit() {
-    const title = this.title.trim();
-    if (!title) {
-      new import_obsidian24.Notice("A note needs a title.");
-      return;
-    }
-    const file = await this.store.createNote(title);
-    this.close();
-    this.onDone();
-    await this.app.workspace.getLeaf(false).openFile(file);
-  }
-  onClose() {
-    this.contentEl.empty();
-  }
-};
-var ConfirmModal = class extends import_obsidian24.Modal {
-  constructor(app, heading, body, onConfirm) {
-    super(app);
-    this.heading = heading;
-    this.body = body;
-    this.onConfirm = onConfirm;
-  }
-  onOpen() {
-    this.titleEl.setText(this.heading);
-    this.contentEl.createEl("p", { text: this.body });
-    new import_obsidian24.Setting(this.contentEl).addButton((b) => b.setButtonText("Cancel").onClick(() => this.close())).addButton(
-      (b) => b.setButtonText("Delete").setWarning().onClick(() => {
-        this.close();
-        this.onConfirm();
-      })
-    );
-  }
-  onClose() {
-    this.contentEl.empty();
-  }
-};
-
 // src/panels/registry.ts
 var PANEL_ORDER = [
   "clock",
@@ -4582,31 +4583,31 @@ var PANEL_TITLES = {
   secondbrain: "Second Brain",
   places: "Navigation"
 };
-var FACTORIES = {
-  clock: () => new ClockPanel(MERIDIAN_CLOCK_COPY),
-  meridian: () => new MeridianPanel(),
-  todo: () => new TodoPanel(),
-  agenda: () => new AgendaPanel(),
-  calendar: () => new CalendarPanel(),
-  actions: () => new ActionsPanel(),
-  qotd: () => new QotdPanel(),
-  journal: () => new JournalPanel(MERIDIAN_JOURNAL_COPY),
-  meals: () => new MealsPanel(MERIDIAN_MEALS_COPY),
-  arfid: () => new ArfidPanel(),
-  spiral: () => new SpiralPanel(),
-  crm: () => new CrmPanel(),
-  search: () => new SearchPanel(),
-  secondbrain: () => new SecondBrainPanel(),
-  places: () => new PlacesPanel(MERIDIAN_PLACES_COPY)
-};
-function createPanels(order, enabled) {
+function createPanels(order, enabled, plugin) {
+  const factories = {
+    clock: () => new ClockPanel(MERIDIAN_CLOCK_COPY),
+    meridian: () => new MeridianPanel(),
+    todo: () => new TodoPanel(),
+    agenda: () => new AgendaPanel(),
+    calendar: () => new CalendarPanel(),
+    actions: () => new ActionsPanel(),
+    qotd: () => new QotdPanel(),
+    journal: () => new JournalPanel(MERIDIAN_JOURNAL_COPY),
+    meals: () => new MealsPanel(MERIDIAN_MEALS_COPY),
+    arfid: () => new ArfidPanel(),
+    spiral: () => new SpiralPanel(),
+    crm: () => new CrmPanel(),
+    search: () => new SearchPanel(plugin.knowledgeBase),
+    secondbrain: () => new SecondBrainPanel(plugin.secondBrain),
+    places: () => new PlacesPanel(MERIDIAN_PLACES_COPY)
+  };
   const seen = /* @__PURE__ */ new Set();
   const panels = [];
   for (const id of order) {
     if (seen.has(id)) continue;
     seen.add(id);
     if (enabled[id] === false) continue;
-    const factory = FACTORIES[id];
+    const factory = factories[id];
     if (factory) panels.push(factory());
   }
   return panels;
@@ -5401,7 +5402,7 @@ var MeridianView = class extends import_obsidian27.ItemView {
     this.renderChrome(root);
     this.grid = root.createDiv({ cls: "mrd-grid" });
     const s = this.plugin.settings;
-    const panels = createPanels(s.panelOrder, s.enabledPanels);
+    const panels = createPanels(s.panelOrder, s.enabledPanels, this.plugin);
     const ctx = this.ctx();
     const layout = computeLayout(s.panelOrder, s.enabledPanels, s.panelColumns, s.panelSpans);
     const placeById = new Map(layout.placements.map((p) => [p.id, p]));

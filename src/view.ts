@@ -96,7 +96,7 @@ export class MeridianView extends ItemView {
 
 		this.grid = root.createDiv({ cls: "mrd-grid" });
 		const s = this.plugin.settings;
-		const panels = createPanels(s.panelOrder, s.enabledPanels);
+		const panels = createPanels(s.panelOrder, s.enabledPanels, this.plugin);
 		const ctx = this.ctx();
 
 		// Deliberate desktop grid, if configured (§3.1). Unconfigured keeps the
