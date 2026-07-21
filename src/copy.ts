@@ -1,4 +1,12 @@
-import type { DashCopy, TodoModalCopy, ClockCopy, MealsCopy, JournalCopy, WeeklyGoalsCopy } from "dash-core";
+import type { DashCopy, TodoModalCopy, ClockCopy, MealsCopy, JournalCopy, WeeklyGoalsCopy, TodoCopy } from "dash-core";
+
+/** MERIDIAN's copy for the Directives panel (the "directive" vocabulary + the
+ * in-voice empty state). */
+export const MERIDIAN_TODO_PANEL_COPY: TodoCopy = {
+	title: "Directives",
+	addNew: "+ New directive",
+	empty: "No directives pending. The queue is clear. This is permitted.",
+};
 import { LOG_FIELD_SPECS } from "./core/dailyfields";
 
 /** MERIDIAN's daily-log journal fields (the specific note sections + labels) and

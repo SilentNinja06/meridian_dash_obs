@@ -2768,6 +2768,221 @@ function firstMatchingLine(content, needle) {
   return "";
 }
 
+// node_modules/dash-core/src/panels/todo.ts
+var import_obsidian17 = require("obsidian");
+var TodoPanel = class extends BasePanel {
+  constructor(copy, editCopy, openWeeklyReview) {
+    super();
+    this.copy = copy;
+    this.editCopy = editCopy;
+    this.openWeeklyReview = openWeeklyReview;
+    __publicField(this, "id", "todo");
+    __publicField(this, "title");
+    /** Which rows are expanded to show sub-tasks / note — survives re-render. */
+    __publicField(this, "expanded", /* @__PURE__ */ new Set());
+    this.title = copy.title;
+  }
+  renderBody() {
+    const store = this.ctx.todos;
+    const instances = store.instancesFor();
+    const active = instances.filter((i) => !i.done && !i.skipped).sort(activeSort);
+    const postponed = instances.filter((i) => i.skipped);
+    const done = instances.filter((i) => i.done);
+    const head = placard(this.el, this.copy.title);
+    const overdue = active.filter((i) => i.flagged).length;
+    if (overdue > 0) head.createSpan({ cls: "mrd-chip mrd-chip-warn", text: `${overdue} slipped` });
+    head.createSpan({ cls: "mrd-chip", text: `${active.length} pending` });
+    const reviewBtn = head.createEl("button", { cls: "mrd-btn mrd-btn-sm mrd-todo-review", text: "Weekly review" });
+    reviewBtn.addEventListener("click", () => this.openWeeklyReview());
+    const addBtn = this.el.createEl("button", { cls: "mrd-btn mrd-btn-primary mrd-todo-add", text: this.copy.addNew });
+    addBtn.addEventListener(
+      "click",
+      () => new TodoEditModal(this.ctx.app, store, void 0, () => this.after(), this.editCopy).open()
+    );
+    const list = this.el.createDiv({ cls: "mrd-todo-list" });
+    if (active.length === 0) {
+      list.createDiv({ cls: "mrd-muted", text: this.copy.empty });
+    }
+    active.forEach((inst, idx) => this.renderRow(list, inst, idx, active.length));
+    if (postponed.length > 0) {
+      const details = this.el.createEl("details", { cls: "mrd-todo-done" });
+      details.createEl("summary", { text: `Postponed \xB7 ${postponed.length}` });
+      const pList = details.createDiv({ cls: "mrd-todo-list" });
+      for (const inst of postponed) this.renderRow(pList, inst, -1, 0);
+    }
+    if (done.length > 0) {
+      const details = this.el.createEl("details", { cls: "mrd-todo-done" });
+      details.createEl("summary", { text: `Completed today \xB7 ${done.length}` });
+      const doneList = details.createDiv({ cls: "mrd-todo-list" });
+      for (const inst of done) this.renderRow(doneList, inst, -1, 0);
+    }
+  }
+  renderRow(parent, inst, idx, count) {
+    var _a;
+    const store = this.ctx.todos;
+    const item = inst.item;
+    const today2 = (0, import_obsidian17.moment)().format("YYYY-MM-DD");
+    const wrap = parent.createDiv({ cls: "mrd-todo-item" });
+    const row = wrap.createDiv({ cls: "mrd-todo-row" });
+    if (inst.flagged) row.addClass("is-flagged");
+    if (inst.done || inst.skipped) row.addClass("is-done");
+    const box = row.createEl("button", { cls: "mrd-todo-check", attr: { "aria-label": inst.done ? "Mark not done" : "Mark done" } });
+    box.setText(inst.done ? "\u2713" : "");
+    box.addEventListener("click", async () => {
+      await store.toggleComplete(item.id);
+      this.after();
+    });
+    const main = row.createDiv({ cls: "mrd-todo-main" });
+    main.createDiv({ cls: "mrd-todo-text", text: item.text });
+    const meta = main.createDiv({ cls: "mrd-todo-meta" });
+    if (item.recurrence.type !== "none") meta.createSpan({ cls: "mrd-chip mrd-chip-cold", text: describeRecurrence(item.recurrence) });
+    if (item.scheduledTime) meta.createSpan({ cls: "mrd-chip", text: item.scheduledTime });
+    if (item.dueDate) {
+      const overdue = !inst.done && item.dueDate < today2;
+      meta.createSpan({ cls: overdue ? "mrd-chip mrd-chip-warn" : "mrd-chip", text: dueLabel(item.dueDate, today2) });
+    }
+    if (item.showOnWeekPrint) meta.createSpan({ cls: "mrd-chip mrd-chip-cold", text: "on planner" });
+    if (inst.flagged) meta.createSpan({ cls: "mrd-chip mrd-chip-warn", text: inst.flagLabel });
+    const subs = (_a = item.subItems) != null ? _a : [];
+    if (subs.length > 0) {
+      const doneN = subItemsDoneCount(item, today2);
+      const chip = meta.createSpan({ cls: "mrd-chip mrd-chip-cold", text: `sub-tasks ${doneN}/${subs.length}` });
+      if (allSubItemsDone(item, today2)) chip.addClass("mrd-chip-warn");
+    }
+    const actions = row.createDiv({ cls: "mrd-todo-actions" });
+    const hasDetail = subs.length > 0 || !!item.note;
+    const isOpen = this.expanded.has(item.id);
+    this.iconBtn(actions, isOpen ? "\u25BE" : "\u25B8", hasDetail ? "Sub-tasks & note" : "Add sub-tasks or a note", false, () => {
+      if (isOpen) this.expanded.delete(item.id);
+      else this.expanded.add(item.id);
+      this.rerender();
+    });
+    if (!inst.done && count > 1 && idx >= 0) {
+      this.iconBtn(actions, "\u2191", "Move up", idx === 0, async () => {
+        await this.move(idx, -1);
+      });
+      this.iconBtn(actions, "\u2193", "Move down", idx === count - 1, async () => {
+        await this.move(idx, 1);
+      });
+    }
+    this.iconBtn(actions, "\u270E", "Edit", false, () => {
+      new TodoEditModal(this.ctx.app, store, item, () => this.after(), this.editCopy).open();
+    });
+    if (inst.skipped) {
+      this.iconBtn(actions, "\u21A9", "Un-postpone", false, async () => {
+        await store.unskipInstance(item.id);
+        this.after();
+      });
+    } else if (inst.recurring && !inst.done) {
+      this.iconBtn(actions, "\u293C", "Postpone for today", false, async () => {
+        await store.skipInstance(item.id);
+        new import_obsidian17.Notice("Postponed for today. It returns on the next occurrence.");
+        this.after();
+      });
+    }
+    this.iconBtn(actions, "\u{1F5D1}", "Delete", false, async () => {
+      await store.remove(item.id);
+      this.after();
+    });
+    if (isOpen) this.renderDetail(wrap, inst, today2);
+  }
+  /** Expanded region: the note line (inline-editable) and the sub-task checklist. */
+  renderDetail(wrap, inst, today2) {
+    var _a, _b;
+    const store = this.ctx.todos;
+    const item = inst.item;
+    const detail = wrap.createDiv({ cls: "mrd-todo-detail" });
+    const noteInput = detail.createEl("input", {
+      cls: "mrd-todo-note-input",
+      attr: { type: "text", placeholder: "Add a note\u2026", value: (_a = item.note) != null ? _a : "" }
+    });
+    const saveNote = () => {
+      var _a2;
+      if (((_a2 = item.note) != null ? _a2 : "") === noteInput.value.trim()) return;
+      void store.setNote(item.id, noteInput.value).then(() => this.after());
+    };
+    noteInput.addEventListener("focus", () => this.ctx.runtime.typingUntil = Date.now() + 2e3);
+    noteInput.addEventListener("input", () => this.ctx.runtime.typingUntil = Date.now() + 2e3);
+    noteInput.addEventListener("blur", saveNote);
+    noteInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        noteInput.blur();
+      }
+    });
+    const subList = detail.createDiv({ cls: "mrd-subtask-list" });
+    for (const sub of (_b = item.subItems) != null ? _b : []) {
+      const srow = subList.createDiv({ cls: "mrd-subtask-row" });
+      const done = subItemDone(item, sub.id, today2);
+      if (done) srow.addClass("is-done");
+      const cb = srow.createEl("button", {
+        cls: "mrd-subtask-check",
+        attr: { "aria-label": done ? "Mark sub-task not done" : "Mark sub-task done" }
+      });
+      cb.setText(done ? "\u2713" : "");
+      cb.addEventListener("click", async () => {
+        await store.toggleSubItem(item.id, sub.id, today2);
+        this.after();
+      });
+      srow.createSpan({ cls: "mrd-subtask-text", text: sub.text });
+      this.iconBtn(srow, "\u{1F5D1}", "Remove sub-task", false, async () => {
+        await store.removeSubItem(item.id, sub.id);
+        this.after();
+      });
+    }
+    const addRow = detail.createDiv({ cls: "mrd-subtask-add" });
+    const addInput = addRow.createEl("input", {
+      cls: "mrd-subtask-input",
+      attr: { type: "text", placeholder: "Add a sub-task\u2026" }
+    });
+    const addSub = () => {
+      const text = addInput.value.trim();
+      if (!text) return;
+      void store.addSubItem(item.id, text).then(() => this.after());
+    };
+    addInput.addEventListener("focus", () => this.ctx.runtime.typingUntil = Date.now() + 2e3);
+    addInput.addEventListener("input", () => this.ctx.runtime.typingUntil = Date.now() + 2e3);
+    addInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        addSub();
+      }
+    });
+    const addBtn = addRow.createEl("button", { cls: "mrd-btn mrd-btn-sm", text: "Add" });
+    addBtn.addEventListener("click", addSub);
+  }
+  iconBtn(parent, glyph, label, disabled, onClick) {
+    const b = parent.createEl("button", { cls: "mrd-icon-btn mrd-todo-icon", text: glyph, attr: { "aria-label": label, title: label } });
+    if (disabled) b.setAttr("disabled", "true");
+    else b.addEventListener("click", onClick);
+  }
+  async move(idx, delta) {
+    const active = this.ctx.todos.instancesFor().filter((i) => !i.done).sort(activeSort);
+    const ids = active.map((i) => i.item.id);
+    const j = idx + delta;
+    if (j < 0 || j >= ids.length) return;
+    [ids[idx], ids[j]] = [ids[j], ids[idx]];
+    await this.ctx.todos.reorder(ids);
+    this.after();
+  }
+  after() {
+    this.ctx.requestRefresh("manual");
+  }
+};
+function dueLabel(due, today2) {
+  if (due < today2) return `overdue \xB7 ${(0, import_obsidian17.moment)(due, "YYYY-MM-DD").format("MMM D")}`;
+  if (due === today2) return "due today";
+  return `due ${(0, import_obsidian17.moment)(due, "YYYY-MM-DD").format("MMM D")}`;
+}
+function activeSort(a, b) {
+  var _a, _b;
+  if (a.flagged !== b.flagged) return a.flagged ? -1 : 1;
+  const at = (_a = a.item.scheduledTime) != null ? _a : "99:99";
+  const bt = (_b = b.item.scheduledTime) != null ? _b : "99:99";
+  if (at !== bt) return at.localeCompare(bt);
+  return a.item.order - b.item.order;
+}
+
 // src/core/dailyfields.ts
 var SUPPLEMENTAL_STOP = /^\s*-\s+Supplemental\s*:?\s*$/i;
 var SPIRAL_MARKER = /%%\s*spiral-log\s*%%/i;
@@ -2789,6 +3004,11 @@ function isLogField(v) {
 }
 
 // src/copy.ts
+var MERIDIAN_TODO_PANEL_COPY = {
+  title: "Directives",
+  addNew: "+ New directive",
+  empty: "No directives pending. The queue is clear. This is permitted."
+};
 var MERIDIAN_JOURNAL_COPY = {
   title: "Daily Log",
   carryHeading: "Reconsider tomorrow",
@@ -2860,7 +3080,7 @@ var MERIDIAN_COPY = {
 };
 
 // src/panels/qotd.ts
-var import_obsidian17 = require("obsidian");
+var import_obsidian18 = require("obsidian");
 
 // src/panels/types.ts
 var BasePanel2 = class extends BasePanel {
@@ -2893,7 +3113,7 @@ var QotdPanel = class extends BasePanel2 {
       card.createDiv({ cls: "mrd-muted", text: "The quotation archive is present but empty." });
       return;
     }
-    const m = (0, import_obsidian17.moment)((0, import_obsidian17.moment)().format("YYYY-MM-DD"), "YYYY-MM-DD");
+    const m = (0, import_obsidian18.moment)((0, import_obsidian18.moment)().format("YYYY-MM-DD"), "YYYY-MM-DD");
     const dayNumber = Math.floor(m.valueOf() / 864e5);
     const idx = (dayNumber % n + n) % n;
     const q = quotes[idx];
@@ -2935,11 +3155,11 @@ function parseQuotes(raw) {
 }
 
 // src/panels/meridian.ts
-var import_obsidian19 = require("obsidian");
+var import_obsidian20 = require("obsidian");
 
 // src/panels/linehistory.ts
-var import_obsidian18 = require("obsidian");
-var LineHistoryModal = class extends import_obsidian18.Modal {
+var import_obsidian19 = require("obsidian");
+var LineHistoryModal = class extends import_obsidian19.Modal {
   constructor(app, plugin) {
     super(app);
     this.plugin = plugin;
@@ -2957,7 +3177,7 @@ var LineHistoryModal = class extends import_obsidian18.Modal {
       const entry = history[i];
       const row = list.createDiv({ cls: "mrd-linehist-row" });
       row.createDiv({ cls: "mrd-linehist-line", text: entry.line });
-      row.createDiv({ cls: "mrd-linehist-when", text: (0, import_obsidian18.moment)(entry.at).fromNow() });
+      row.createDiv({ cls: "mrd-linehist-when", text: (0, import_obsidian19.moment)(entry.at).fromNow() });
     }
   }
   onClose() {
@@ -3365,7 +3585,7 @@ var MeridianPanel = class extends BasePanel2 {
     const bag = fresh.length ? fresh : candidates;
     const line = bag[Math.floor(Math.random() * bag.length)];
     if (pool === "milestone") {
-      this.ctx.plugin.milestoneShownDate = (0, import_obsidian19.moment)().format("YYYY-MM-DD");
+      this.ctx.plugin.milestoneShownDate = (0, import_obsidian20.moment)().format("YYYY-MM-DD");
       void this.ctx.plugin.saveData_();
     }
     ring.push(line);
@@ -3380,7 +3600,7 @@ var MeridianPanel = class extends BasePanel2 {
   }
   async weights() {
     const { todos, bridge, runtime, plugin } = this.ctx;
-    const todayStr2 = (0, import_obsidian19.moment)().format("YYYY-MM-DD");
+    const todayStr2 = (0, import_obsidian20.moment)().format("YYYY-MM-DD");
     const pending = todos.pendingCount();
     const overdueTodos = todos.overdueCount();
     const crm = safe(() => bridge.crmContacts(), []);
@@ -3419,7 +3639,7 @@ var MeridianPanel = class extends BasePanel2 {
     const completionsMilestone = doneToday > 0 && doneToday % 5 === 0;
     const streak = this.ctx.plugin.streak;
     const streakSeven = streak.current > 0 && streak.current % 7 === 0;
-    const newRecord = this.ctx.runtime.streakRecordDate === (0, import_obsidian19.moment)().format("YYYY-MM-DD");
+    const newRecord = this.ctx.runtime.streakRecordDate === (0, import_obsidian20.moment)().format("YYYY-MM-DD");
     return completionsMilestone || streakSeven || newRecord;
   }
 };
@@ -3476,341 +3696,11 @@ async function safeAsync(fn, fallback) {
   }
 }
 
-// src/panels/todo.ts
-var import_obsidian21 = require("obsidian");
-
-// src/panels/weekreview.ts
-var import_obsidian20 = require("obsidian");
-var WeekReviewModal = class extends import_obsidian20.Modal {
-  constructor(app, plugin) {
-    super(app);
-    this.plugin = plugin;
-  }
-  onOpen() {
-    this.titleEl.setText("Weekly review");
-    this.modalEl.addClass("mrd-review-modal");
-    const body = this.contentEl.createDiv({ cls: "mrd-review" });
-    body.createDiv({ cls: "mrd-muted", text: "Compiling the record\u2026" });
-    void this.compile().then((summary) => {
-      if (!body.isConnected) return;
-      this.render(body, summary);
-    });
-  }
-  async compile() {
-    const s = this.plugin.settings;
-    const bridge = this.plugin.bridge;
-    const days = [];
-    for (let i = 6; i >= 0; i--) days.push((0, import_obsidian20.moment)().subtract(i, "days").format("YYYY-MM-DD"));
-    const dayStats = [];
-    let totalCompleted = 0;
-    let contactLines = 0;
-    const contacts = /* @__PURE__ */ new Set();
-    let mealsDays = 0;
-    let regulationEntries = 0;
-    let nourishmentEntries = 0;
-    for (const date of days) {
-      const raw = await readDailyNoteRaw(this.app, date);
-      const completed = countBullets(readField(raw, headingField(s.completedTasksHeading)));
-      totalCompleted += completed;
-      dayStats.push({ date, completed });
-      const crm = readMarkerLogLines(raw, s.crmLogMarker || "%% crm-log %%", s.crmLogHeading);
-      contactLines += crm.length;
-      for (const line of crm) {
-        const name = contactName(line);
-        if (name) contacts.add(name);
-      }
-      if (readHeadingSection(raw, "Meals").trim().length > 0) mealsDays++;
-      nourishmentEntries += readMarkerLogLines(raw, "%% arfid-log %%", "Miscellaneous notes").length;
-      regulationEntries += await bridge.spiralEntriesForDate(date);
-    }
-    return {
-      days: dayStats,
-      totalCompleted,
-      contactLines,
-      contacts: [...contacts].sort((a, b) => a.localeCompare(b)),
-      mealsDays,
-      regulationEntries,
-      nourishmentEntries
-    };
-  }
-  render(host, sum) {
-    host.empty();
-    host.createDiv({ cls: "mrd-review-header", text: "OBSERVATION SUMMARY \u2014 7-day window. The record is complete." });
-    const streak = this.plugin.streak;
-    if (streak.current > 0) {
-      host.createDiv({
-        cls: "mrd-review-streak",
-        text: `RECORD \u2014 ${streak.current} consecutive ${plural(streak.current, "day", "days")} observed${streak.longest > streak.current ? ` \xB7 longest ${streak.longest}` : ""}.`
-      });
-    }
-    const dir = host.createDiv({ cls: "mrd-review-block" });
-    dir.createDiv({ cls: "mrd-review-stat-head", text: "Directives completed" });
-    dir.createDiv({ cls: "mrd-review-figure", text: String(sum.totalCompleted) });
-    const bars = dir.createDiv({ cls: "mrd-review-bars" });
-    const max = Math.max(1, ...sum.days.map((d) => d.completed));
-    for (const d of sum.days) {
-      const cell = bars.createDiv({ cls: "mrd-review-bar-cell" });
-      const track = cell.createDiv({ cls: "mrd-review-bar-track" });
-      const fill = track.createDiv({ cls: "mrd-review-bar-fill" });
-      fill.style.height = `${Math.round(d.completed / max * 100)}%`;
-      if (d.completed === 0) fill.addClass("is-empty");
-      cell.createDiv({ cls: "mrd-review-bar-day", text: (0, import_obsidian20.moment)(d.date, "YYYY-MM-DD").format("dd")[0] });
-      cell.createDiv({ cls: "mrd-review-bar-count", text: String(d.completed) });
-    }
-    const crm = host.createDiv({ cls: "mrd-review-block" });
-    crm.createDiv({ cls: "mrd-review-stat-head", text: "Contacts reached" });
-    crm.createDiv({
-      cls: "mrd-review-line",
-      text: `${sum.contactLines} ${plural(sum.contactLines, "interaction", "interactions")} \xB7 ${sum.contacts.length} distinct.`
-    });
-    if (sum.contacts.length > 0) {
-      const chips = crm.createDiv({ cls: "mrd-review-chips" });
-      for (const name of sum.contacts) chips.createSpan({ cls: "mrd-chip mrd-chip-cold", text: name });
-    }
-    const meals = host.createDiv({ cls: "mrd-review-block" });
-    meals.createDiv({ cls: "mrd-review-stat-head", text: "Meals planned" });
-    meals.createDiv({ cls: "mrd-review-line", text: `${sum.mealsDays} of 7 ${plural(sum.mealsDays, "day", "days")}.` });
-    const nour = host.createDiv({ cls: "mrd-review-block" });
-    nour.createDiv({ cls: "mrd-review-stat-head", text: "Nourishment log" });
-    nour.createDiv({ cls: "mrd-review-line", text: `${sum.nourishmentEntries} ${plural(sum.nourishmentEntries, "entry", "entries")} this week.` });
-    if (sum.regulationEntries > 0) {
-      const reg = host.createDiv({ cls: "mrd-review-block" });
-      reg.createDiv({ cls: "mrd-review-stat-head", text: "Regulation log" });
-      reg.createDiv({ cls: "mrd-review-line", text: `${sum.regulationEntries} ${plural(sum.regulationEntries, "entry", "entries")} this week.` });
-    }
-  }
-  onClose() {
-    this.contentEl.empty();
-  }
-};
-function countBullets(body) {
-  return body.split("\n").filter((l) => /^\s*-\s+\S/.test(l)).length;
-}
-function contactName(line) {
-  var _a;
-  const m = line.match(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/);
-  if (!m) return "";
-  return ((_a = m[2]) != null ? _a : m[1]).trim();
-}
-function plural(n, one, many) {
-  return n === 1 ? one : many;
-}
-
-// src/panels/todo.ts
-var TodoPanel = class extends BasePanel2 {
-  constructor() {
-    super(...arguments);
-    this.id = "todo";
-    this.title = "Directives";
-    /** Which rows are expanded to show sub-tasks / note — survives re-render. */
-    this.expanded = /* @__PURE__ */ new Set();
-  }
-  renderBody() {
-    const store = this.ctx.todos;
-    const instances = store.instancesFor();
-    const active = instances.filter((i) => !i.done && !i.skipped).sort(activeSort);
-    const postponed = instances.filter((i) => i.skipped);
-    const done = instances.filter((i) => i.done);
-    const head = placard(this.el, "Directives");
-    const overdue = active.filter((i) => i.flagged).length;
-    if (overdue > 0) head.createSpan({ cls: "mrd-chip mrd-chip-warn", text: `${overdue} slipped` });
-    head.createSpan({ cls: "mrd-chip", text: `${active.length} pending` });
-    const reviewBtn = head.createEl("button", { cls: "mrd-btn mrd-btn-sm mrd-todo-review", text: "Weekly review" });
-    reviewBtn.addEventListener("click", () => new WeekReviewModal(this.ctx.app, this.ctx.plugin).open());
-    const addBtn = this.el.createEl("button", { cls: "mrd-btn mrd-btn-primary mrd-todo-add", text: "+ New directive" });
-    addBtn.addEventListener(
-      "click",
-      () => new TodoEditModal(this.ctx.app, store, void 0, () => this.after(), MERIDIAN_TODO_COPY).open()
-    );
-    const list = this.el.createDiv({ cls: "mrd-todo-list" });
-    if (active.length === 0) {
-      list.createDiv({ cls: "mrd-muted", text: "No directives pending. The queue is clear. This is permitted." });
-    }
-    active.forEach((inst, idx) => this.renderRow(list, inst, idx, active.length));
-    if (postponed.length > 0) {
-      const details = this.el.createEl("details", { cls: "mrd-todo-done" });
-      details.createEl("summary", { text: `Postponed \xB7 ${postponed.length}` });
-      const pList = details.createDiv({ cls: "mrd-todo-list" });
-      for (const inst of postponed) this.renderRow(pList, inst, -1, 0);
-    }
-    if (done.length > 0) {
-      const details = this.el.createEl("details", { cls: "mrd-todo-done" });
-      details.createEl("summary", { text: `Completed today \xB7 ${done.length}` });
-      const doneList = details.createDiv({ cls: "mrd-todo-list" });
-      for (const inst of done) this.renderRow(doneList, inst, -1, 0);
-    }
-  }
-  renderRow(parent, inst, idx, count) {
-    var _a;
-    const store = this.ctx.todos;
-    const item = inst.item;
-    const today2 = (0, import_obsidian21.moment)().format("YYYY-MM-DD");
-    const wrap = parent.createDiv({ cls: "mrd-todo-item" });
-    const row = wrap.createDiv({ cls: "mrd-todo-row" });
-    if (inst.flagged) row.addClass("is-flagged");
-    if (inst.done || inst.skipped) row.addClass("is-done");
-    const box = row.createEl("button", { cls: "mrd-todo-check", attr: { "aria-label": inst.done ? "Mark not done" : "Mark done" } });
-    box.setText(inst.done ? "\u2713" : "");
-    box.addEventListener("click", async () => {
-      await store.toggleComplete(item.id);
-      this.after();
-    });
-    const main = row.createDiv({ cls: "mrd-todo-main" });
-    main.createDiv({ cls: "mrd-todo-text", text: item.text });
-    const meta = main.createDiv({ cls: "mrd-todo-meta" });
-    if (item.recurrence.type !== "none") meta.createSpan({ cls: "mrd-chip mrd-chip-cold", text: describeRecurrence(item.recurrence) });
-    if (item.scheduledTime) meta.createSpan({ cls: "mrd-chip", text: item.scheduledTime });
-    if (item.dueDate) {
-      const overdue = !inst.done && item.dueDate < today2;
-      meta.createSpan({ cls: overdue ? "mrd-chip mrd-chip-warn" : "mrd-chip", text: dueLabel(item.dueDate, today2) });
-    }
-    if (item.showOnWeekPrint) meta.createSpan({ cls: "mrd-chip mrd-chip-cold", text: "on planner" });
-    if (inst.flagged) meta.createSpan({ cls: "mrd-chip mrd-chip-warn", text: inst.flagLabel });
-    const subs = (_a = item.subItems) != null ? _a : [];
-    if (subs.length > 0) {
-      const doneN = subItemsDoneCount(item, today2);
-      const chip = meta.createSpan({ cls: "mrd-chip mrd-chip-cold", text: `sub-tasks ${doneN}/${subs.length}` });
-      if (allSubItemsDone(item, today2)) chip.addClass("mrd-chip-warn");
-    }
-    const actions = row.createDiv({ cls: "mrd-todo-actions" });
-    const hasDetail = subs.length > 0 || !!item.note;
-    const isOpen = this.expanded.has(item.id);
-    this.iconBtn(actions, isOpen ? "\u25BE" : "\u25B8", hasDetail ? "Sub-tasks & note" : "Add sub-tasks or a note", false, () => {
-      if (isOpen) this.expanded.delete(item.id);
-      else this.expanded.add(item.id);
-      this.rerender();
-    });
-    if (!inst.done && count > 1 && idx >= 0) {
-      this.iconBtn(actions, "\u2191", "Move up", idx === 0, async () => {
-        await this.move(idx, -1);
-      });
-      this.iconBtn(actions, "\u2193", "Move down", idx === count - 1, async () => {
-        await this.move(idx, 1);
-      });
-    }
-    this.iconBtn(actions, "\u270E", "Edit", false, () => {
-      new TodoEditModal(this.ctx.app, store, item, () => this.after(), MERIDIAN_TODO_COPY).open();
-    });
-    if (inst.skipped) {
-      this.iconBtn(actions, "\u21A9", "Un-postpone", false, async () => {
-        await store.unskipInstance(item.id);
-        this.after();
-      });
-    } else if (inst.recurring && !inst.done) {
-      this.iconBtn(actions, "\u293C", "Postpone for today", false, async () => {
-        await store.skipInstance(item.id);
-        new import_obsidian21.Notice("Postponed for today. It returns on the next occurrence.");
-        this.after();
-      });
-    }
-    this.iconBtn(actions, "\u{1F5D1}", "Delete", false, async () => {
-      await store.remove(item.id);
-      this.after();
-    });
-    if (isOpen) this.renderDetail(wrap, inst, today2);
-  }
-  /** Expanded region: the note line (inline-editable) and the sub-task checklist. */
-  renderDetail(wrap, inst, today2) {
-    var _a, _b;
-    const store = this.ctx.todos;
-    const item = inst.item;
-    const detail = wrap.createDiv({ cls: "mrd-todo-detail" });
-    const noteInput = detail.createEl("input", {
-      cls: "mrd-todo-note-input",
-      attr: { type: "text", placeholder: "Add a note\u2026", value: (_a = item.note) != null ? _a : "" }
-    });
-    const saveNote = () => {
-      var _a2;
-      if (((_a2 = item.note) != null ? _a2 : "") === noteInput.value.trim()) return;
-      void store.setNote(item.id, noteInput.value).then(() => this.after());
-    };
-    noteInput.addEventListener("focus", () => this.ctx.runtime.typingUntil = Date.now() + 2e3);
-    noteInput.addEventListener("input", () => this.ctx.runtime.typingUntil = Date.now() + 2e3);
-    noteInput.addEventListener("blur", saveNote);
-    noteInput.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") {
-        e.preventDefault();
-        noteInput.blur();
-      }
-    });
-    const subList = detail.createDiv({ cls: "mrd-subtask-list" });
-    for (const sub of (_b = item.subItems) != null ? _b : []) {
-      const srow = subList.createDiv({ cls: "mrd-subtask-row" });
-      const done = subItemDone(item, sub.id, today2);
-      if (done) srow.addClass("is-done");
-      const cb = srow.createEl("button", {
-        cls: "mrd-subtask-check",
-        attr: { "aria-label": done ? "Mark sub-task not done" : "Mark sub-task done" }
-      });
-      cb.setText(done ? "\u2713" : "");
-      cb.addEventListener("click", async () => {
-        await store.toggleSubItem(item.id, sub.id, today2);
-        this.after();
-      });
-      srow.createSpan({ cls: "mrd-subtask-text", text: sub.text });
-      this.iconBtn(srow, "\u{1F5D1}", "Remove sub-task", false, async () => {
-        await store.removeSubItem(item.id, sub.id);
-        this.after();
-      });
-    }
-    const addRow = detail.createDiv({ cls: "mrd-subtask-add" });
-    const addInput = addRow.createEl("input", {
-      cls: "mrd-subtask-input",
-      attr: { type: "text", placeholder: "Add a sub-task\u2026" }
-    });
-    const addSub = () => {
-      const text = addInput.value.trim();
-      if (!text) return;
-      void store.addSubItem(item.id, text).then(() => this.after());
-    };
-    addInput.addEventListener("focus", () => this.ctx.runtime.typingUntil = Date.now() + 2e3);
-    addInput.addEventListener("input", () => this.ctx.runtime.typingUntil = Date.now() + 2e3);
-    addInput.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") {
-        e.preventDefault();
-        addSub();
-      }
-    });
-    const addBtn = addRow.createEl("button", { cls: "mrd-btn mrd-btn-sm", text: "Add" });
-    addBtn.addEventListener("click", addSub);
-  }
-  iconBtn(parent, glyph, label, disabled, onClick) {
-    const b = parent.createEl("button", { cls: "mrd-icon-btn mrd-todo-icon", text: glyph, attr: { "aria-label": label, title: label } });
-    if (disabled) b.setAttr("disabled", "true");
-    else b.addEventListener("click", onClick);
-  }
-  async move(idx, delta) {
-    const active = this.ctx.todos.instancesFor().filter((i) => !i.done).sort(activeSort);
-    const ids = active.map((i) => i.item.id);
-    const j = idx + delta;
-    if (j < 0 || j >= ids.length) return;
-    [ids[idx], ids[j]] = [ids[j], ids[idx]];
-    await this.ctx.todos.reorder(ids);
-    this.after();
-  }
-  after() {
-    this.ctx.requestRefresh("manual");
-  }
-};
-function dueLabel(due, today2) {
-  if (due < today2) return `overdue \xB7 ${(0, import_obsidian21.moment)(due, "YYYY-MM-DD").format("MMM D")}`;
-  if (due === today2) return "due today";
-  return `due ${(0, import_obsidian21.moment)(due, "YYYY-MM-DD").format("MMM D")}`;
-}
-function activeSort(a, b) {
-  var _a, _b;
-  if (a.flagged !== b.flagged) return a.flagged ? -1 : 1;
-  const at = (_a = a.item.scheduledTime) != null ? _a : "99:99";
-  const bt = (_b = b.item.scheduledTime) != null ? _b : "99:99";
-  if (at !== bt) return at.localeCompare(bt);
-  return a.item.order - b.item.order;
-}
-
 // src/panels/agenda.ts
-var import_obsidian23 = require("obsidian");
+var import_obsidian22 = require("obsidian");
 
 // src/panels/weekprint.ts
-var import_obsidian22 = require("obsidian");
+var import_obsidian21 = require("obsidian");
 
 // src/weeklygoals.ts
 function meridianWeeklyGoals(plugin) {
@@ -3822,11 +3712,11 @@ function meridianWeeklyGoals(plugin) {
 }
 
 // src/panels/weekprint.ts
-var WeekPrintModal = class extends import_obsidian22.Modal {
+var WeekPrintModal = class extends import_obsidian21.Modal {
   constructor(app, plugin) {
     super(app);
     this.plugin = plugin;
-    this.weekStart = (0, import_obsidian22.moment)().startOf("week");
+    this.weekStart = (0, import_obsidian21.moment)().startOf("week");
     this.sources = [];
   }
   onOpen() {
@@ -3859,18 +3749,18 @@ var WeekPrintModal = class extends import_obsidian22.Modal {
       this.render();
     });
     this.ctrlBtn(nav, "This week", () => {
-      this.weekStart = (0, import_obsidian22.moment)().startOf("week");
+      this.weekStart = (0, import_obsidian21.moment)().startOf("week");
       this.render();
     });
     this.ctrlBtn(nav, "Set goals", () => {
       new WeeklyGoalsModal(this.app, meridianWeeklyGoals(this.plugin), this.plugin.todos, weekKeyOf(this.weekStart), () => this.render(), MERIDIAN_WEEKLYGOALS_COPY).open();
     });
     const shareBtn = controls.createEl("button", {
-      cls: `mrd-btn ${import_obsidian22.Platform.isMobile ? "mrd-btn-primary" : ""}`.trim(),
+      cls: `mrd-btn ${import_obsidian21.Platform.isMobile ? "mrd-btn-primary" : ""}`.trim(),
       text: "Share / Print"
     });
     shareBtn.addEventListener("click", () => void this.share());
-    if (!import_obsidian22.Platform.isMobile) {
+    if (!import_obsidian21.Platform.isMobile) {
       const printBtn = controls.createEl("button", { cls: "mrd-btn mrd-btn-primary", text: "Print" });
       printBtn.addEventListener("click", () => this.print());
     }
@@ -4034,7 +3924,7 @@ ${collectWeekPrintCss()}`;
     a.click();
     a.remove();
     window.setTimeout(() => URL.revokeObjectURL(url), 1e4);
-    new import_obsidian22.Notice(`Saved \u201C${name}\u201D. Open it in a browser to print.`);
+    new import_obsidian21.Notice(`Saved \u201C${name}\u201D. Open it in a browser to print.`);
   }
   onClose() {
     this.contentEl.empty();
@@ -4117,7 +4007,7 @@ var AgendaPanel = class extends BasePanel2 {
   renderBody() {
     const s = this.ctx.settings();
     const head = placard(this.el, "Today's Agenda");
-    head.createSpan({ cls: "mrd-placard-badge", text: (0, import_obsidian23.moment)().format("YYYY-MM-DD") });
+    head.createSpan({ cls: "mrd-placard-badge", text: (0, import_obsidian22.moment)().format("YYYY-MM-DD") });
     const actions = this.el.createDiv({ cls: "mrd-btn-row mrd-agenda-actions" });
     const addBtn = actions.createEl("button", { cls: "mrd-btn mrd-btn-sm", text: "+ Event" });
     addBtn.addEventListener(
@@ -4134,7 +4024,7 @@ var AgendaPanel = class extends BasePanel2 {
       void this.fetchAll();
       new WeekPrintModal(this.ctx.app, this.ctx.plugin).open();
     });
-    const today2 = (0, import_obsidian23.moment)().format("YYYY-MM-DD");
+    const today2 = (0, import_obsidian22.moment)().format("YYYY-MM-DD");
     const localToday = this.ctx.plugin.localEvents.filter((e) => e.date === today2);
     if (s.agendaUrls.length === 0 && localToday.length === 0) {
       this.el.createDiv({
@@ -4207,7 +4097,7 @@ var AgendaPanel = class extends BasePanel2 {
       if (age > 90 * 1e3) {
         this.el.createDiv({
           cls: "mrd-agenda-age",
-          text: `Serving the last successful read from ${(0, import_obsidian23.moment)(oldest).fromNow()}. Proton can take up to eight hours to propagate a change; a fresh read is on its way.`
+          text: `Serving the last successful read from ${(0, import_obsidian22.moment)(oldest).fromNow()}. Proton can take up to eight hours to propagate a change; a fresh read is on its way.`
         });
       }
     }
@@ -4280,6 +4170,123 @@ var AgendaPanel = class extends BasePanel2 {
     if ((_b = this.el) == null ? void 0 : _b.isConnected) this.rerender();
   }
 };
+
+// src/panels/weekreview.ts
+var import_obsidian23 = require("obsidian");
+var WeekReviewModal = class extends import_obsidian23.Modal {
+  constructor(app, plugin) {
+    super(app);
+    this.plugin = plugin;
+  }
+  onOpen() {
+    this.titleEl.setText("Weekly review");
+    this.modalEl.addClass("mrd-review-modal");
+    const body = this.contentEl.createDiv({ cls: "mrd-review" });
+    body.createDiv({ cls: "mrd-muted", text: "Compiling the record\u2026" });
+    void this.compile().then((summary) => {
+      if (!body.isConnected) return;
+      this.render(body, summary);
+    });
+  }
+  async compile() {
+    const s = this.plugin.settings;
+    const bridge = this.plugin.bridge;
+    const days = [];
+    for (let i = 6; i >= 0; i--) days.push((0, import_obsidian23.moment)().subtract(i, "days").format("YYYY-MM-DD"));
+    const dayStats = [];
+    let totalCompleted = 0;
+    let contactLines = 0;
+    const contacts = /* @__PURE__ */ new Set();
+    let mealsDays = 0;
+    let regulationEntries = 0;
+    let nourishmentEntries = 0;
+    for (const date of days) {
+      const raw = await readDailyNoteRaw(this.app, date);
+      const completed = countBullets(readField(raw, headingField(s.completedTasksHeading)));
+      totalCompleted += completed;
+      dayStats.push({ date, completed });
+      const crm = readMarkerLogLines(raw, s.crmLogMarker || "%% crm-log %%", s.crmLogHeading);
+      contactLines += crm.length;
+      for (const line of crm) {
+        const name = contactName(line);
+        if (name) contacts.add(name);
+      }
+      if (readHeadingSection(raw, "Meals").trim().length > 0) mealsDays++;
+      nourishmentEntries += readMarkerLogLines(raw, "%% arfid-log %%", "Miscellaneous notes").length;
+      regulationEntries += await bridge.spiralEntriesForDate(date);
+    }
+    return {
+      days: dayStats,
+      totalCompleted,
+      contactLines,
+      contacts: [...contacts].sort((a, b) => a.localeCompare(b)),
+      mealsDays,
+      regulationEntries,
+      nourishmentEntries
+    };
+  }
+  render(host, sum) {
+    host.empty();
+    host.createDiv({ cls: "mrd-review-header", text: "OBSERVATION SUMMARY \u2014 7-day window. The record is complete." });
+    const streak = this.plugin.streak;
+    if (streak.current > 0) {
+      host.createDiv({
+        cls: "mrd-review-streak",
+        text: `RECORD \u2014 ${streak.current} consecutive ${plural(streak.current, "day", "days")} observed${streak.longest > streak.current ? ` \xB7 longest ${streak.longest}` : ""}.`
+      });
+    }
+    const dir = host.createDiv({ cls: "mrd-review-block" });
+    dir.createDiv({ cls: "mrd-review-stat-head", text: "Directives completed" });
+    dir.createDiv({ cls: "mrd-review-figure", text: String(sum.totalCompleted) });
+    const bars = dir.createDiv({ cls: "mrd-review-bars" });
+    const max = Math.max(1, ...sum.days.map((d) => d.completed));
+    for (const d of sum.days) {
+      const cell = bars.createDiv({ cls: "mrd-review-bar-cell" });
+      const track = cell.createDiv({ cls: "mrd-review-bar-track" });
+      const fill = track.createDiv({ cls: "mrd-review-bar-fill" });
+      fill.style.height = `${Math.round(d.completed / max * 100)}%`;
+      if (d.completed === 0) fill.addClass("is-empty");
+      cell.createDiv({ cls: "mrd-review-bar-day", text: (0, import_obsidian23.moment)(d.date, "YYYY-MM-DD").format("dd")[0] });
+      cell.createDiv({ cls: "mrd-review-bar-count", text: String(d.completed) });
+    }
+    const crm = host.createDiv({ cls: "mrd-review-block" });
+    crm.createDiv({ cls: "mrd-review-stat-head", text: "Contacts reached" });
+    crm.createDiv({
+      cls: "mrd-review-line",
+      text: `${sum.contactLines} ${plural(sum.contactLines, "interaction", "interactions")} \xB7 ${sum.contacts.length} distinct.`
+    });
+    if (sum.contacts.length > 0) {
+      const chips = crm.createDiv({ cls: "mrd-review-chips" });
+      for (const name of sum.contacts) chips.createSpan({ cls: "mrd-chip mrd-chip-cold", text: name });
+    }
+    const meals = host.createDiv({ cls: "mrd-review-block" });
+    meals.createDiv({ cls: "mrd-review-stat-head", text: "Meals planned" });
+    meals.createDiv({ cls: "mrd-review-line", text: `${sum.mealsDays} of 7 ${plural(sum.mealsDays, "day", "days")}.` });
+    const nour = host.createDiv({ cls: "mrd-review-block" });
+    nour.createDiv({ cls: "mrd-review-stat-head", text: "Nourishment log" });
+    nour.createDiv({ cls: "mrd-review-line", text: `${sum.nourishmentEntries} ${plural(sum.nourishmentEntries, "entry", "entries")} this week.` });
+    if (sum.regulationEntries > 0) {
+      const reg = host.createDiv({ cls: "mrd-review-block" });
+      reg.createDiv({ cls: "mrd-review-stat-head", text: "Regulation log" });
+      reg.createDiv({ cls: "mrd-review-line", text: `${sum.regulationEntries} ${plural(sum.regulationEntries, "entry", "entries")} this week.` });
+    }
+  }
+  onClose() {
+    this.contentEl.empty();
+  }
+};
+function countBullets(body) {
+  return body.split("\n").filter((l) => /^\s*-\s+\S/.test(l)).length;
+}
+function contactName(line) {
+  var _a;
+  const m = line.match(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/);
+  if (!m) return "";
+  return ((_a = m[2]) != null ? _a : m[1]).trim();
+}
+function plural(n, one, many) {
+  return n === 1 ? one : many;
+}
 
 // src/panels/util.ts
 function commandButton2(parent, app, fullId, label, opts = {}) {
@@ -4587,7 +4594,7 @@ function createPanels(order, enabled, plugin) {
   const factories = {
     clock: () => new ClockPanel(MERIDIAN_CLOCK_COPY),
     meridian: () => new MeridianPanel(),
-    todo: () => new TodoPanel(),
+    todo: () => new TodoPanel(MERIDIAN_TODO_PANEL_COPY, MERIDIAN_TODO_COPY, () => new WeekReviewModal(plugin.app, plugin).open()),
     agenda: () => new AgendaPanel(),
     calendar: () => new CalendarPanel(),
     actions: () => new ActionsPanel(),

@@ -12,7 +12,7 @@
 	"author": "SilentNinja06",
 	"license": "MIT",
 	"dependencies": {
-		"dash-core": "github:SilentNinja06/dash_core_obs#d3984766683bf6ef0783edcbbd7ef6423e06e78f"
+		"dash-core": "github:SilentNinja06/dash_core_obs#8cebf6d84243d21ee51414a697607d86a046e9fa"
 	},
 	"devDependencies": {
 		"@types/node": "^20.11.0",

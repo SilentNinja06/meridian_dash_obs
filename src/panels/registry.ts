@@ -1,16 +1,18 @@
 import { Panel } from "./types";
 import type MeridianDashPlugin from "../main";
-import { ClockPanel, JournalPanel, MealsPanel, PlacesPanel, CalendarPanel, SearchPanel, SecondBrainPanel } from "dash-core";
+import { ClockPanel, JournalPanel, MealsPanel, PlacesPanel, CalendarPanel, SearchPanel, SecondBrainPanel, TodoPanel } from "dash-core";
 import {
 	MERIDIAN_CLOCK_COPY,
 	MERIDIAN_JOURNAL_COPY,
 	MERIDIAN_MEALS_COPY,
 	MERIDIAN_PLACES_COPY,
+	MERIDIAN_TODO_PANEL_COPY,
+	MERIDIAN_TODO_COPY,
 } from "../copy";
 import { QotdPanel } from "./qotd";
 import { MeridianPanel } from "./meridian";
-import { TodoPanel } from "./todo";
 import { AgendaPanel } from "./agenda";
+import { WeekReviewModal } from "./weekreview";
 import { ArfidPanel } from "./arfid";
 import { SpiralPanel } from "./spiral";
 import { CrmPanel } from "./crm";
@@ -63,7 +65,7 @@ export function createPanels(order: string[], enabled: Record<string, boolean>, 
 	const factories: Record<string, PanelFactory> = {
 		clock: () => new ClockPanel(MERIDIAN_CLOCK_COPY),
 		meridian: () => new MeridianPanel(),
-		todo: () => new TodoPanel(),
+		todo: () => new TodoPanel(MERIDIAN_TODO_PANEL_COPY, MERIDIAN_TODO_COPY, () => new WeekReviewModal(plugin.app, plugin).open()),
 		agenda: () => new AgendaPanel(),
 		calendar: () => new CalendarPanel(),
 		actions: () => new ActionsPanel(),
