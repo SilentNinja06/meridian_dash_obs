@@ -1461,8 +1461,8 @@ var BasePanel = class {
   }
 };
 function placard(el, title) {
-  const head = el.createDiv({ cls: "mrd-placard" });
-  head.createSpan({ cls: "mrd-placard-title", text: title.toUpperCase() });
+  const head = el.createDiv({ cls: "dash-placard" });
+  head.createSpan({ cls: "dash-placard-title", text: title.toUpperCase() });
   return head;
 }
 
@@ -1515,7 +1515,7 @@ var PromptModal = class extends import_obsidian6.Modal {
       setting.addTextArea((t) => {
         var _a;
         t.setPlaceholder((_a = this.opts.placeholder) != null ? _a : "").setValue(this.value).onChange((v) => this.value = v);
-        t.inputEl.classList.add("mrd-modal-wide");
+        t.inputEl.classList.add("dash-modal-wide");
         t.inputEl.rows = 4;
         t.inputEl.focus();
       });
@@ -1523,7 +1523,7 @@ var PromptModal = class extends import_obsidian6.Modal {
       setting.addText((t) => {
         var _a;
         t.setPlaceholder((_a = this.opts.placeholder) != null ? _a : "").setValue(this.value).onChange((v) => this.value = v);
-        t.inputEl.classList.add("mrd-modal-wide");
+        t.inputEl.classList.add("dash-modal-wide");
         t.inputEl.focus();
         t.inputEl.addEventListener("keydown", (e) => {
           if (e.key === "Enter") {
@@ -1563,15 +1563,15 @@ var CalendarPanel = class extends BasePanel {
     const head = placard(this.el, "Calendar");
     const baseNote = ((_a = this.ctx.settings().logsBaseNote) != null ? _a : "").trim();
     if (baseNote) {
-      const openBase = head.createEl("button", { cls: "mrd-btn mrd-btn-sm mrd-cal-basebtn", text: "Logs base" });
+      const openBase = head.createEl("button", { cls: "dash-btn dash-btn-sm dash-cal-basebtn", text: "Logs base" });
       openBase.addEventListener("click", () => void this.ctx.app.workspace.openLinkText(baseNote, "", false));
     }
-    const nav = this.el.createDiv({ cls: "mrd-cal-nav" });
+    const nav = this.el.createDiv({ cls: "dash-cal-nav" });
     this.navBtn(nav, "\u2039", "Previous month", () => {
       this.view = this.view.clone().subtract(1, "month");
       this.rerender();
     });
-    nav.createDiv({ cls: "mrd-cal-title", text: this.view.format("MMMM YYYY") });
+    nav.createDiv({ cls: "dash-cal-title", text: this.view.format("MMMM YYYY") });
     this.navBtn(nav, "\u203A", "Next month", () => {
       this.view = this.view.clone().add(1, "month");
       this.rerender();
@@ -1580,10 +1580,10 @@ var CalendarPanel = class extends BasePanel {
       this.view = (0, import_obsidian7.moment)().startOf("month");
       this.rerender();
     });
-    const grid = this.el.createDiv({ cls: "mrd-cal-grid" });
+    const grid = this.el.createDiv({ cls: "dash-cal-grid" });
     const weekStart = this.view.clone().startOf("month").startOf("week");
     for (let i = 0; i < 7; i++) {
-      grid.createDiv({ cls: "mrd-cal-dow", text: weekStart.clone().add(i, "days").format("dd") });
+      grid.createDiv({ cls: "dash-cal-dow", text: weekStart.clone().add(i, "days").format("dd") });
     }
     const todayStr2 = (0, import_obsidian7.moment)().format("YYYY-MM-DD");
     const month = this.view.month();
@@ -1591,22 +1591,22 @@ var CalendarPanel = class extends BasePanel {
       const day = weekStart.clone().add(i, "days");
       const dateStr = day.format("YYYY-MM-DD");
       const exists = !!this.ctx.app.vault.getAbstractFileByPath(dailyNotePath(this.ctx.app, dateStr));
-      const cell = grid.createDiv({ cls: "mrd-cal-cell" });
+      const cell = grid.createDiv({ cls: "dash-cal-cell" });
       if (day.month() !== month) cell.addClass("is-outside");
       if (dateStr === todayStr2) cell.addClass("is-today");
       if (exists) cell.addClass("has-note");
-      cell.createSpan({ cls: "mrd-cal-num", text: String(day.date()) });
-      if (exists) cell.createSpan({ cls: "mrd-cal-dot" });
+      cell.createSpan({ cls: "dash-cal-num", text: String(day.date()) });
+      if (exists) cell.createSpan({ cls: "dash-cal-dot" });
       cell.setAttr("aria-label", day.format("YYYY-MM-DD") + (exists ? " \xB7 note exists" : ""));
       cell.addEventListener("click", () => void this.openDay(dateStr, exists));
     }
     this.el.createDiv({
-      cls: "mrd-cal-legend",
+      cls: "dash-cal-legend",
       text: "Filled days have a daily note. Tap any day to open it \u2014 an empty day is created from your daily-note template."
     });
   }
   navBtn(parent, glyph, label, onClick) {
-    const b = parent.createEl("button", { cls: "mrd-cal-navbtn", text: glyph, attr: { "aria-label": label, title: label } });
+    const b = parent.createEl("button", { cls: "dash-cal-navbtn", text: glyph, attr: { "aria-label": label, title: label } });
     b.addEventListener("click", onClick);
   }
   async openDay(dateStr, exists) {
@@ -1667,7 +1667,7 @@ var TodoEditModal = class extends import_obsidian8.Modal {
     const { contentEl } = this;
     new import_obsidian8.Setting(contentEl).setName(this.copy.itemLabel).addText((t) => {
       t.setPlaceholder("What needs doing").setValue(this.text).onChange((v) => this.text = v);
-      t.inputEl.classList.add("mrd-modal-wide");
+      t.inputEl.classList.add("dash-modal-wide");
       t.inputEl.focus();
       t.inputEl.addEventListener("keydown", (e) => {
         if (e.key === "Enter") {
@@ -1712,7 +1712,7 @@ var TodoEditModal = class extends import_obsidian8.Modal {
     if (this.recType === "weekly") {
       const s = new import_obsidian8.Setting(host).setName("On days");
       for (const d of WEEKDAYS) {
-        const btn = s.controlEl.createEl("button", { cls: "mrd-day-toggle", text: d.label });
+        const btn = s.controlEl.createEl("button", { cls: "dash-day-toggle", text: d.label });
         if (this.weeklyDays.has(d.v)) btn.addClass("is-on");
         btn.addEventListener("click", () => {
           if (this.weeklyDays.has(d.v)) this.weeklyDays.delete(d.v);
@@ -1955,16 +1955,16 @@ var ClockPanel = class extends BasePanel {
   }
   renderBody() {
     placard(this.el, this.copy.title);
-    const wrap = this.el.createDiv({ cls: "mrd-clock" });
-    const main = wrap.createDiv({ cls: "mrd-clock-main" });
-    this.digitsEl = main.createSpan({ cls: "mrd-clock-digits" });
-    this.secEl = main.createSpan({ cls: "mrd-clock-sec" });
-    this.dateEl = wrap.createDiv({ cls: "mrd-clock-date" });
-    this.sinceEl = wrap.createDiv({ cls: "mrd-clock-since" });
+    const wrap = this.el.createDiv({ cls: "dash-clock" });
+    const main = wrap.createDiv({ cls: "dash-clock-main" });
+    this.digitsEl = main.createSpan({ cls: "dash-clock-digits" });
+    this.secEl = main.createSpan({ cls: "dash-clock-sec" });
+    this.dateEl = wrap.createDiv({ cls: "dash-clock-date" });
+    this.sinceEl = wrap.createDiv({ cls: "dash-clock-since" });
     const streak = this.ctx.streak;
     if (streak.current > 0) {
       wrap.createDiv({
-        cls: "mrd-clock-record",
+        cls: "dash-clock-record",
         text: this.copy.record.replace("{count}", String(streak.current)).replace("{unit}", streak.current === 1 ? this.copy.dayUnit : this.copy.daysUnit)
       });
     }
@@ -2012,7 +2012,7 @@ function runCommand(app, fullId) {
 }
 function commandButton(parent, app, fullId, label, opts = {}) {
   var _a;
-  const btn = parent.createEl("button", { cls: `mrd-btn ${(_a = opts.cls) != null ? _a : ""}`.trim(), text: label });
+  const btn = parent.createEl("button", { cls: `dash-btn ${(_a = opts.cls) != null ? _a : ""}`.trim(), text: label });
   if (!commandExists(app, fullId)) {
     btn.setAttr("disabled", "true");
     btn.addClass("is-unavailable");
@@ -2038,20 +2038,20 @@ var PlacesPanel = class extends BasePanel {
   }
   renderBody() {
     placard(this.el, this.copy.title);
-    const grid = this.el.createDiv({ cls: "mrd-places" });
+    const grid = this.el.createDiv({ cls: "dash-places" });
     const places = this.ctx.settings().places;
     if (places.length === 0) {
-      grid.createDiv({ cls: "mrd-muted", text: this.copy.empty });
+      grid.createDiv({ cls: "dash-muted", text: this.copy.empty });
       return;
     }
     for (const place of places) {
       if (place.type === "command") {
         commandButton(grid, this.ctx.app, place.target, place.label, {
-          cls: "mrd-place-btn",
+          cls: "dash-place-btn",
           offlineText: this.copy.commandOffline
         });
       } else {
-        const btn = grid.createEl("button", { cls: "mrd-btn mrd-place-btn", text: place.label });
+        const btn = grid.createEl("button", { cls: "dash-btn dash-place-btn", text: place.label });
         btn.addEventListener("click", () => {
           void this.ctx.app.workspace.openLinkText(place.target, "", false);
         });
@@ -2084,7 +2084,7 @@ var LocalEventModal = class extends import_obsidian11.Modal {
     const { contentEl } = this;
     new import_obsidian11.Setting(contentEl).setName("Event").addText((t) => {
       t.setPlaceholder("What's on").setValue(this.summary).onChange((v) => this.summary = v);
-      t.inputEl.classList.add("mrd-modal-wide");
+      t.inputEl.classList.add("dash-modal-wide");
       t.inputEl.focus();
       t.inputEl.addEventListener("keydown", (e) => {
         if (e.key === "Enter") {
@@ -2158,20 +2158,20 @@ var MealsPanel = class extends BasePanel {
     const companion = this.ctx.companion;
     placard(this.el, this.copy.title);
     if (!((_a = companion.recipesAvailable) == null ? void 0 : _a.call(companion))) {
-      this.el.createDiv({ cls: "mrd-muted", text: this.copy.offline });
+      this.el.createDiv({ cls: "dash-muted", text: this.copy.offline });
       return;
     }
     const meals = (_c = await ((_b = companion.plannedMeals) == null ? void 0 : _b.call(companion))) != null ? _c : [];
-    const mealsWrap = this.el.createDiv({ cls: "mrd-meals" });
-    mealsWrap.createDiv({ cls: "mrd-subhead", text: this.copy.plannedHeading });
+    const mealsWrap = this.el.createDiv({ cls: "dash-meals" });
+    mealsWrap.createDiv({ cls: "dash-subhead", text: this.copy.plannedHeading });
     if (meals.length === 0) {
-      mealsWrap.createDiv({ cls: "mrd-muted", text: this.copy.noMeals });
+      mealsWrap.createDiv({ cls: "dash-muted", text: this.copy.noMeals });
     } else {
-      const cards = mealsWrap.createDiv({ cls: "mrd-meal-cards" });
+      const cards = mealsWrap.createDiv({ cls: "dash-meal-cards" });
       for (const meal of meals) {
-        const card = cards.createDiv({ cls: "mrd-meal-card" });
-        card.createDiv({ cls: "mrd-meal-name", text: meal.name });
-        card.createDiv({ cls: "mrd-meal-open", text: this.copy.openRecipe });
+        const card = cards.createDiv({ cls: "dash-meal-card" });
+        card.createDiv({ cls: "dash-meal-name", text: meal.name });
+        card.createDiv({ cls: "dash-meal-open", text: this.copy.openRecipe });
         card.addEventListener("click", () => {
           const dest = this.ctx.app.metadataCache.getFirstLinkpathDest(meal.link, "");
           if (dest instanceof import_obsidian12.TFile) void this.ctx.app.workspace.getLeaf(false).openFile(dest);
@@ -2179,21 +2179,21 @@ var MealsPanel = class extends BasePanel {
       }
     }
     const grocery = (_e = await ((_d = companion.groceryList) == null ? void 0 : _d.call(companion))) != null ? _e : { path: "", items: [], exists: false };
-    const gWrap = this.el.createDiv({ cls: "mrd-grocery" });
-    gWrap.createDiv({ cls: "mrd-subhead", text: this.copy.groceryHeading });
+    const gWrap = this.el.createDiv({ cls: "dash-grocery" });
+    gWrap.createDiv({ cls: "dash-subhead", text: this.copy.groceryHeading });
     if (!grocery.exists) {
-      gWrap.createDiv({ cls: "mrd-muted", text: this.copy.noGroceryAt.replace("{path}", grocery.path) });
+      gWrap.createDiv({ cls: "dash-muted", text: this.copy.noGroceryAt.replace("{path}", grocery.path) });
     } else if (grocery.items.length === 0) {
-      gWrap.createDiv({ cls: "mrd-muted", text: this.copy.groceryEmpty });
+      gWrap.createDiv({ cls: "dash-muted", text: this.copy.groceryEmpty });
     } else {
       const remaining = grocery.items.filter((i) => !i.checked).length;
       gWrap.createDiv({
-        cls: "mrd-grocery-count",
+        cls: "dash-grocery-count",
         text: this.copy.remaining.replace("{remaining}", String(remaining)).replace("{total}", String(grocery.items.length))
       });
-      const list = gWrap.createDiv({ cls: "mrd-grocery-list" });
+      const list = gWrap.createDiv({ cls: "dash-grocery-list" });
       for (const item of grocery.items) {
-        const row = list.createEl("label", { cls: "mrd-grocery-row" });
+        const row = list.createEl("label", { cls: "dash-grocery-row" });
         if (item.checked) row.addClass("is-checked");
         const box = row.createEl("input", { attr: { type: "checkbox" } });
         box.checked = item.checked;
@@ -2203,10 +2203,10 @@ var MealsPanel = class extends BasePanel {
           this.ctx.markFoodFocus();
           this.rerender();
         });
-        row.createSpan({ cls: "mrd-grocery-name", text: item.name });
+        row.createSpan({ cls: "dash-grocery-name", text: item.name });
       }
     }
-    const actions = this.el.createDiv({ cls: "mrd-btn-row" });
+    const actions = this.el.createDiv({ cls: "dash-btn-row" });
     const nudge = () => this.ctx.markFoodFocus();
     for (const cmd of this.copy.commands) {
       commandButton(actions, this.ctx.app, cmd.id, cmd.label, {
@@ -2240,7 +2240,7 @@ var JournalPanel = class extends BasePanel {
   async renderBody() {
     placard(this.el, this.copy.title);
     await this.renderYesterdayCarry();
-    const wrap = this.el.createDiv({ cls: "mrd-journal" });
+    const wrap = this.el.createDiv({ cls: "dash-journal" });
     for (const field of this.copy.fields) {
       await this.renderField(wrap, field);
     }
@@ -2257,14 +2257,14 @@ var JournalPanel = class extends BasePanel {
       console.error("dash-core: could not read yesterday's carry-over", e);
     }
     if (!text) return;
-    const block = this.el.createDiv({ cls: "mrd-carry" });
-    if (this.copy.carryLabel) block.createDiv({ cls: "mrd-carry-label", text: this.copy.carryLabel });
-    block.createDiv({ cls: "mrd-carry-body", text });
+    const block = this.el.createDiv({ cls: "dash-carry" });
+    if (this.copy.carryLabel) block.createDiv({ cls: "dash-carry-label", text: this.copy.carryLabel });
+    block.createDiv({ cls: "dash-carry-body", text });
   }
   async renderField(parent, field) {
-    const block = parent.createDiv({ cls: "mrd-journal-field" });
-    block.createDiv({ cls: "mrd-journal-label", text: field.label });
-    const ta = block.createEl("textarea", { cls: "mrd-journal-input" });
+    const block = parent.createDiv({ cls: "dash-journal-field" });
+    block.createDiv({ cls: "dash-journal-label", text: field.label });
+    const ta = block.createEl("textarea", { cls: "dash-journal-input" });
     const loaded = await readDailyField(this.ctx.app, field.spec);
     ta.value = field.stripPlaceholder ? tidy(loaded) : loaded;
     autosize(ta);
@@ -2339,18 +2339,18 @@ var WeeklyGoalsModal = class extends import_obsidian14.Modal {
     const { contentEl } = this;
     contentEl.empty();
     const goals = this.store.forWeek(this.weekKey);
-    const list = contentEl.createDiv({ cls: "mrd-goals-list" });
+    const list = contentEl.createDiv({ cls: "dash-goals-list" });
     if (goals.length === 0) {
-      list.createDiv({ cls: "mrd-muted", text: this.copy.empty });
+      list.createDiv({ cls: "dash-muted", text: this.copy.empty });
     }
     for (const goal of goals) {
-      const row = list.createDiv({ cls: "mrd-goals-row" });
-      row.createSpan({ cls: "mrd-goals-text", text: goal.text });
-      const actions = row.createDiv({ cls: "mrd-goals-actions" });
-      const toDir = actions.createEl("button", { cls: "mrd-btn mrd-btn-sm", text: this.copy.toItem });
+      const row = list.createDiv({ cls: "dash-goals-row" });
+      row.createSpan({ cls: "dash-goals-text", text: goal.text });
+      const actions = row.createDiv({ cls: "dash-goals-actions" });
+      const toDir = actions.createEl("button", { cls: "dash-btn dash-btn-sm", text: this.copy.toItem });
       toDir.addEventListener("click", () => void this.toItem(goal.text));
       const del = actions.createEl("button", {
-        cls: "mrd-icon-btn",
+        cls: "dash-icon-btn",
         text: "\u{1F5D1}",
         attr: { "aria-label": this.copy.removeGoal, title: this.copy.removeGoal }
       });
@@ -2363,7 +2363,7 @@ var WeeklyGoalsModal = class extends import_obsidian14.Modal {
     const addRow = new import_obsidian14.Setting(contentEl).setName(this.copy.addName);
     addRow.addText((t) => {
       t.setPlaceholder(this.copy.addPlaceholder).setValue(this.draft).onChange((v) => this.draft = v);
-      t.inputEl.classList.add("mrd-modal-wide");
+      t.inputEl.classList.add("dash-modal-wide");
       t.inputEl.focus();
       t.inputEl.addEventListener("keydown", (e) => {
         if (e.key === "Enter") {
@@ -2408,27 +2408,27 @@ var SecondBrainPanel = class extends BasePanel {
   renderBody() {
     const head = placard(this.el, "Second Brain");
     const notes = this.store.listNotes();
-    head.createSpan({ cls: "mrd-placard-badge", text: `${notes.length} active` });
-    const actions = this.el.createDiv({ cls: "mrd-btn-row" });
-    const add = actions.createEl("button", { cls: "mrd-btn mrd-btn-primary", text: "+ Note" });
+    head.createSpan({ cls: "dash-placard-badge", text: `${notes.length} active` });
+    const actions = this.el.createDiv({ cls: "dash-btn-row" });
+    const add = actions.createEl("button", { cls: "dash-btn dash-btn-primary", text: "+ Note" });
     add.addEventListener("click", () => new NewNoteModal2(this.ctx.app, this.store, () => this.rerender()).open());
     const input = this.el.createEl("input", {
-      cls: "mrd-search-input",
+      cls: "dash-search-input",
       attr: { type: "search", placeholder: "Search the Second Brain\u2026" }
     });
     input.value = this.query;
-    const results = this.el.createDiv({ cls: "mrd-sb-results" });
+    const results = this.el.createDiv({ cls: "dash-sb-results" });
     const render = () => {
       results.empty();
       const q = this.query.trim();
       const list = q ? this.fuzzy(notes, q) : notes.slice(0, 12);
       if (list.length === 0) {
-        results.createDiv({ cls: "mrd-muted", text: q ? "No matches." : "No active notes yet." });
+        results.createDiv({ cls: "dash-muted", text: q ? "No matches." : "No active notes yet." });
         return;
       }
       for (const file of list) this.renderNoteRow(results, file);
       if (!q && notes.length > 12) {
-        results.createDiv({ cls: "mrd-muted", text: `+${notes.length - 12} more \u2014 type to search.` });
+        results.createDiv({ cls: "dash-muted", text: `+${notes.length - 12} more \u2014 type to search.` });
       }
     };
     input.addEventListener("input", () => {
@@ -2438,12 +2438,12 @@ var SecondBrainPanel = class extends BasePanel {
     render();
     const archived = this.store.listArchived();
     if (archived.length > 0) {
-      const arch = this.el.createEl("details", { cls: "mrd-sb-archived" });
+      const arch = this.el.createEl("details", { cls: "dash-sb-archived" });
       arch.createEl("summary", { text: `Archive \xB7 ${archived.length}` });
       const list = arch.createDiv();
       for (const file of archived) {
-        const row = list.createDiv({ cls: "mrd-sb-member" });
-        const link = row.createEl("a", { cls: "mrd-sb-link", text: file.basename });
+        const row = list.createDiv({ cls: "dash-sb-member" });
+        const link = row.createEl("a", { cls: "dash-sb-link", text: file.basename });
         link.addEventListener("click", (e) => {
           e.preventDefault();
           void this.ctx.app.workspace.getLeaf(false).openFile(file);
@@ -2457,8 +2457,8 @@ var SecondBrainPanel = class extends BasePanel {
     }
   }
   renderNoteRow(parent, file) {
-    const row = parent.createDiv({ cls: "mrd-sb-row" });
-    const link = row.createEl("a", { cls: "mrd-sb-link", text: file.basename });
+    const row = parent.createDiv({ cls: "dash-sb-row" });
+    const link = row.createEl("a", { cls: "dash-sb-link", text: file.basename });
     link.addEventListener("click", (e) => {
       e.preventDefault();
       void this.ctx.app.workspace.getLeaf(false).openFile(file);
@@ -2477,7 +2477,7 @@ var SecondBrainPanel = class extends BasePanel {
     });
   }
   iconBtn(parent, glyph, label, onClick) {
-    const b = parent.createEl("button", { cls: "mrd-icon-btn mrd-sb-icon", text: glyph, attr: { title: label, "aria-label": label } });
+    const b = parent.createEl("button", { cls: "dash-icon-btn dash-sb-icon", text: glyph, attr: { title: label, "aria-label": label } });
     b.addEventListener("click", onClick);
   }
   fuzzy(files, query) {
@@ -2594,19 +2594,19 @@ var SearchPanel = class extends BasePanel {
     this.buildIndex();
     placard(this.el, "Knowledge Base");
     const store = this.store;
-    const actions = this.el.createDiv({ cls: "mrd-btn-row" });
-    const note = actions.createEl("button", { cls: "mrd-btn mrd-btn-primary", text: "+ Note" });
+    const actions = this.el.createDiv({ cls: "dash-btn-row" });
+    const note = actions.createEl("button", { cls: "dash-btn dash-btn-primary", text: "+ Note" });
     note.addEventListener("click", () => new NewNoteModal(this.ctx.app, store, () => this.rerender()).open());
-    const cat = actions.createEl("button", { cls: "mrd-btn", text: "+ Category" });
+    const cat = actions.createEl("button", { cls: "dash-btn", text: "+ Category" });
     cat.addEventListener("click", () => new NewCategoryModal(this.ctx.app, store, () => this.rerender()).open());
-    const assign2 = actions.createEl("button", { cls: "mrd-btn", text: "Assign to category" });
+    const assign2 = actions.createEl("button", { cls: "dash-btn", text: "Assign to category" });
     assign2.addEventListener("click", () => runAssignFlow(this.ctx.app, store, () => this.rerender()));
     const input = this.el.createEl("input", {
-      cls: "mrd-search-input",
+      cls: "dash-search-input",
       attr: { type: "search", placeholder: "Search the knowledge base\u2026", enterkeyhint: "search" }
     });
     this.inputEl = input;
-    this.resultsEl = this.el.createDiv({ cls: "mrd-search-results" });
+    this.resultsEl = this.el.createDiv({ cls: "dash-search-results" });
     input.addEventListener("input", () => this.scheduleQuery(input.value));
     input.addEventListener("keydown", (e) => this.onKey(e));
     void this.runQuery("");
@@ -2627,10 +2627,10 @@ var SearchPanel = class extends BasePanel {
   renderCategories() {
     const store = this.store;
     const cats = store.listCategories();
-    const section = this.el.createDiv({ cls: "mrd-sb-cats" });
-    section.createDiv({ cls: "mrd-subhead", text: `Categories \xB7 ${cats.length}` });
+    const section = this.el.createDiv({ cls: "dash-sb-cats" });
+    section.createDiv({ cls: "dash-subhead", text: `Categories \xB7 ${cats.length}` });
     if (cats.length === 0) {
-      section.createDiv({ cls: "mrd-muted", text: "No categories yet. Create one to start organizing." });
+      section.createDiv({ cls: "dash-muted", text: "No categories yet. Create one to start organizing." });
       return;
     }
     const listEl = section.createDiv();
@@ -2640,15 +2640,15 @@ var SearchPanel = class extends BasePanel {
       );
       if (!listEl.isConnected) return;
       for (const { cat, members } of withMembers) {
-        const details = listEl.createEl("details", { cls: "mrd-sb-cat" });
+        const details = listEl.createEl("details", { cls: "dash-sb-cat" });
         const summary = details.createEl("summary");
-        summary.createSpan({ cls: "mrd-sb-cat-name", text: cat.name });
-        summary.createSpan({ cls: "mrd-chip mrd-chip-cold", text: String(members.length) });
-        const body = details.createDiv({ cls: "mrd-sb-cat-body" });
-        if (members.length === 0) body.createDiv({ cls: "mrd-muted", text: "Empty." });
+        summary.createSpan({ cls: "dash-sb-cat-name", text: cat.name });
+        summary.createSpan({ cls: "dash-chip dash-chip-cold", text: String(members.length) });
+        const body = details.createDiv({ cls: "dash-sb-cat-body" });
+        if (members.length === 0) body.createDiv({ cls: "dash-muted", text: "Empty." });
         for (const m of members) {
-          const row = body.createDiv({ cls: "mrd-sb-member" });
-          const link = row.createEl("a", { cls: "mrd-sb-link", text: m });
+          const row = body.createDiv({ cls: "dash-sb-member" });
+          const link = row.createEl("a", { cls: "dash-sb-link", text: m });
           link.addEventListener("click", (e) => {
             e.preventDefault();
             void this.ctx.app.workspace.openLinkText(m, cat.file.path, false);
@@ -2714,20 +2714,20 @@ var SearchPanel = class extends BasePanel {
     el.empty();
     if (this.showingRecent) {
       if (this.hits.length === 0) {
-        el.createDiv({ cls: "mrd-muted", text: "No notes in the knowledge-base scope yet." });
+        el.createDiv({ cls: "dash-muted", text: "No notes in the knowledge-base scope yet." });
         return;
       }
-      el.createDiv({ cls: "mrd-subhead", text: `Recently modified \xB7 ${this.hits.length}` });
+      el.createDiv({ cls: "dash-subhead", text: `Recently modified \xB7 ${this.hits.length}` });
     } else if (this.hits.length === 0) {
-      el.createDiv({ cls: "mrd-muted", text: "No matches in the knowledge base." });
+      el.createDiv({ cls: "dash-muted", text: "No matches in the knowledge base." });
       return;
     }
     this.hits.forEach((hit, i) => {
-      const row = el.createDiv({ cls: "mrd-search-row" });
+      const row = el.createDiv({ cls: "dash-search-row" });
       if (i === this.selected) row.addClass("is-selected");
-      row.createDiv({ cls: "mrd-search-title", text: hit.title });
+      row.createDiv({ cls: "dash-search-title", text: hit.title });
       if (hit.context && hit.context !== hit.title) {
-        const ctx = row.createDiv({ cls: "mrd-search-context", text: hit.context });
+        const ctx = row.createDiv({ cls: "dash-search-context", text: hit.context });
         if (hit.body) ctx.addClass("is-body");
       }
       row.addEventListener("click", () => this.open(hit.file));
@@ -2790,30 +2790,30 @@ var TodoPanel = class extends BasePanel {
     const done = instances.filter((i) => i.done);
     const head = placard(this.el, this.copy.title);
     const overdue = active.filter((i) => i.flagged).length;
-    if (overdue > 0) head.createSpan({ cls: "mrd-chip mrd-chip-warn", text: `${overdue} slipped` });
-    head.createSpan({ cls: "mrd-chip", text: `${active.length} pending` });
-    const reviewBtn = head.createEl("button", { cls: "mrd-btn mrd-btn-sm mrd-todo-review", text: "Weekly review" });
+    if (overdue > 0) head.createSpan({ cls: "dash-chip dash-chip-warn", text: `${overdue} slipped` });
+    head.createSpan({ cls: "dash-chip", text: `${active.length} pending` });
+    const reviewBtn = head.createEl("button", { cls: "dash-btn dash-btn-sm dash-todo-review", text: "Weekly review" });
     reviewBtn.addEventListener("click", () => this.openWeeklyReview());
-    const addBtn = this.el.createEl("button", { cls: "mrd-btn mrd-btn-primary mrd-todo-add", text: this.copy.addNew });
+    const addBtn = this.el.createEl("button", { cls: "dash-btn dash-btn-primary dash-todo-add", text: this.copy.addNew });
     addBtn.addEventListener(
       "click",
       () => new TodoEditModal(this.ctx.app, store, void 0, () => this.after(), this.editCopy).open()
     );
-    const list = this.el.createDiv({ cls: "mrd-todo-list" });
+    const list = this.el.createDiv({ cls: "dash-todo-list" });
     if (active.length === 0) {
-      list.createDiv({ cls: "mrd-muted", text: this.copy.empty });
+      list.createDiv({ cls: "dash-muted", text: this.copy.empty });
     }
     active.forEach((inst, idx) => this.renderRow(list, inst, idx, active.length));
     if (postponed.length > 0) {
-      const details = this.el.createEl("details", { cls: "mrd-todo-done" });
+      const details = this.el.createEl("details", { cls: "dash-todo-done" });
       details.createEl("summary", { text: `Postponed \xB7 ${postponed.length}` });
-      const pList = details.createDiv({ cls: "mrd-todo-list" });
+      const pList = details.createDiv({ cls: "dash-todo-list" });
       for (const inst of postponed) this.renderRow(pList, inst, -1, 0);
     }
     if (done.length > 0) {
-      const details = this.el.createEl("details", { cls: "mrd-todo-done" });
+      const details = this.el.createEl("details", { cls: "dash-todo-done" });
       details.createEl("summary", { text: `Completed today \xB7 ${done.length}` });
-      const doneList = details.createDiv({ cls: "mrd-todo-list" });
+      const doneList = details.createDiv({ cls: "dash-todo-list" });
       for (const inst of done) this.renderRow(doneList, inst, -1, 0);
     }
   }
@@ -2822,34 +2822,34 @@ var TodoPanel = class extends BasePanel {
     const store = this.ctx.todos;
     const item = inst.item;
     const today2 = (0, import_obsidian17.moment)().format("YYYY-MM-DD");
-    const wrap = parent.createDiv({ cls: "mrd-todo-item" });
-    const row = wrap.createDiv({ cls: "mrd-todo-row" });
+    const wrap = parent.createDiv({ cls: "dash-todo-item" });
+    const row = wrap.createDiv({ cls: "dash-todo-row" });
     if (inst.flagged) row.addClass("is-flagged");
     if (inst.done || inst.skipped) row.addClass("is-done");
-    const box = row.createEl("button", { cls: "mrd-todo-check", attr: { "aria-label": inst.done ? "Mark not done" : "Mark done" } });
+    const box = row.createEl("button", { cls: "dash-todo-check", attr: { "aria-label": inst.done ? "Mark not done" : "Mark done" } });
     box.setText(inst.done ? "\u2713" : "");
     box.addEventListener("click", async () => {
       await store.toggleComplete(item.id);
       this.after();
     });
-    const main = row.createDiv({ cls: "mrd-todo-main" });
-    main.createDiv({ cls: "mrd-todo-text", text: item.text });
-    const meta = main.createDiv({ cls: "mrd-todo-meta" });
-    if (item.recurrence.type !== "none") meta.createSpan({ cls: "mrd-chip mrd-chip-cold", text: describeRecurrence(item.recurrence) });
-    if (item.scheduledTime) meta.createSpan({ cls: "mrd-chip", text: item.scheduledTime });
+    const main = row.createDiv({ cls: "dash-todo-main" });
+    main.createDiv({ cls: "dash-todo-text", text: item.text });
+    const meta = main.createDiv({ cls: "dash-todo-meta" });
+    if (item.recurrence.type !== "none") meta.createSpan({ cls: "dash-chip dash-chip-cold", text: describeRecurrence(item.recurrence) });
+    if (item.scheduledTime) meta.createSpan({ cls: "dash-chip", text: item.scheduledTime });
     if (item.dueDate) {
       const overdue = !inst.done && item.dueDate < today2;
-      meta.createSpan({ cls: overdue ? "mrd-chip mrd-chip-warn" : "mrd-chip", text: dueLabel(item.dueDate, today2) });
+      meta.createSpan({ cls: overdue ? "dash-chip dash-chip-warn" : "dash-chip", text: dueLabel(item.dueDate, today2) });
     }
-    if (item.showOnWeekPrint) meta.createSpan({ cls: "mrd-chip mrd-chip-cold", text: "on planner" });
-    if (inst.flagged) meta.createSpan({ cls: "mrd-chip mrd-chip-warn", text: inst.flagLabel });
+    if (item.showOnWeekPrint) meta.createSpan({ cls: "dash-chip dash-chip-cold", text: "on planner" });
+    if (inst.flagged) meta.createSpan({ cls: "dash-chip dash-chip-warn", text: inst.flagLabel });
     const subs = (_a = item.subItems) != null ? _a : [];
     if (subs.length > 0) {
       const doneN = subItemsDoneCount(item, today2);
-      const chip = meta.createSpan({ cls: "mrd-chip mrd-chip-cold", text: `sub-tasks ${doneN}/${subs.length}` });
-      if (allSubItemsDone(item, today2)) chip.addClass("mrd-chip-warn");
+      const chip = meta.createSpan({ cls: "dash-chip dash-chip-cold", text: `sub-tasks ${doneN}/${subs.length}` });
+      if (allSubItemsDone(item, today2)) chip.addClass("dash-chip-warn");
     }
-    const actions = row.createDiv({ cls: "mrd-todo-actions" });
+    const actions = row.createDiv({ cls: "dash-todo-actions" });
     const hasDetail = subs.length > 0 || !!item.note;
     const isOpen = this.expanded.has(item.id);
     this.iconBtn(actions, isOpen ? "\u25BE" : "\u25B8", hasDetail ? "Sub-tasks & note" : "Add sub-tasks or a note", false, () => {
@@ -2891,9 +2891,9 @@ var TodoPanel = class extends BasePanel {
     var _a, _b;
     const store = this.ctx.todos;
     const item = inst.item;
-    const detail = wrap.createDiv({ cls: "mrd-todo-detail" });
+    const detail = wrap.createDiv({ cls: "dash-todo-detail" });
     const noteInput = detail.createEl("input", {
-      cls: "mrd-todo-note-input",
+      cls: "dash-todo-note-input",
       attr: { type: "text", placeholder: "Add a note\u2026", value: (_a = item.note) != null ? _a : "" }
     });
     const saveNote = () => {
@@ -2910,13 +2910,13 @@ var TodoPanel = class extends BasePanel {
         noteInput.blur();
       }
     });
-    const subList = detail.createDiv({ cls: "mrd-subtask-list" });
+    const subList = detail.createDiv({ cls: "dash-subtask-list" });
     for (const sub of (_b = item.subItems) != null ? _b : []) {
-      const srow = subList.createDiv({ cls: "mrd-subtask-row" });
+      const srow = subList.createDiv({ cls: "dash-subtask-row" });
       const done = subItemDone(item, sub.id, today2);
       if (done) srow.addClass("is-done");
       const cb = srow.createEl("button", {
-        cls: "mrd-subtask-check",
+        cls: "dash-subtask-check",
         attr: { "aria-label": done ? "Mark sub-task not done" : "Mark sub-task done" }
       });
       cb.setText(done ? "\u2713" : "");
@@ -2924,15 +2924,15 @@ var TodoPanel = class extends BasePanel {
         await store.toggleSubItem(item.id, sub.id, today2);
         this.after();
       });
-      srow.createSpan({ cls: "mrd-subtask-text", text: sub.text });
+      srow.createSpan({ cls: "dash-subtask-text", text: sub.text });
       this.iconBtn(srow, "\u{1F5D1}", "Remove sub-task", false, async () => {
         await store.removeSubItem(item.id, sub.id);
         this.after();
       });
     }
-    const addRow = detail.createDiv({ cls: "mrd-subtask-add" });
+    const addRow = detail.createDiv({ cls: "dash-subtask-add" });
     const addInput = addRow.createEl("input", {
-      cls: "mrd-subtask-input",
+      cls: "dash-subtask-input",
       attr: { type: "text", placeholder: "Add a sub-task\u2026" }
     });
     const addSub = () => {
@@ -2948,11 +2948,11 @@ var TodoPanel = class extends BasePanel {
         addSub();
       }
     });
-    const addBtn = addRow.createEl("button", { cls: "mrd-btn mrd-btn-sm", text: "Add" });
+    const addBtn = addRow.createEl("button", { cls: "dash-btn dash-btn-sm", text: "Add" });
     addBtn.addEventListener("click", addSub);
   }
   iconBtn(parent, glyph, label, disabled, onClick) {
-    const b = parent.createEl("button", { cls: "mrd-icon-btn mrd-todo-icon", text: glyph, attr: { "aria-label": label, title: label } });
+    const b = parent.createEl("button", { cls: "dash-icon-btn dash-todo-icon", text: glyph, attr: { "aria-label": label, title: label } });
     if (disabled) b.setAttr("disabled", "true");
     else b.addEventListener("click", onClick);
   }
@@ -2992,9 +2992,9 @@ var WeekReviewModal = class extends import_obsidian18.Modal {
   }
   onOpen() {
     this.titleEl.setText(this.config.title);
-    this.modalEl.addClass("mrd-review-modal");
-    const body = this.contentEl.createDiv({ cls: "mrd-review" });
-    body.createDiv({ cls: "mrd-muted", text: this.config.compilingText });
+    this.modalEl.addClass("dash-review-modal");
+    const body = this.contentEl.createDiv({ cls: "dash-review" });
+    body.createDiv({ cls: "dash-muted", text: this.config.compilingText });
     void this.config.compile().then((data) => {
       if (!body.isConnected) return;
       this.render(body, data);
@@ -3002,31 +3002,31 @@ var WeekReviewModal = class extends import_obsidian18.Modal {
   }
   render(host, data) {
     host.empty();
-    host.createDiv({ cls: "mrd-review-header", text: data.header });
-    if (data.streakLine) host.createDiv({ cls: "mrd-review-streak", text: data.streakLine });
+    host.createDiv({ cls: "dash-review-header", text: data.header });
+    if (data.streakLine) host.createDiv({ cls: "dash-review-streak", text: data.streakLine });
     for (const block of data.blocks) {
-      const b = host.createDiv({ cls: "mrd-review-block" });
-      b.createDiv({ cls: "mrd-review-stat-head", text: block.head });
-      if (block.figure !== void 0) b.createDiv({ cls: "mrd-review-figure", text: block.figure });
+      const b = host.createDiv({ cls: "dash-review-block" });
+      b.createDiv({ cls: "dash-review-stat-head", text: block.head });
+      if (block.figure !== void 0) b.createDiv({ cls: "dash-review-figure", text: block.figure });
       if (block.bars) this.renderBars(b, block.bars);
-      if (block.line !== void 0) b.createDiv({ cls: "mrd-review-line", text: block.line });
+      if (block.line !== void 0) b.createDiv({ cls: "dash-review-line", text: block.line });
       if (block.chips) {
-        const chips = b.createDiv({ cls: "mrd-review-chips" });
-        for (const name of block.chips) chips.createSpan({ cls: "mrd-chip mrd-chip-cold", text: name });
+        const chips = b.createDiv({ cls: "dash-review-chips" });
+        for (const name of block.chips) chips.createSpan({ cls: "dash-chip dash-chip-cold", text: name });
       }
     }
   }
   renderBars(parent, data) {
-    const bars = parent.createDiv({ cls: "mrd-review-bars" });
+    const bars = parent.createDiv({ cls: "dash-review-bars" });
     const max = Math.max(1, ...data.map((d) => d.count));
     for (const d of data) {
-      const cell = bars.createDiv({ cls: "mrd-review-bar-cell" });
-      const track = cell.createDiv({ cls: "mrd-review-bar-track" });
-      const fill = track.createDiv({ cls: "mrd-review-bar-fill" });
+      const cell = bars.createDiv({ cls: "dash-review-bar-cell" });
+      const track = cell.createDiv({ cls: "dash-review-bar-track" });
+      const fill = track.createDiv({ cls: "dash-review-bar-fill" });
       fill.style.height = `${Math.round(d.count / max * 100)}%`;
       if (d.count === 0) fill.addClass("is-empty");
-      cell.createDiv({ cls: "mrd-review-bar-day", text: d.label });
-      cell.createDiv({ cls: "mrd-review-bar-count", text: String(d.count) });
+      cell.createDiv({ cls: "dash-review-bar-day", text: d.label });
+      cell.createDiv({ cls: "dash-review-bar-count", text: String(d.count) });
     }
   }
   onClose() {
@@ -3062,13 +3062,13 @@ var AgendaPanel = class extends BasePanel {
     var _a;
     const s = this.ctx.settings();
     const head = placard(this.el, this.copy.title);
-    head.createSpan({ cls: "mrd-placard-badge", text: (0, import_obsidian19.moment)().format("YYYY-MM-DD") });
-    const actions = this.el.createDiv({ cls: "mrd-btn-row mrd-agenda-actions" });
-    const addBtn = actions.createEl("button", { cls: "mrd-btn mrd-btn-sm", text: this.copy.addEvent });
+    head.createSpan({ cls: "dash-placard-badge", text: (0, import_obsidian19.moment)().format("YYYY-MM-DD") });
+    const actions = this.el.createDiv({ cls: "dash-btn-row dash-agenda-actions" });
+    const addBtn = actions.createEl("button", { cls: "dash-btn dash-btn-sm", text: this.copy.addEvent });
     addBtn.addEventListener("click", () => this.actions.openLocalEvent(void 0, () => this.rerender()));
-    const goalsBtn = actions.createEl("button", { cls: "mrd-btn mrd-btn-sm", text: this.copy.weeklyGoals });
+    const goalsBtn = actions.createEl("button", { cls: "dash-btn dash-btn-sm", text: this.copy.weeklyGoals });
     goalsBtn.addEventListener("click", () => this.actions.openWeeklyGoals(() => this.rerender()));
-    const printBtn = actions.createEl("button", { cls: "mrd-btn mrd-btn-sm", text: this.copy.printWeek });
+    const printBtn = actions.createEl("button", { cls: "dash-btn dash-btn-sm", text: this.copy.printWeek });
     printBtn.addEventListener("click", () => {
       void this.fetchAll();
       this.actions.openWeekPrint();
@@ -3076,7 +3076,7 @@ var AgendaPanel = class extends BasePanel {
     const today2 = (0, import_obsidian19.moment)().format("YYYY-MM-DD");
     const localToday = this.ctx.localEvents.filter((e) => e.date === today2);
     if (s.agendaUrls.length === 0 && localToday.length === 0) {
-      this.el.createDiv({ cls: "mrd-muted", text: this.copy.noCalendars });
+      this.el.createDiv({ cls: "dash-muted", text: this.copy.noCalendars });
       return;
     }
     const rows = [];
@@ -3103,10 +3103,10 @@ var AgendaPanel = class extends BasePanel {
     }
     const failed = s.agendaUrls.filter((c) => this.errors.has(c.url));
     if (failed.length) {
-      const box = this.el.createDiv({ cls: "mrd-agenda-alert" });
+      const box = this.el.createDiv({ cls: "dash-agenda-alert" });
       for (const c of failed) {
         box.createDiv({
-          cls: "mrd-agenda-alert-line",
+          cls: "dash-agenda-alert-line",
           text: this.copy.fetchFailed.replace("{label}", c.label).replace("{error}", (_a = this.errors.get(c.url)) != null ? _a : "")
         });
       }
@@ -3114,23 +3114,23 @@ var AgendaPanel = class extends BasePanel {
     rows.sort((a, b) => a.item.sortKey - b.item.sortKey || a.item.summary.localeCompare(b.item.summary));
     this.dayItems = rows.filter((r) => r.countdown).map((r) => r.item);
     this.hadEvents = rows.length > 0;
-    this.countdownEl = this.el.createDiv({ cls: "mrd-agenda-next" });
+    this.countdownEl = this.el.createDiv({ cls: "dash-agenda-next" });
     this.renderCountdown();
-    const list = this.el.createDiv({ cls: "mrd-agenda-list" });
+    const list = this.el.createDiv({ cls: "dash-agenda-list" });
     for (const r of rows) {
-      const row = list.createDiv({ cls: "mrd-agenda-row" });
-      row.createSpan({ cls: "mrd-agenda-swatch" }).style.background = r.color;
-      const time = row.createSpan({ cls: "mrd-agenda-time" });
+      const row = list.createDiv({ cls: "dash-agenda-row" });
+      row.createSpan({ cls: "dash-agenda-swatch" }).style.background = r.color;
+      const time = row.createSpan({ cls: "dash-agenda-time" });
       time.setText(r.item.allDay ? this.copy.allDay : r.item.timeLabel);
-      const body = row.createDiv({ cls: "mrd-agenda-body" });
-      const title = body.createDiv({ cls: "mrd-agenda-title" });
+      const body = row.createDiv({ cls: "dash-agenda-body" });
+      const title = body.createDiv({ cls: "dash-agenda-title" });
       title.createSpan({ text: r.item.summary });
-      if (r.local) title.createSpan({ cls: "mrd-chip mrd-chip-cold mrd-agenda-local-chip", text: this.copy.localLabel });
+      if (r.local) title.createSpan({ cls: "dash-chip dash-chip-cold dash-agenda-local-chip", text: this.copy.localLabel });
       const sub = [r.local ? "" : r.label, r.item.location].filter(Boolean).join(" \xB7 ");
-      if (sub) body.createDiv({ cls: "mrd-agenda-sub", text: sub });
+      if (sub) body.createDiv({ cls: "dash-agenda-sub", text: sub });
       if (r.local) {
         const ev = r.local;
-        row.addClass("mrd-agenda-row-edit");
+        row.addClass("dash-agenda-row-edit");
         row.setAttr("title", this.copy.editLocal);
         row.addEventListener("click", () => this.actions.openLocalEvent(ev, () => this.rerender()));
       }
@@ -3139,7 +3139,7 @@ var AgendaPanel = class extends BasePanel {
       const age = Date.now() - oldest;
       if (age > 90 * 1e3) {
         this.el.createDiv({
-          cls: "mrd-agenda-age",
+          cls: "dash-agenda-age",
           text: this.copy.staleness.replace("{when}", (0, import_obsidian19.moment)(oldest).fromNow())
         });
       }
@@ -3156,7 +3156,7 @@ var AgendaPanel = class extends BasePanel {
       el.addClass("is-clear");
       el.removeClass("is-now");
       el.createDiv({
-        cls: "mrd-agenda-next-line",
+        cls: "dash-agenda-next-line",
         text: this.hadEvents ? this.copy.clearRest : this.copy.clearDay
       });
       return;
@@ -3164,21 +3164,21 @@ var AgendaPanel = class extends BasePanel {
     el.removeClass("is-clear");
     el.toggleClass("is-now", state.kind === "now");
     const label = state.kind === "now" ? this.copy.now : this.copy.next;
-    const line = el.createDiv({ cls: "mrd-agenda-next-line" });
-    line.createSpan({ cls: "mrd-agenda-next-label", text: label });
-    line.createSpan({ cls: "mrd-agenda-next-summary", text: (_a = state.summary) != null ? _a : "" });
+    const line = el.createDiv({ cls: "dash-agenda-next-line" });
+    line.createSpan({ cls: "dash-agenda-next-label", text: label });
+    line.createSpan({ cls: "dash-agenda-next-summary", text: (_a = state.summary) != null ? _a : "" });
     const until = formatGap((_b = state.untilMs) != null ? _b : 0);
     line.createSpan({
-      cls: "mrd-agenda-next-when",
+      cls: "dash-agenda-next-when",
       text: state.kind === "now" ? this.copy.endsIn.replace("{t}", until) : this.copy.inT.replace("{t}", until)
     });
     if (state.kind === "now") {
       el.createDiv({
-        cls: "mrd-agenda-gap",
+        cls: "dash-agenda-gap",
         text: state.gapMs === void 0 ? this.copy.gapClear : this.copy.gapOpen.replace("{t}", formatGap(state.gapMs))
       });
     } else {
-      el.createDiv({ cls: "mrd-agenda-gap", text: this.copy.gapUntil.replace("{t}", until) });
+      el.createDiv({ cls: "dash-agenda-gap", text: this.copy.gapUntil.replace("{t}", until) });
     }
   }
   /** 1-minute tick: recompute the placard only, guarding against unmount. */
@@ -3224,7 +3224,7 @@ var WeekPrintModal = class extends import_obsidian20.Modal {
     __publicField(this, "sources", []);
   }
   onOpen() {
-    this.modalEl.addClass("mrd-week-modal");
+    this.modalEl.addClass("dash-week-modal");
     const cache = this.config.agendaCache;
     this.sources = this.config.calendars.map((cal, i) => {
       var _a;
@@ -3242,13 +3242,13 @@ var WeekPrintModal = class extends import_obsidian20.Modal {
     contentEl.empty();
     const days = Array.from({ length: 7 }, (_, i) => this.weekStart.clone().add(i, "days"));
     const range = `${days[0].format("MMM D")} \u2013 ${days[6].format("MMM D, YYYY")}`;
-    const controls = contentEl.createDiv({ cls: "mrd-week-noprint mrd-week-controls" });
-    const nav = controls.createDiv({ cls: "mrd-week-nav" });
+    const controls = contentEl.createDiv({ cls: "dash-week-noprint dash-week-controls" });
+    const nav = controls.createDiv({ cls: "dash-week-nav" });
     this.ctrlBtn(nav, copy.prevWeek, () => {
       this.weekStart = this.weekStart.clone().subtract(1, "week");
       this.render();
     });
-    nav.createSpan({ cls: "mrd-week-range", text: range });
+    nav.createSpan({ cls: "dash-week-range", text: range });
     this.ctrlBtn(nav, copy.nextWeek, () => {
       this.weekStart = this.weekStart.clone().add(1, "week");
       this.render();
@@ -3268,76 +3268,76 @@ var WeekPrintModal = class extends import_obsidian20.Modal {
       ).open();
     });
     const shareBtn = controls.createEl("button", {
-      cls: `mrd-btn ${import_obsidian20.Platform.isMobile ? "mrd-btn-primary" : ""}`.trim(),
+      cls: `dash-btn ${import_obsidian20.Platform.isMobile ? "dash-btn-primary" : ""}`.trim(),
       text: copy.sharePrint
     });
     shareBtn.addEventListener("click", () => void this.share());
     if (!import_obsidian20.Platform.isMobile) {
-      const printBtn = controls.createEl("button", { cls: "mrd-btn mrd-btn-primary", text: copy.print });
+      const printBtn = controls.createEl("button", { cls: "dash-btn dash-btn-primary", text: copy.print });
       printBtn.addEventListener("click", () => this.print());
     }
-    const sheet = contentEl.createDiv({ cls: "mrd-week-print" });
-    const header = sheet.createDiv({ cls: "mrd-week-header" });
-    header.createDiv({ cls: "mrd-week-title", text: copy.title });
-    header.createDiv({ cls: "mrd-week-dates", text: range });
+    const sheet = contentEl.createDiv({ cls: "dash-week-print" });
+    const header = sheet.createDiv({ cls: "dash-week-header" });
+    header.createDiv({ cls: "dash-week-title", text: copy.title });
+    header.createDiv({ cls: "dash-week-dates", text: range });
     this.renderGoals(sheet);
     if (this.sources.length > 0) {
-      const legend = sheet.createDiv({ cls: "mrd-week-legend" });
+      const legend = sheet.createDiv({ cls: "dash-week-legend" });
       for (const s of this.sources) {
-        const item = legend.createSpan({ cls: "mrd-week-legend-item" });
-        const sw = item.createSpan({ cls: "mrd-week-swatch" });
+        const item = legend.createSpan({ cls: "dash-week-legend-item" });
+        const sw = item.createSpan({ cls: "dash-week-swatch" });
         sw.style.background = s.color;
         item.createSpan({ text: s.label });
       }
     }
-    const grid = sheet.createDiv({ cls: "mrd-week-grid" });
+    const grid = sheet.createDiv({ cls: "dash-week-grid" });
     for (const day of days) {
       this.renderDay(grid, day);
     }
-    const notes = grid.createDiv({ cls: "mrd-week-cell mrd-week-notes" });
-    notes.createDiv({ cls: "mrd-week-cell-head", text: copy.notesHead });
-    notes.createDiv({ cls: "mrd-week-lines" });
+    const notes = grid.createDiv({ cls: "dash-week-cell dash-week-notes" });
+    notes.createDiv({ cls: "dash-week-cell-head", text: copy.notesHead });
+    notes.createDiv({ cls: "dash-week-lines" });
   }
   /** The week's goals, printed at the top as checkbox lines to work against. */
   renderGoals(sheet) {
     const goals = this.config.weeklyGoals.forWeek(weekKeyOf(this.weekStart));
     if (goals.length === 0) return;
-    const block = sheet.createDiv({ cls: "mrd-week-goals" });
-    block.createDiv({ cls: "mrd-week-goals-head", text: this.config.copy.goalsHead });
-    const list = block.createDiv({ cls: "mrd-week-goals-list" });
+    const block = sheet.createDiv({ cls: "dash-week-goals" });
+    block.createDiv({ cls: "dash-week-goals-head", text: this.config.copy.goalsHead });
+    const list = block.createDiv({ cls: "dash-week-goals-list" });
     for (const goal of goals) {
-      const row = list.createDiv({ cls: "mrd-week-goal" });
-      row.createSpan({ cls: "mrd-week-goal-box", text: "\u2610" });
-      row.createSpan({ cls: "mrd-week-goal-text", text: goal.text });
+      const row = list.createDiv({ cls: "dash-week-goal" });
+      row.createSpan({ cls: "dash-week-goal-box", text: "\u2610" });
+      row.createSpan({ cls: "dash-week-goal-text", text: goal.text });
     }
   }
   renderDay(grid, day) {
     const dateStr = day.format("YYYY-MM-DD");
     const events = this.eventsForDay(dateStr);
     const directives = this.config.todos.itemsForWeekPrint(dateStr);
-    const cell = grid.createDiv({ cls: "mrd-week-cell" });
-    const head = cell.createDiv({ cls: "mrd-week-cell-head" });
-    head.createSpan({ cls: "mrd-week-dow", text: day.format("dddd") });
-    head.createSpan({ cls: "mrd-week-date", text: day.format("MMM D") });
+    const cell = grid.createDiv({ cls: "dash-week-cell" });
+    const head = cell.createDiv({ cls: "dash-week-cell-head" });
+    head.createSpan({ cls: "dash-week-dow", text: day.format("dddd") });
+    head.createSpan({ cls: "dash-week-date", text: day.format("MMM D") });
     if (events.length > 0) {
-      const list = cell.createDiv({ cls: "mrd-week-events" });
+      const list = cell.createDiv({ cls: "dash-week-events" });
       for (const ev of events) {
-        const row = list.createDiv({ cls: "mrd-week-event" });
+        const row = list.createDiv({ cls: "dash-week-event" });
         row.style.borderLeftColor = ev.color;
         const time = ev.item.allDay ? "" : ev.item.timeLabel + " ";
-        row.createSpan({ cls: "mrd-week-ev-text", text: `${time}${ev.item.summary}` });
+        row.createSpan({ cls: "dash-week-ev-text", text: `${time}${ev.item.summary}` });
       }
     }
     if (directives.length > 0) {
-      const list = cell.createDiv({ cls: "mrd-week-directives" });
+      const list = cell.createDiv({ cls: "dash-week-directives" });
       for (const item of directives) {
-        const row = list.createDiv({ cls: "mrd-week-directive" });
-        row.createSpan({ cls: "mrd-week-goal-box", text: "\u2610" });
+        const row = list.createDiv({ cls: "dash-week-directive" });
+        row.createSpan({ cls: "dash-week-goal-box", text: "\u2610" });
         const time = item.scheduledTime ? item.scheduledTime + " " : "";
-        row.createSpan({ cls: "mrd-week-directive-text", text: `${time}${item.text}` });
+        row.createSpan({ cls: "dash-week-directive-text", text: `${time}${item.text}` });
       }
     }
-    cell.createDiv({ cls: "mrd-week-lines" });
+    cell.createDiv({ cls: "dash-week-lines" });
   }
   eventsForDay(dateStr) {
     const out = [];
@@ -3353,7 +3353,7 @@ var WeekPrintModal = class extends import_obsidian20.Modal {
     return out;
   }
   ctrlBtn(parent, text, onClick) {
-    const b = parent.createEl("button", { cls: "mrd-btn mrd-btn-sm", text });
+    const b = parent.createEl("button", { cls: "dash-btn dash-btn-sm", text });
     b.addEventListener("click", onClick);
   }
   /**
@@ -3364,12 +3364,12 @@ var WeekPrintModal = class extends import_obsidian20.Modal {
    * the loaded stylesheet.
    */
   print() {
-    const sheet = this.contentEl.querySelector(".mrd-week-print");
+    const sheet = this.contentEl.querySelector(".dash-week-print");
     if (!sheet) {
       window.print();
       return;
     }
-    const iframe = document.body.createEl("iframe", { cls: "mrd-week-print-frame" });
+    const iframe = document.body.createEl("iframe", { cls: "dash-week-print-frame" });
     iframe.setAttribute("aria-hidden", "true");
     const doc = iframe.contentDocument;
     const win = iframe.contentWindow;
@@ -3411,7 +3411,7 @@ ${collectWeekPrintCss()}`;
    * file download where the Web Share API is unavailable.
    */
   async share() {
-    const sheet = this.contentEl.querySelector(".mrd-week-print");
+    const sheet = this.contentEl.querySelector(".dash-week-print");
     if (!sheet) return;
     const html = this.plannerDocument(sheet);
     const name = `Week planner ${this.weekStart.format("YYYY-MM-DD")}.html`;
@@ -3451,31 +3451,31 @@ function collectWeekPrintCss() {
     }
     if (!rules) continue;
     for (const rule of Array.from(rules)) {
-      if (rule.cssText.includes("mrd-week")) parts.push(rule.cssText);
+      if (rule.cssText.includes("dash-week")) parts.push(rule.cssText);
     }
   }
   return parts.length ? parts.join("\n") : WEEK_PRINT_FALLBACK_CSS;
 }
 var WEEK_PRINT_FALLBACK_CSS = `
-.mrd-week-print { background:#fff; color:#16140f; padding:16px 18px; font-family:"Inter",system-ui,sans-serif; }
-.mrd-week-header { display:flex; justify-content:space-between; border-bottom:2px solid #16140f; padding-bottom:6px; margin-bottom:8px; }
-.mrd-week-title { font-weight:600; letter-spacing:0.14em; text-transform:uppercase; font-size:1.15rem; }
-.mrd-week-dates { font-size:0.85rem; color:#444; }
-.mrd-week-legend { display:flex; flex-wrap:wrap; gap:12px; margin-bottom:10px; font-size:0.72rem; color:#333; }
-.mrd-week-legend-item { display:inline-flex; align-items:center; gap:5px; }
-.mrd-week-swatch { width:11px; height:11px; border-radius:2px; display:inline-block; }
-.mrd-week-goals { border:1px solid #999; border-radius:4px; padding:6px 8px; margin-bottom:10px; }
-.mrd-week-goals-head { font-weight:700; font-size:0.78rem; margin-bottom:4px; }
-.mrd-week-goal, .mrd-week-directive { display:flex; align-items:baseline; gap:6px; font-size:0.72rem; color:#16140f; }
-.mrd-week-goal-box { color:#444; }
-.mrd-week-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; }
-.mrd-week-cell { border:1px solid #999; border-radius:4px; padding:5px 7px; min-height:5.6cm; display:flex; flex-direction:column; }
-.mrd-week-cell-head { display:flex; justify-content:space-between; border-bottom:1px solid #ccc; padding-bottom:3px; margin-bottom:4px; }
-.mrd-week-dow { font-weight:700; font-size:0.82rem; }
-.mrd-week-date { font-size:0.7rem; color:#666; }
-.mrd-week-event, .mrd-week-directive-text { font-size:0.68rem; color:#16140f; }
-.mrd-week-event { border-left:4px solid #999; padding-left:5px; }
-.mrd-week-lines { flex:1; min-height:1.6cm; background-image:repeating-linear-gradient(to bottom, transparent 0, transparent 0.56cm, #d8d8d8 0.56cm, #d8d8d8 calc(0.56cm + 1px)); }
+.dash-week-print { background:#fff; color:#16140f; padding:16px 18px; font-family:"Inter",system-ui,sans-serif; }
+.dash-week-header { display:flex; justify-content:space-between; border-bottom:2px solid #16140f; padding-bottom:6px; margin-bottom:8px; }
+.dash-week-title { font-weight:600; letter-spacing:0.14em; text-transform:uppercase; font-size:1.15rem; }
+.dash-week-dates { font-size:0.85rem; color:#444; }
+.dash-week-legend { display:flex; flex-wrap:wrap; gap:12px; margin-bottom:10px; font-size:0.72rem; color:#333; }
+.dash-week-legend-item { display:inline-flex; align-items:center; gap:5px; }
+.dash-week-swatch { width:11px; height:11px; border-radius:2px; display:inline-block; }
+.dash-week-goals { border:1px solid #999; border-radius:4px; padding:6px 8px; margin-bottom:10px; }
+.dash-week-goals-head { font-weight:700; font-size:0.78rem; margin-bottom:4px; }
+.dash-week-goal, .dash-week-directive { display:flex; align-items:baseline; gap:6px; font-size:0.72rem; color:#16140f; }
+.dash-week-goal-box { color:#444; }
+.dash-week-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; }
+.dash-week-cell { border:1px solid #999; border-radius:4px; padding:5px 7px; min-height:5.6cm; display:flex; flex-direction:column; }
+.dash-week-cell-head { display:flex; justify-content:space-between; border-bottom:1px solid #ccc; padding-bottom:3px; margin-bottom:4px; }
+.dash-week-dow { font-weight:700; font-size:0.82rem; }
+.dash-week-date { font-size:0.7rem; color:#666; }
+.dash-week-event, .dash-week-directive-text { font-size:0.68rem; color:#16140f; }
+.dash-week-event { border-left:4px solid #999; padding-left:5px; }
+.dash-week-lines { flex:1; min-height:1.6cm; background-image:repeating-linear-gradient(to bottom, transparent 0, transparent 0.56cm, #d8d8d8 0.56cm, #d8d8d8 calc(0.56cm + 1px)); }
 `;
 function safeParse(text) {
   if (!text) return [];
@@ -3579,7 +3579,7 @@ var MERIDIAN_MEALS_COPY = {
   remaining: "{remaining} of {total} remaining",
   commandOffline: "This subsystem is offline. Its plugin is not currently enabled.",
   commands: [
-    { id: "recipe-manager:meal-plan", label: "Plan a meal", cls: "mrd-btn-primary", food: true },
+    { id: "recipe-manager:meal-plan", label: "Plan a meal", cls: "dash-btn-primary", food: true },
     { id: "recipe-manager:grocery-list", label: "Build grocery list", food: true },
     { id: "recipe-manager:open-recipe", label: "Open recipe", food: true },
     { id: "recipe-manager:new-recipe", label: "New recipe", food: true },
@@ -3734,13 +3734,13 @@ var QotdPanel = class extends BasePanel2 {
   }
   async renderBody() {
     placard(this.el, "Quote of the Day");
-    const card = this.el.createDiv({ cls: "mrd-qotd" });
+    const card = this.el.createDiv({ cls: "dash-qotd" });
     let raw;
     try {
       raw = await this.ctx.app.vault.adapter.read(QUOTES_PATH);
     } catch (e) {
       card.createDiv({
-        cls: "mrd-muted",
+        cls: "dash-muted",
         text: "The quotation archive is not on file at scripts/qotd/quotes.json. Nothing is broken; there is simply nothing to observe here yet."
       });
       return;
@@ -3748,17 +3748,17 @@ var QotdPanel = class extends BasePanel2 {
     const quotes = parseQuotes(raw);
     const n = quotes.length;
     if (n === 0) {
-      card.createDiv({ cls: "mrd-muted", text: "The quotation archive is present but empty." });
+      card.createDiv({ cls: "dash-muted", text: "The quotation archive is present but empty." });
       return;
     }
     const m = (0, import_obsidian22.moment)((0, import_obsidian22.moment)().format("YYYY-MM-DD"), "YYYY-MM-DD");
     const dayNumber = Math.floor(m.valueOf() / 864e5);
     const idx = (dayNumber % n + n) % n;
     const q = quotes[idx];
-    const mark = card.createDiv({ cls: "mrd-qotd-mark", text: "\u201C" });
+    const mark = card.createDiv({ cls: "dash-qotd-mark", text: "\u201C" });
     mark.setAttribute("aria-hidden", "true");
-    card.createDiv({ cls: "mrd-qotd-text", text: q.text });
-    if (q.author) card.createDiv({ cls: "mrd-qotd-author", text: `\u2014 ${q.author}` });
+    card.createDiv({ cls: "dash-qotd-text", text: q.text });
+    if (q.author) card.createDiv({ cls: "dash-qotd-author", text: `\u2014 ${q.author}` });
   }
 };
 function parseQuotes(raw) {
@@ -3807,15 +3807,15 @@ var LineHistoryModal = class extends import_obsidian23.Modal {
     const { contentEl } = this;
     const history = this.plugin.lineHistory;
     if (history.length === 0) {
-      contentEl.createDiv({ cls: "mrd-muted", text: "No lines on record yet. The rotation has only just begun." });
+      contentEl.createDiv({ cls: "dash-muted", text: "No lines on record yet. The rotation has only just begun." });
       return;
     }
-    const list = contentEl.createDiv({ cls: "mrd-linehist" });
+    const list = contentEl.createDiv({ cls: "dash-linehist" });
     for (let i = history.length - 1; i >= 0; i--) {
       const entry = history[i];
-      const row = list.createDiv({ cls: "mrd-linehist-row" });
-      row.createDiv({ cls: "mrd-linehist-line", text: entry.line });
-      row.createDiv({ cls: "mrd-linehist-when", text: (0, import_obsidian23.moment)(entry.at).fromNow() });
+      const row = list.createDiv({ cls: "dash-linehist-row" });
+      row.createDiv({ cls: "dash-linehist-line", text: entry.line });
+      row.createDiv({ cls: "dash-linehist-when", text: (0, import_obsidian23.moment)(entry.at).fromNow() });
     }
   }
   onClose() {
@@ -4199,15 +4199,15 @@ var MeridianPanel = class extends BasePanel2 {
   async renderBody() {
     if (!this.currentLine) this.currentLine = await this.pick();
     const head = placard(this.el, "MERIDIAN");
-    head.createSpan({ cls: "mrd-placard-badge", text: "OBSERVING" });
+    head.createSpan({ cls: "dash-placard-badge", text: "OBSERVING" });
     const histBtn = head.createEl("button", {
-      cls: "mrd-icon-btn mrd-meridian-hist",
+      cls: "dash-icon-btn dash-meridian-hist",
       text: "\u276F",
       attr: { "aria-label": "Recent lines", title: "Recent lines" }
     });
     histBtn.addEventListener("click", () => new LineHistoryModal(this.ctx.app, this.ctx.plugin).open());
-    const card = this.el.createDiv({ cls: "mrd-meridian" });
-    card.createDiv({ cls: "mrd-meridian-line", text: this.currentLine });
+    const card = this.el.createDiv({ cls: "dash-meridian" });
+    card.createDiv({ cls: "dash-meridian-line", text: this.currentLine });
   }
   // --------------------------------------------------------- selection
   async pick() {
@@ -4350,24 +4350,24 @@ var ArfidPanel = class extends BasePanel2 {
     const { bridge, app } = this.ctx;
     placard(this.el, "Nourishment Log");
     if (!bridge.arfidAvailable()) {
-      this.el.createDiv({ cls: "mrd-muted", text: "The nourishment subsystem is offline. Enable ARFID Tracker to bring it online." });
+      this.el.createDiv({ cls: "dash-muted", text: "The nourishment subsystem is offline. Enable ARFID Tracker to bring it online." });
       return;
     }
     const entries = await bridge.arfidToday();
-    const list = this.el.createDiv({ cls: "mrd-loglist" });
+    const list = this.el.createDiv({ cls: "dash-loglist" });
     if (entries.length === 0) {
-      list.createDiv({ cls: "mrd-muted", text: "No entries logged today. The log is open whenever you are." });
+      list.createDiv({ cls: "dash-muted", text: "No entries logged today. The log is open whenever you are." });
     } else {
       for (const e of entries) {
-        const row = list.createDiv({ cls: "mrd-logrow" });
-        row.createSpan({ cls: "mrd-logrow-time", text: e.time });
-        row.createSpan({ cls: "mrd-logrow-label", text: e.label });
+        const row = list.createDiv({ cls: "dash-logrow" });
+        row.createSpan({ cls: "dash-logrow-time", text: e.time });
+        row.createSpan({ cls: "dash-logrow-label", text: e.label });
       }
     }
-    const actions = this.el.createDiv({ cls: "mrd-btn-row" });
+    const actions = this.el.createDiv({ cls: "dash-btn-row" });
     const nudge = () => this.ctx.markFoodFocus();
-    commandButton2(actions, app, "arfid-tracker:quick-log", "Log a food", { cls: "mrd-btn-primary", onRun: nudge });
-    commandButton2(actions, app, "arfid-tracker:struggling", "I'm struggling", { cls: "mrd-btn-cold", onRun: nudge });
+    commandButton2(actions, app, "arfid-tracker:quick-log", "Log a food", { cls: "dash-btn-primary", onRun: nudge });
+    commandButton2(actions, app, "arfid-tracker:struggling", "I'm struggling", { cls: "dash-btn-cold", onRun: nudge });
     commandButton2(actions, app, "arfid-tracker:log-exposure", "Exposure", { onRun: nudge });
     commandButton2(actions, app, "arfid-tracker:log-symptoms", "Symptoms", { onRun: nudge });
   }
@@ -4384,24 +4384,24 @@ var SpiralPanel = class extends BasePanel2 {
     const { bridge, app } = this.ctx;
     placard(this.el, "Regulation Log");
     if (!bridge.spiralAvailable()) {
-      this.el.createDiv({ cls: "mrd-muted", text: "The regulation subsystem is offline. Enable the Spiral & Shutdown Logger to bring it online." });
+      this.el.createDiv({ cls: "dash-muted", text: "The regulation subsystem is offline. Enable the Spiral & Shutdown Logger to bring it online." });
       return;
     }
     const entries = await bridge.spiralToday();
-    const card = this.el.createDiv({ cls: "mrd-spiral" });
+    const card = this.el.createDiv({ cls: "dash-spiral" });
     if (entries.length === 0) {
-      card.createDiv({ cls: "mrd-muted", text: "Nothing logged today. That is simply the reading; it is not a target." });
+      card.createDiv({ cls: "dash-muted", text: "Nothing logged today. That is simply the reading; it is not a target." });
     } else {
-      card.createDiv({ cls: "mrd-spiral-held", text: "Logged today. The record is holding it." });
-      const list = card.createDiv({ cls: "mrd-loglist" });
+      card.createDiv({ cls: "dash-spiral-held", text: "Logged today. The record is holding it." });
+      const list = card.createDiv({ cls: "dash-loglist" });
       for (const e of entries) {
-        const row = list.createDiv({ cls: "mrd-logrow" });
-        row.createSpan({ cls: "mrd-logrow-time", text: e.time });
-        row.createSpan({ cls: "mrd-logrow-label", text: e.label });
+        const row = list.createDiv({ cls: "dash-logrow" });
+        row.createSpan({ cls: "dash-logrow-time", text: e.time });
+        row.createSpan({ cls: "dash-logrow-label", text: e.label });
       }
     }
-    const actions = this.el.createDiv({ cls: "mrd-btn-row" });
-    commandButton2(actions, app, "spiral-shutdown-logger:quick-capture", "Log an entry", { cls: "mrd-btn-cold" });
+    const actions = this.el.createDiv({ cls: "dash-btn-row" });
+    commandButton2(actions, app, "spiral-shutdown-logger:quick-capture", "Log an entry", { cls: "dash-btn-cold" });
     commandButton2(actions, app, "spiral-shutdown-logger:thought-capture", "Jot a thought", {});
   }
 };
@@ -4424,36 +4424,36 @@ var CrmPanel = class extends BasePanel2 {
     const { bridge, app } = this.ctx;
     placard(this.el, "Contacts");
     if (!bridge.crmAvailable()) {
-      this.el.createDiv({ cls: "mrd-muted", text: "The contacts subsystem is offline. Enable Simple Contact Manager to bring it online." });
+      this.el.createDiv({ cls: "dash-muted", text: "The contacts subsystem is offline. Enable Simple Contact Manager to bring it online." });
       return;
     }
     const contacts = bridge.crmContacts();
     const triage = contacts.filter((c) => c.overdue || c.dueToday);
-    const actions = this.el.createDiv({ cls: "mrd-btn-row" });
-    commandButton2(actions, app, "simple-contact-manager:log-interaction", "Log interaction", { cls: "mrd-btn-primary" });
+    const actions = this.el.createDiv({ cls: "dash-btn-row" });
+    commandButton2(actions, app, "simple-contact-manager:log-interaction", "Log interaction", { cls: "dash-btn-primary" });
     commandButton2(actions, app, "simple-contact-manager:new-contact", "New contact", {});
-    const list = this.el.createDiv({ cls: "mrd-crm-list" });
+    const list = this.el.createDiv({ cls: "dash-crm-list" });
     if (triage.length === 0) {
-      list.createDiv({ cls: "mrd-muted", text: "No one is due or overdue. The lines you keep are current." });
+      list.createDiv({ cls: "dash-muted", text: "No one is due or overdue. The lines you keep are current." });
       return;
     }
     for (const c of triage) this.renderRow(list, c);
   }
   renderRow(parent, c) {
-    const row = parent.createDiv({ cls: "mrd-crm-row" });
+    const row = parent.createDiv({ cls: "dash-crm-row" });
     if (c.overdue) row.addClass("is-overdue");
-    const main = row.createDiv({ cls: "mrd-crm-main" });
-    const name = main.createEl("a", { cls: "mrd-crm-name", text: c.name });
+    const main = row.createDiv({ cls: "dash-crm-main" });
+    const name = main.createEl("a", { cls: "dash-crm-name", text: c.name });
     name.addEventListener("click", (e) => {
       e.preventDefault();
       const file = this.ctx.app.vault.getAbstractFileByPath(c.path);
       if (file instanceof import_obsidian25.TFile) void this.ctx.app.workspace.getLeaf(false).openFile(file);
     });
-    const meta = main.createDiv({ cls: "mrd-crm-meta" });
-    if (c.priority) meta.createSpan({ cls: `mrd-chip mrd-prio-${c.priority}`, text: c.priority });
-    meta.createSpan({ cls: c.overdue ? "mrd-chip mrd-chip-warn" : "mrd-chip", text: c.overdue ? "overdue" : "due today" });
-    if (c.daysSince !== null) meta.createSpan({ cls: "mrd-chip mrd-chip-cold", text: `${c.daysSince}d since` });
-    const log = row.createEl("button", { cls: "mrd-btn mrd-btn-sm", text: "Log" });
+    const meta = main.createDiv({ cls: "dash-crm-meta" });
+    if (c.priority) meta.createSpan({ cls: `dash-chip dash-prio-${c.priority}`, text: c.priority });
+    meta.createSpan({ cls: c.overdue ? "dash-chip dash-chip-warn" : "dash-chip", text: c.overdue ? "overdue" : "due today" });
+    if (c.daysSince !== null) meta.createSpan({ cls: "dash-chip dash-chip-cold", text: `${c.daysSince}d since` });
+    const log = row.createEl("button", { cls: "dash-btn dash-btn-sm", text: "Log" });
     log.addEventListener("click", () => {
       if (this.ctx.bridge.crmLogViaApi(c.path)) return;
       new CrmInteractionModal(this.ctx.app, c.name, async (text) => {
@@ -4499,7 +4499,7 @@ var CrmInteractionModal = class extends import_obsidian25.Modal {
     this.titleEl.setText(`Log interaction \u2014 ${this.contactName}`);
     new import_obsidian25.Setting(this.contentEl).setName("Interaction note").addText((t) => {
       t.setPlaceholder("e.g. Called re: contract renewal").onChange((v) => this.note = v);
-      t.inputEl.classList.add("mrd-modal-wide");
+      t.inputEl.classList.add("dash-modal-wide");
       t.inputEl.focus();
       t.inputEl.addEventListener("keydown", (e) => {
         if (e.key === "Enter") {
@@ -4586,16 +4586,16 @@ var ActionsPanel = class extends BasePanel2 {
     const { bridge, app } = this.ctx;
     placard(this.el, "Quick Actions");
     const nudge = () => this.ctx.markFoodFocus();
-    const primary = this.el.createDiv({ cls: "mrd-btn-row mrd-actions-primary" });
-    commandButton2(primary, app, "arfid-tracker:quick-log", "Log a food", { cls: "mrd-btn-primary mrd-btn-lg", onRun: nudge });
-    commandButton2(primary, app, "spiral-shutdown-logger:quick-capture", "Log an entry", { cls: "mrd-btn-cold mrd-btn-lg" });
-    commandButton2(primary, app, "arfid-tracker:struggling", "I'm struggling", { cls: "mrd-btn-lg mrd-btn-warn", onRun: nudge });
+    const primary = this.el.createDiv({ cls: "dash-btn-row dash-actions-primary" });
+    commandButton2(primary, app, "arfid-tracker:quick-log", "Log a food", { cls: "dash-btn-primary dash-btn-lg", onRun: nudge });
+    commandButton2(primary, app, "spiral-shutdown-logger:quick-capture", "Log an entry", { cls: "dash-btn-cold dash-btn-lg" });
+    commandButton2(primary, app, "arfid-tracker:struggling", "I'm struggling", { cls: "dash-btn-lg dash-btn-warn", onRun: nudge });
     for (const group of GROUPS) {
-      const block = this.el.createDiv({ cls: "mrd-actions-group" });
-      block.createDiv({ cls: "mrd-subhead", text: group.title });
-      const row = block.createDiv({ cls: "mrd-btn-row" });
+      const block = this.el.createDiv({ cls: "dash-actions-group" });
+      block.createDiv({ cls: "dash-subhead", text: group.title });
+      const row = block.createDiv({ cls: "dash-btn-row" });
       for (const [id, label] of group.commands) {
-        commandButton2(row, app, id, label, { cls: "mrd-btn-sm", onRun: group.foodNudge ? nudge : void 0 });
+        commandButton2(row, app, id, label, { cls: "dash-btn-sm", onRun: group.foodNudge ? nudge : void 0 });
       }
     }
   }
@@ -4641,7 +4641,7 @@ function createPanels(order, enabled, plugin) {
     clock: () => new ClockPanel(MERIDIAN_CLOCK_COPY),
     meridian: () => new MeridianPanel(),
     todo: () => new TodoPanel(MERIDIAN_TODO_PANEL_COPY, MERIDIAN_TODO_COPY, () => new WeekReviewModal(plugin.app, meridianWeekReviewConfig(plugin)).open()),
-    agenda: () => new AgendaPanel(MERIDIAN_AGENDA_COPY, calendarColor, "var(--mrd-cal-local)", {
+    agenda: () => new AgendaPanel(MERIDIAN_AGENDA_COPY, calendarColor, "var(--dash-cal-local)", {
       openLocalEvent: (existing, onDone) => new LocalEventModal(plugin.app, meridianLocalEvents(plugin), existing, onDone).open(),
       openWeeklyGoals: (onDone) => new WeeklyGoalsModal(plugin.app, meridianWeeklyGoals(plugin), plugin.todos, currentWeekKey(), onDone, MERIDIAN_WEEKLYGOALS_COPY).open(),
       openWeekPrint: () => new WeekPrintModal(plugin.app, meridianWeekPrintConfig(plugin)).open()
@@ -4767,7 +4767,7 @@ var MeridianSettingTab = class extends import_obsidian26.PluginSettingTab {
     new import_obsidian26.Setting(containerEl).setName("Panels").setDesc(
       "Toggle panels on or off and reorder them. On the desktop you can also place each panel in a column (1\u20133) and give it a span; leave everything at column 1 to keep the default packed layout. A phone always stacks to one column in this order."
     ).setHeading();
-    const list = containerEl.createDiv({ cls: "mrd-settings-panel-list" });
+    const list = containerEl.createDiv({ cls: "dash-settings-panel-list" });
     const renderList = () => {
       list.empty();
       s.panelOrder.forEach((id, index) => {
@@ -4835,7 +4835,7 @@ var MeridianSettingTab = class extends import_obsidian26.PluginSettingTab {
     new import_obsidian26.Setting(containerEl).setName("Calendars").setDesc(
       "Up to 10 public Proton Calendar share links (.ics). Today only \u2014 no month view. Each has a swatch colour, a countdown toggle (keep it on the agenda while excluding it from the NEXT / open-gap math \u2014 e.g. a birthdays feed), and a remove button."
     );
-    const calList = containerEl.createDiv({ cls: "mrd-settings-cal-list" });
+    const calList = containerEl.createDiv({ cls: "dash-settings-cal-list" });
     const renderCals = () => {
       calList.empty();
       s.agendaUrls.forEach((cal, i) => {
@@ -4851,7 +4851,7 @@ var MeridianSettingTab = class extends import_obsidian26.PluginSettingTab {
             cal.url = v.trim();
             await this.save();
           });
-          t.inputEl.classList.add("mrd-settings-cal-url");
+          t.inputEl.classList.add("dash-settings-cal-url");
         });
         row.addColorPicker(
           (c) => c.setValue(cal.color || calendarColor(i)).onChange(async (v) => {
@@ -5458,20 +5458,20 @@ var MeridianView = class extends import_obsidian28.ItemView {
     this.teardown();
     const root = this.contentEl;
     root.empty();
-    root.addClass("mrd-root");
+    root.addClass("dash-root");
     this.renderChrome(root);
-    this.grid = root.createDiv({ cls: "mrd-grid" });
+    this.grid = root.createDiv({ cls: "dash-grid" });
     const s = this.plugin.settings;
     const panels = createPanels(s.panelOrder, s.enabledPanels, this.plugin);
     const ctx = this.ctx();
     const layout = computeLayout(s.panelOrder, s.enabledPanels, s.panelColumns, s.panelSpans);
     const placeById = new Map(layout.placements.map((p) => [p.id, p]));
     if (layout.configured) {
-      this.grid.addClass("mrd-grid-cols");
-      this.grid.style.setProperty("--mrd-cols", String(layout.columns));
+      this.grid.addClass("dash-grid-cols");
+      this.grid.style.setProperty("--dash-cols", String(layout.columns));
     }
     for (const panel of panels) {
-      const host = this.grid.createDiv({ cls: "mrd-panel" });
+      const host = this.grid.createDiv({ cls: "dash-panel" });
       host.dataset.panel = panel.id;
       if (layout.configured) {
         const p = placeById.get(panel.id);
@@ -5482,19 +5482,19 @@ var MeridianView = class extends import_obsidian28.ItemView {
     }
   }
   renderChrome(root) {
-    const header = root.createDiv({ cls: "mrd-topbar" });
-    const brand = header.createDiv({ cls: "mrd-brand" });
+    const header = root.createDiv({ cls: "dash-topbar" });
+    const brand = header.createDiv({ cls: "dash-brand" });
     brand.appendChild(radarMark());
-    const label = brand.createDiv({ cls: "mrd-brand-text" });
-    label.createDiv({ cls: "mrd-brand-name", text: "MERIDIAN" });
-    label.createDiv({ cls: "mrd-brand-sub", text: "HALCYON SYSTEMS \xB7 STABILITY THROUGH OBSERVATION" });
-    const refresh = header.createEl("button", { cls: "mrd-icon-btn", attr: { "aria-label": "Refresh" } });
+    const label = brand.createDiv({ cls: "dash-brand-text" });
+    label.createDiv({ cls: "dash-brand-name", text: "MERIDIAN" });
+    label.createDiv({ cls: "dash-brand-sub", text: "HALCYON SYSTEMS \xB7 STABILITY THROUGH OBSERVATION" });
+    const refresh = header.createEl("button", { cls: "dash-icon-btn", attr: { "aria-label": "Refresh" } });
     (0, import_obsidian28.setIcon)(refresh, "refresh-cw");
     refresh.addEventListener("click", () => void this.refreshPanels("manual"));
   }
   async mountPanel(panel, host, ctx) {
     host.empty();
-    const body = host.createDiv({ cls: "mrd-panel-body" });
+    const body = host.createDiv({ cls: "dash-panel-body" });
     try {
       await panel.mount(body, ctx);
     } catch (e) {
@@ -5506,12 +5506,12 @@ var MeridianView = class extends import_obsidian28.ItemView {
   renderErrorCard(host, panel, err) {
     console.error(`MERIDIAN Dashboard: panel "${panel.id}" failed`, err);
     host.empty();
-    host.addClass("mrd-panel-error");
-    const card = host.createDiv({ cls: "mrd-error-card" });
-    const head = card.createDiv({ cls: "mrd-placard mrd-placard-muted" });
-    head.createSpan({ cls: "mrd-placard-title", text: `${panel.title.toUpperCase()} \u2014 SUBSYSTEM UNAVAILABLE` });
+    host.addClass("dash-panel-error");
+    const card = host.createDiv({ cls: "dash-error-card" });
+    const head = card.createDiv({ cls: "dash-placard dash-placard-muted" });
+    head.createSpan({ cls: "dash-placard-title", text: `${panel.title.toUpperCase()} \u2014 SUBSYSTEM UNAVAILABLE` });
     card.createDiv({
-      cls: "mrd-error-note",
+      cls: "dash-error-note",
       text: "This subsystem could not be brought online. The condition has been logged. The rest of the facility is unaffected."
     });
   }
@@ -5542,7 +5542,7 @@ function radarMark() {
   const ns = "http://www.w3.org/2000/svg";
   const svg = document.createElementNS(ns, "svg");
   svg.setAttribute("viewBox", "0 0 32 32");
-  svg.setAttribute("class", "mrd-radar-mark");
+  svg.setAttribute("class", "dash-radar-mark");
   svg.setAttribute("width", "28");
   svg.setAttribute("height", "28");
   const frame = document.createElementNS(ns, "rect");
@@ -5551,21 +5551,21 @@ function radarMark() {
   frame.setAttribute("width", "29");
   frame.setAttribute("height", "29");
   frame.setAttribute("rx", "7");
-  frame.setAttribute("class", "mrd-radar-frame");
+  frame.setAttribute("class", "dash-radar-frame");
   svg.appendChild(frame);
   for (const r of [4, 8, 12]) {
     const c = document.createElementNS(ns, "circle");
     c.setAttribute("cx", "16");
     c.setAttribute("cy", "16");
     c.setAttribute("r", String(r));
-    c.setAttribute("class", "mrd-radar-ring");
+    c.setAttribute("class", "dash-radar-ring");
     svg.appendChild(c);
   }
   const dot = document.createElementNS(ns, "circle");
   dot.setAttribute("cx", "22");
   dot.setAttribute("cy", "11");
   dot.setAttribute("r", "2.2");
-  dot.setAttribute("class", "mrd-radar-dot");
+  dot.setAttribute("class", "dash-radar-dot");
   svg.appendChild(dot);
   return svg;
 }

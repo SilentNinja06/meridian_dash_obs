@@ -90,7 +90,7 @@ export const MERIDIAN_MEALS_COPY: MealsCopy = {
 	remaining: "{remaining} of {total} remaining",
 	commandOffline: "This subsystem is offline. Its plugin is not currently enabled.",
 	commands: [
-		{ id: "recipe-manager:meal-plan", label: "Plan a meal", cls: "mrd-btn-primary", food: true },
+		{ id: "recipe-manager:meal-plan", label: "Plan a meal", cls: "dash-btn-primary", food: true },
 		{ id: "recipe-manager:grocery-list", label: "Build grocery list", food: true },
 		{ id: "recipe-manager:open-recipe", label: "Open recipe", food: true },
 		{ id: "recipe-manager:new-recipe", label: "New recipe", food: true },

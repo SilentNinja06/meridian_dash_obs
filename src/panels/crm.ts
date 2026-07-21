@@ -27,43 +27,43 @@ export class CrmPanel extends BasePanel {
 		placard(this.el, "Contacts");
 
 		if (!bridge.crmAvailable()) {
-			this.el.createDiv({ cls: "mrd-muted", text: "The contacts subsystem is offline. Enable Simple Contact Manager to bring it online." });
+			this.el.createDiv({ cls: "dash-muted", text: "The contacts subsystem is offline. Enable Simple Contact Manager to bring it online." });
 			return;
 		}
 
 		const contacts = bridge.crmContacts();
 		const triage = contacts.filter((c) => c.overdue || c.dueToday);
 
-		const actions = this.el.createDiv({ cls: "mrd-btn-row" });
-		commandButton(actions, app, "simple-contact-manager:log-interaction", "Log interaction", { cls: "mrd-btn-primary" });
+		const actions = this.el.createDiv({ cls: "dash-btn-row" });
+		commandButton(actions, app, "simple-contact-manager:log-interaction", "Log interaction", { cls: "dash-btn-primary" });
 		commandButton(actions, app, "simple-contact-manager:new-contact", "New contact", {});
 
-		const list = this.el.createDiv({ cls: "mrd-crm-list" });
+		const list = this.el.createDiv({ cls: "dash-crm-list" });
 		if (triage.length === 0) {
-			list.createDiv({ cls: "mrd-muted", text: "No one is due or overdue. The lines you keep are current." });
+			list.createDiv({ cls: "dash-muted", text: "No one is due or overdue. The lines you keep are current." });
 			return;
 		}
 		for (const c of triage) this.renderRow(list, c);
 	}
 
 	private renderRow(parent: HTMLElement, c: CrmRow): void {
-		const row = parent.createDiv({ cls: "mrd-crm-row" });
+		const row = parent.createDiv({ cls: "dash-crm-row" });
 		if (c.overdue) row.addClass("is-overdue");
 
-		const main = row.createDiv({ cls: "mrd-crm-main" });
-		const name = main.createEl("a", { cls: "mrd-crm-name", text: c.name });
+		const main = row.createDiv({ cls: "dash-crm-main" });
+		const name = main.createEl("a", { cls: "dash-crm-name", text: c.name });
 		name.addEventListener("click", (e) => {
 			e.preventDefault();
 			const file = this.ctx.app.vault.getAbstractFileByPath(c.path);
 			if (file instanceof TFile) void this.ctx.app.workspace.getLeaf(false).openFile(file);
 		});
-		const meta = main.createDiv({ cls: "mrd-crm-meta" });
-		if (c.priority) meta.createSpan({ cls: `mrd-chip mrd-prio-${c.priority}`, text: c.priority });
-		meta.createSpan({ cls: c.overdue ? "mrd-chip mrd-chip-warn" : "mrd-chip", text: c.overdue ? "overdue" : "due today" });
-		if (c.daysSince !== null) meta.createSpan({ cls: "mrd-chip mrd-chip-cold", text: `${c.daysSince}d since` });
+		const meta = main.createDiv({ cls: "dash-crm-meta" });
+		if (c.priority) meta.createSpan({ cls: `dash-chip dash-prio-${c.priority}`, text: c.priority });
+		meta.createSpan({ cls: c.overdue ? "dash-chip dash-chip-warn" : "dash-chip", text: c.overdue ? "overdue" : "due today" });
+		if (c.daysSince !== null) meta.createSpan({ cls: "dash-chip dash-chip-cold", text: `${c.daysSince}d since` });
 
 		// Log this specific contact — no re-pick from a fuzzy list.
-		const log = row.createEl("button", { cls: "mrd-btn mrd-btn-sm", text: "Log" });
+		const log = row.createEl("button", { cls: "dash-btn dash-btn-sm", text: "Log" });
 		log.addEventListener("click", () => {
 			// Prefer the plugin's own modal (API v2+); otherwise log it ourselves.
 			if (this.ctx.bridge.crmLogViaApi(c.path)) return;
@@ -112,7 +112,7 @@ class CrmInteractionModal extends Modal {
 		this.titleEl.setText(`Log interaction — ${this.contactName}`);
 		new Setting(this.contentEl).setName("Interaction note").addText((t) => {
 			t.setPlaceholder("e.g. Called re: contract renewal").onChange((v) => (this.note = v));
-			t.inputEl.classList.add("mrd-modal-wide");
+			t.inputEl.classList.add("dash-modal-wide");
 			t.inputEl.focus();
 			t.inputEl.addEventListener("keydown", (e) => {
 				if (e.key === "Enter") {

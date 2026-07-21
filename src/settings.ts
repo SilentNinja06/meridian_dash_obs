@@ -219,7 +219,7 @@ export class MeridianSettingTab extends PluginSettingTab {
 			)
 			.setHeading();
 
-		const list = containerEl.createDiv({ cls: "mrd-settings-panel-list" });
+		const list = containerEl.createDiv({ cls: "dash-settings-panel-list" });
 		const renderList = () => {
 			list.empty();
 			s.panelOrder.forEach((id, index) => {
@@ -304,7 +304,7 @@ export class MeridianSettingTab extends PluginSettingTab {
 			.setDesc(
 				"Up to 10 public Proton Calendar share links (.ics). Today only — no month view. Each has a swatch colour, a countdown toggle (keep it on the agenda while excluding it from the NEXT / open-gap math — e.g. a birthdays feed), and a remove button."
 			);
-		const calList = containerEl.createDiv({ cls: "mrd-settings-cal-list" });
+		const calList = containerEl.createDiv({ cls: "dash-settings-cal-list" });
 		const renderCals = () => {
 			calList.empty();
 			s.agendaUrls.forEach((cal, i) => {
@@ -320,7 +320,7 @@ export class MeridianSettingTab extends PluginSettingTab {
 						cal.url = v.trim();
 						await this.save();
 					});
-					t.inputEl.classList.add("mrd-settings-cal-url");
+					t.inputEl.classList.add("dash-settings-cal-url");
 				});
 				row.addColorPicker((c) =>
 					c.setValue(cal.color || calendarColor(i)).onChange(async (v) => {

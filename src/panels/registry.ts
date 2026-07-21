@@ -87,7 +87,7 @@ export function createPanels(order: string[], enabled: Record<string, boolean>, 
 		meridian: () => new MeridianPanel(),
 		todo: () => new TodoPanel(MERIDIAN_TODO_PANEL_COPY, MERIDIAN_TODO_COPY, () => new WeekReviewModal(plugin.app, meridianWeekReviewConfig(plugin)).open()),
 		agenda: () =>
-			new AgendaPanel(MERIDIAN_AGENDA_COPY, calendarColor, "var(--mrd-cal-local)", {
+			new AgendaPanel(MERIDIAN_AGENDA_COPY, calendarColor, "var(--dash-cal-local)", {
 				openLocalEvent: (existing, onDone) =>
 					new LocalEventModal(plugin.app, meridianLocalEvents(plugin), existing, onDone).open(),
 				openWeeklyGoals: (onDone) =>

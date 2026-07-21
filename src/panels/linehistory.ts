@@ -17,15 +17,15 @@ export class LineHistoryModal extends Modal {
 		const { contentEl } = this;
 		const history = this.plugin.lineHistory;
 		if (history.length === 0) {
-			contentEl.createDiv({ cls: "mrd-muted", text: "No lines on record yet. The rotation has only just begun." });
+			contentEl.createDiv({ cls: "dash-muted", text: "No lines on record yet. The rotation has only just begun." });
 			return;
 		}
-		const list = contentEl.createDiv({ cls: "mrd-linehist" });
+		const list = contentEl.createDiv({ cls: "dash-linehist" });
 		for (let i = history.length - 1; i >= 0; i--) {
 			const entry = history[i];
-			const row = list.createDiv({ cls: "mrd-linehist-row" });
-			row.createDiv({ cls: "mrd-linehist-line", text: entry.line });
-			row.createDiv({ cls: "mrd-linehist-when", text: moment(entry.at).fromNow() });
+			const row = list.createDiv({ cls: "dash-linehist-row" });
+			row.createDiv({ cls: "dash-linehist-line", text: entry.line });
+			row.createDiv({ cls: "dash-linehist-when", text: moment(entry.at).fromNow() });
 		}
 	}
 

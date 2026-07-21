@@ -30,14 +30,14 @@ export class QotdPanel extends BasePanel {
 
 	protected async renderBody(): Promise<void> {
 		placard(this.el, "Quote of the Day");
-		const card = this.el.createDiv({ cls: "mrd-qotd" });
+		const card = this.el.createDiv({ cls: "dash-qotd" });
 
 		let raw: string;
 		try {
 			raw = await this.ctx.app.vault.adapter.read(QUOTES_PATH);
 		} catch {
 			card.createDiv({
-				cls: "mrd-muted",
+				cls: "dash-muted",
 				text: "The quotation archive is not on file at scripts/qotd/quotes.json. Nothing is broken; there is simply nothing to observe here yet.",
 			});
 			return;
@@ -46,7 +46,7 @@ export class QotdPanel extends BasePanel {
 		const quotes = parseQuotes(raw);
 		const n = quotes.length;
 		if (n === 0) {
-			card.createDiv({ cls: "mrd-muted", text: "The quotation archive is present but empty." });
+			card.createDiv({ cls: "dash-muted", text: "The quotation archive is present but empty." });
 			return;
 		}
 
@@ -56,10 +56,10 @@ export class QotdPanel extends BasePanel {
 		const idx = ((dayNumber % n) + n) % n;
 		const q = quotes[idx];
 
-		const mark = card.createDiv({ cls: "mrd-qotd-mark", text: "“" });
+		const mark = card.createDiv({ cls: "dash-qotd-mark", text: "“" });
 		mark.setAttribute("aria-hidden", "true");
-		card.createDiv({ cls: "mrd-qotd-text", text: q.text });
-		if (q.author) card.createDiv({ cls: "mrd-qotd-author", text: `— ${q.author}` });
+		card.createDiv({ cls: "dash-qotd-text", text: q.text });
+		if (q.author) card.createDiv({ cls: "dash-qotd-author", text: `— ${q.author}` });
 	}
 }
 
