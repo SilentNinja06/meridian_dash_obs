@@ -1,4 +1,4 @@
-import { FieldSpec, headingField, labelField } from "./dailynote";
+import { FieldSpec, headingField, labelField } from "dash-core";
 
 /**
  * The daily-note free-text sections the dashboard reads and writes, defined once

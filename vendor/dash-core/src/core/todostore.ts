@@ -7,7 +7,7 @@ import { appendDailyLogLine } from "./dailynote";
  * under `# Completed tasks` in today's note as a one-way archive — the note is
  * never re-read as state.
  *
- * Overdue policy (settled with Piper):
+ * Overdue policy:
  *  - Non-recurring scheduled items past their date roll to today and carry a
  *    "carried over" flag (roll-and-flag, once — not an accumulating pile).
  *  - Recurring items show only on their occurrence dates; if the *previous*
@@ -280,7 +280,7 @@ export class TodoStore {
 		return out;
 	}
 
-	/** Count of slipped items for MERIDIAN's `overdue` pool weighting (§7.3). */
+	/** Count of slipped items for overdue-based weighting. */
 	overdueCount(date = todayStr()): number {
 		return this.instancesFor(date).filter((i) => i.flagged && !i.done).length;
 	}
@@ -493,7 +493,7 @@ export class TodoStore {
 			await appendDailyLogLine(this.app, `- ${time} ${item.text}`, { marker, heading, time });
 		} catch (e) {
 			// The archive is a convenience; never let it block completion state.
-			console.error("MERIDIAN Dashboard: could not archive completed task", e);
+			console.error("dash-core: could not archive completed task", e);
 		}
 	}
 }
@@ -505,34 +505,12 @@ function missedLabel(prev: string | null, date: string): string {
 	return `missed ${moment(prev, "YYYY-MM-DD").format("MMM D")}`;
 }
 
-function cryptoId(): string {
-	// crypto.randomUUID exists in Obsidian's Electron/mobile webviews; fall back.
+/** A collision-resistant id for directives and sub-items. Uses
+ * `crypto.randomUUID` where available (Obsidian's Electron/mobile webviews),
+ * with a timestamp-based fallback. Exported so hosts that seed their own
+ * starter directives can mint ids the same way. */
+export function cryptoId(): string {
 	const c = (globalThis as unknown as { crypto?: Crypto }).crypto;
 	if (c?.randomUUID) return c.randomUUID();
 	return "t-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
-}
-
-/** Seed to-dos from the old template (§7.4), created on first run. */
-export function seedTodos(): TodoItem[] {
-	const specs: Array<{ text: string; recurrence: Recurrence; time?: string }> = [
-		{ text: "Take meds", recurrence: { type: "daily" }, time: "09:00" },
-		{ text: "Log food", recurrence: { type: "daily" } },
-		{ text: "Do daily log", recurrence: { type: "daily" } },
-		{ text: "Refer to the day before's notes", recurrence: { type: "daily" } },
-		{ text: "Check the day's calendar", recurrence: { type: "daily" } },
-		{ text: "Ground School", recurrence: { type: "daily" } },
-		{ text: "Resolve course", recurrence: { type: "daily" } },
-		{ text: "Marketing course", recurrence: { type: "daily" } },
-		{ text: "Inkscape course", recurrence: { type: "daily" } },
-	];
-	return specs.map((s, idx) => ({
-		id: cryptoId(),
-		text: s.text,
-		recurrence: s.recurrence,
-		createdAt: Date.now(),
-		order: idx,
-		scheduledTime: s.time,
-		completions: [],
-		skips: [],
-	}));
 }

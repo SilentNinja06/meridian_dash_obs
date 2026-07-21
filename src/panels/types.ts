@@ -1,7 +1,7 @@
 import { App } from "obsidian";
 import type MeridianDashPlugin from "../main";
 import type { Bridge } from "../core/bridge";
-import type { TodoStore } from "../core/todostore";
+import type { TodoStore } from "dash-core";
 import type { MeridianSettings } from "../settings";
 
 export type RefreshReason = "open" | "interval" | "vault" | "manual";

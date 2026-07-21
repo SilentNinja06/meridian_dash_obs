@@ -1,6 +1,6 @@
 import { App, Modal, Notice, Setting, moment } from "obsidian";
 import type MeridianDashPlugin from "../main";
-import { LocalEvent } from "../core/localevents";
+import { LocalEvent } from "dash-core";
 
 /**
  * Add / edit / delete a local event (§2.1). Local events are dashboard-only —

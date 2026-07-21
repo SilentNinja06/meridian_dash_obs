@@ -1,5 +1,5 @@
 import { App, TFile, getAllTags, moment } from "obsidian";
-import { appendDailyLogLine, readDailyNoteRaw, readMarkerLogLines, readHeadingSection } from "./dailynote";
+import { appendDailyLogLine, readDailyNoteRaw, readMarkerLogLines, readHeadingSection } from "dash-core";
 
 /**
  * The one place that reaches into the sibling plugins (§8). Each read prefers

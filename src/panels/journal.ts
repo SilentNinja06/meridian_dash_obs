@@ -7,7 +7,7 @@ import {
 	readDailyNoteRaw,
 	readField,
 	writeDailyField,
-} from "../core/dailynote";
+} from "dash-core";
 import { LOG_FIELD_SPECS } from "../core/dailyfields";
 
 /**

@@ -1,7 +1,7 @@
 import { App, Modal, Notice, Setting, TFile, moment } from "obsidian";
 import { BasePanel, placard } from "./types";
 import { CrmRow } from "../core/bridge";
-import { appendDailyLogLine } from "../core/dailynote";
+import { appendDailyLogLine } from "dash-core";
 import { commandButton } from "./util";
 
 /**

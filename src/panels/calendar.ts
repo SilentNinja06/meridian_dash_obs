@@ -1,6 +1,6 @@
 import { Notice, TFile, moment } from "obsidian";
 import { BasePanel, placard } from "./types";
-import { dailyNotePath, ensureDailyNote, getDailyNoteFile } from "../core/dailynote";
+import { dailyNotePath, ensureDailyNote, getDailyNoteFile } from "dash-core";
 
 /**
  * Calendar of daily notes. A month grid where days that already have a daily

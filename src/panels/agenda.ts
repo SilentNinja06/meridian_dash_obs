@@ -1,8 +1,8 @@
 import { moment } from "obsidian";
 import { BasePanel, placard } from "./types";
-import { AgendaItem, eventsOnDate, fetchICS, parseICS } from "../core/ics";
-import { agendaState, formatGap } from "../core/agendamath";
-import { LocalEvent, localEventToAgendaItem } from "../core/localevents";
+import { AgendaItem, eventsOnDate, fetchICS, parseICS } from "dash-core";
+import { agendaState, formatGap } from "dash-core";
+import { LocalEvent, localEventToAgendaItem } from "dash-core";
 import { calendarColor } from "../core/tokens";
 import { WeekPrintModal } from "./weekprint";
 import { LocalEventModal } from "./localeventmodal";

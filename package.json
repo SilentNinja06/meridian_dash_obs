@@ -11,6 +11,9 @@
 	"keywords": ["obsidian", "obsidian-plugin", "dashboard", "home"],
 	"author": "SilentNinja06",
 	"license": "MIT",
+	"dependencies": {
+		"dash-core": "file:vendor/dash-core"
+	},
 	"devDependencies": {
 		"@types/node": "^20.11.0",
 		"esbuild": "^0.21.5",

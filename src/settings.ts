@@ -1,8 +1,8 @@
 import { App, PluginSettingTab, Setting } from "obsidian";
 import type MeridianDashPlugin from "./main";
-import { TodoItem } from "./core/todostore";
-import { LocalEvent } from "./core/localevents";
-import { StreakData } from "./core/streak";
+import { TodoItem } from "dash-core";
+import { LocalEvent } from "dash-core";
+import { StreakData } from "dash-core";
 import { calendarColor } from "./core/tokens";
 import { PANEL_ORDER, PANEL_TITLES } from "./panels/registry";
 

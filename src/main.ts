@@ -9,13 +9,14 @@ import {
 	mergeSettings,
 } from "./settings";
 import { Bridge } from "./core/bridge";
-import { TodoStore, seedTodos } from "./core/todostore";
-import { DirectivesStore } from "./core/directivesstore";
-import { LibraryStore } from "./core/library";
-import { appendToDailyField, getDailyNoteFile, headingField, readDailyNoteRaw, readField, readMarkerLogLines } from "./core/dailynote";
+import { TodoStore } from "dash-core";
+import { seedTodos, DIRECTIVES_HEADER } from "./seed";
+import { DirectivesStore } from "dash-core";
+import { LibraryStore } from "dash-core";
+import { appendToDailyField, getDailyNoteFile, headingField, readDailyNoteRaw, readField, readMarkerLogLines } from "dash-core";
 import { LOG_FIELD_LABELS, LOG_FIELD_SPECS, LOG_FIELDS, LogField, isLogField } from "./core/dailyfields";
-import { LocalEvent } from "./core/localevents";
-import { DEFAULT_STREAK, StreakData, currentStreakFromDays } from "./core/streak";
+import { LocalEvent } from "dash-core";
+import { DEFAULT_STREAK, StreakData, currentStreakFromDays } from "dash-core";
 import { MeridianRuntime, RefreshReason } from "./panels/types";
 import { MeridianView, VIEW_TYPE_MERIDIAN } from "./view";
 import { TodoEditModal } from "./panels/todomodal";
@@ -70,7 +71,10 @@ export default class MeridianDashPlugin extends Plugin {
 			archiveSubfolder: this.settings.kbArchiveSubfolder,
 			listHeading: this.settings.kbListHeading,
 		}));
-		this.directives = new DirectivesStore(this.app, () => this.settings.directivesPath);
+		this.directives = new DirectivesStore(this.app, () => this.settings.directivesPath, {
+			header: DIRECTIVES_HEADER,
+			defaultPath: "MERIDIAN/Directives.md",
+		});
 		this.todos = new TodoStore(
 			this.app,
 			() => this.directives.getItems(),

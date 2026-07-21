@@ -13,14 +13,20 @@ interface DirectivesFile {
 	todos: TodoItem[];
 }
 
-export const DIRECTIVES_HEADER =
-	"%% MERIDIAN Dashboard — persistent directives. Managed automatically; " +
+/** Neutral default header. `parseTodos` ignores the header entirely (it only
+ * reads the fenced ```json block), so the header is write-only chrome — a host
+ * passes its own voiced header to `buildMarkdown` to keep its on-disk format
+ * exact, while an existing file written with any other header still parses. */
+export const DEFAULT_DIRECTIVES_HEADER =
+	"%% Dashboard — persistent directives. Managed automatically; " +
 	"edit these in the dashboard, not here. %%";
 
-/** JSON payload wrapped in a fenced block inside a Markdown file. */
-export function buildMarkdown(items: TodoItem[]): string {
+/** JSON payload wrapped in a fenced block inside a Markdown file. The `header`
+ * is host-supplied chrome (defaulting to a neutral line); it never affects
+ * parsing, only the human-readable comment at the top of the file. */
+export function buildMarkdown(items: TodoItem[], header: string = DEFAULT_DIRECTIVES_HEADER): string {
 	const json = JSON.stringify({ version: 1, todos: items } as DirectivesFile, null, 2);
-	return `${DIRECTIVES_HEADER}\n\n\`\`\`json\n${json}\n\`\`\`\n`;
+	return `${header}\n\n\`\`\`json\n${json}\n\`\`\`\n`;
 }
 
 /** Extract the todo list from a directives file. Tolerates a fenced ```json

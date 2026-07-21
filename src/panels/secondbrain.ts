@@ -1,6 +1,6 @@
 import { App, Modal, Notice, Setting, TFile, prepareFuzzySearch } from "obsidian";
 import { BasePanel, placard } from "./types";
-import { LibraryStore } from "../core/library";
+import { LibraryStore } from "dash-core";
 
 /**
  * Second Brain panel — the ongoing-project library. Search it, add notes, and

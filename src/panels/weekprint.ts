@@ -1,6 +1,6 @@
 import { App, Modal, Notice, Platform, moment } from "obsidian";
 import type MeridianDashPlugin from "../main";
-import { AgendaItem, eventsOnDate, parseICS } from "../core/ics";
+import { AgendaItem, eventsOnDate, parseICS } from "dash-core";
 import { calendarColor } from "../core/tokens";
 import { WeeklyGoalsModal, weekKeyOf, weekLabel } from "./weeklygoals";
 

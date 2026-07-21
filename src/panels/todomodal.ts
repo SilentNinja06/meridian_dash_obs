@@ -1,5 +1,5 @@
 import { App, Modal, Notice, Setting, moment } from "obsidian";
-import { Recurrence, RecurrenceType, TodoItem, TodoStore } from "../core/todostore";
+import { Recurrence, RecurrenceType, TodoItem, TodoStore } from "dash-core";
 
 /**
  * The add/edit modal for a Directive (§7.4). Extracted from the panel so the

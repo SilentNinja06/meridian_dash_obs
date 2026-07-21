@@ -1,7 +1,7 @@
 /**
  * Observation streak (§2.2): a genuine longevity metric and honest milestone
  * trigger. The current streak is derived by scanning the daily notes backward
- * from today (see MeridianDashPlugin.updateStreak) rather than accumulated
+ * from today (see the host's streak recompute) rather than accumulated
  * incrementally — that makes it self-healing and robust to *when* it recomputes.
  *
  * `currentStreakFromDays` is the pure counting rule, unit-tested for the

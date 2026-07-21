@@ -6,7 +6,7 @@ import { buildMarkdown, parseTodos } from "./directivesserde";
  * Persistence for the Directives list as a **Markdown vault file**.
  *
  * Why Markdown specifically: the to-do list is the one piece of dashboard state
- * the Operator edits on both the phone and the desktop, so it must sync.
+ * the user edits on both phone and desktop, so it must sync.
  * Obsidian Sync always syncs Markdown; a plugin's `data.json` only syncs with
  * "installed community plugins" enabled, and a plain `.json` vault file only
  * syncs with "Sync all other file types" enabled (off by default) — which is
@@ -17,7 +17,17 @@ import { buildMarkdown, parseTodos } from "./directivesserde";
  * The JSON serialization itself lives in `directivesserde.ts` (Obsidian-free,
  * unit-tested).
  */
-const DEFAULT_PATH = "MERIDIAN/Directives.md";
+const DEFAULT_PATH = "Dashboard/Directives.md";
+
+/** Host-supplied chrome that keeps core lore-free while letting each dashboard
+ * preserve its own on-disk format and default location. */
+export interface DirectivesStoreOptions {
+	/** Voiced header line written at the top of the file (parsing ignores it).
+	 * Omit for the neutral default in `buildMarkdown`. */
+	header?: string;
+	/** Fallback path when `getPath()` returns empty. */
+	defaultPath?: string;
+}
 
 export class DirectivesStore {
 	private items: TodoItem[] = [];
@@ -25,7 +35,11 @@ export class DirectivesStore {
 	 * caused by our own write reloads to identical content and is ignored. */
 	private lastSerialized = "";
 
-	constructor(private app: App, private getPath: () => string) {}
+	constructor(
+		private app: App,
+		private getPath: () => string,
+		private opts: DirectivesStoreOptions = {}
+	) {}
 
 	getItems(): TodoItem[] {
 		return this.items;
@@ -38,7 +52,7 @@ export class DirectivesStore {
 	/** The Markdown file the directives live in. Any configured extension is
 	 * coerced to `.md` so the file always syncs. */
 	path(): string {
-		const raw = (this.getPath() || DEFAULT_PATH).trim();
+		const raw = (this.getPath() || this.opts.defaultPath || DEFAULT_PATH).trim();
 		return normalizePath(raw.replace(/\.[^./]+$/, "") + ".md");
 	}
 
@@ -60,7 +74,7 @@ export class DirectivesStore {
 			this.lastSerialized = raw;
 			this.items = parseTodos(raw);
 		} catch (e) {
-			console.error("MERIDIAN: could not read the directives file", e);
+			console.error("dash-core: could not read the directives file", e);
 		}
 		return true;
 	}
@@ -75,7 +89,7 @@ export class DirectivesStore {
 			this.lastSerialized = ""; // force a write to the new .md on next save
 			return true;
 		} catch (e) {
-			console.error("MERIDIAN: could not read the legacy directives file", e);
+			console.error("dash-core: could not read the legacy directives file", e);
 			return false;
 		}
 	}
@@ -83,7 +97,7 @@ export class DirectivesStore {
 	/** Write the current list to the Markdown file (creating it and its folder if
 	 * needed). No-op when the content is unchanged. */
 	async save(): Promise<void> {
-		const body = buildMarkdown(this.items);
+		const body = buildMarkdown(this.items, this.opts.header);
 		if (body === this.lastSerialized) return;
 		this.lastSerialized = body;
 		const path = this.path();

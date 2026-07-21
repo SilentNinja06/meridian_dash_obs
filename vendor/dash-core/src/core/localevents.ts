@@ -1,7 +1,7 @@
 import type { AgendaItem } from "./ics";
 
 /**
- * Local events (§2.1): schedule entries the read-only Proton ICS will never
+ * Local events (§2.1): schedule entries the read-only calendar subscription will never
  * carry, entered on the dashboard and merged into today's agenda. Purely
  * dashboard state — never written to the daily note or any ICS.
  */

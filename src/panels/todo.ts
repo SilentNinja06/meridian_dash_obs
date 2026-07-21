@@ -1,7 +1,7 @@
 import { Notice, moment } from "obsidian";
 import { BasePanel, placard } from "./types";
-import { TodoInstance, describeRecurrence } from "../core/todostore";
-import { allSubItemsDone, subItemDone, subItemsDoneCount } from "../core/subitems";
+import { TodoInstance, describeRecurrence } from "dash-core";
+import { allSubItemsDone, subItemDone, subItemsDoneCount } from "dash-core";
 import { TodoEditModal } from "./todomodal";
 import { WeekReviewModal } from "./weekreview";
 

@@ -6,7 +6,7 @@ import {
 	readField,
 	readHeadingSection,
 	readMarkerLogLines,
-} from "../core/dailynote";
+} from "dash-core";
 
 /**
  * Weekly review (§1.4): a read-only rollup of the last 7 days, compiled from the

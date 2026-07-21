@@ -35,7 +35,7 @@ export function agendaState(items: TimedLike[], now: number): AgendaState {
 	const timed = items.filter((i) => !i.allDay).sort((a, b) => a.startMs - b.startMs);
 
 	// In-progress event (started, not yet ended). If several overlap, take the
-	// one ending soonest — that's when the operator is next free.
+	// one ending soonest — that's when you are next free.
 	const inProgress = timed
 		.filter((i) => i.endMs !== undefined && i.startMs <= now && (i.endMs as number) > now)
 		.sort((a, b) => (a.endMs as number) - (b.endMs as number))[0];
