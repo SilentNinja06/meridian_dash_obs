@@ -17,7 +17,7 @@
 	"author": "SilentNinja06",
 	"license": "MIT",
 	"dependencies": {
-		"dash-core": "github:SilentNinja06/dash_core_obs#claude/meridian-dash-agenda-fixes-27zeep"
+		"dash-core": "github:SilentNinja06/dash_core_obs#9574c8b61e43257cde30ecd69d4edea871aa4274"
 	},
 	"devDependencies": {
 		"@types/node": "^20.11.0",
