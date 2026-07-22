@@ -1009,6 +1009,17 @@
 	font-size: 0.88rem;
 	color: var(--dash-bone);
 }
+/* Rows that aren't food that was eaten (a library add, a status change) read as
+   an aside — dimmed, with a chip — so they're never mistaken for a consumed meal. */
+.dash-logrow-aside .dash-logrow-label {
+	color: var(--dash-bone-dim, var(--dash-amber-soft));
+	font-style: italic;
+}
+.dash-logrow-tag {
+	margin-left: auto;
+	flex: none;
+	font-size: 0.62rem;
+}
 .dash-spiral-held {
 	font-size: 0.86rem;
 	color: var(--dash-teal-soft);
@@ -1623,18 +1634,59 @@
 
 /* -------------------------------------------------------- settings tab */
 
-.dash-settings-panel-list {
-	border: 1px solid var(--background-modifier-border, #444);
-	border-radius: 6px;
-	padding: 4px 10px;
-	margin-bottom: 10px;
-}
+.dash-settings-panel-list,
 .dash-settings-cal-list {
 	border: 1px solid var(--background-modifier-border, #444);
 	border-radius: 6px;
 	padding: 4px 10px;
 	margin-bottom: 10px;
 }
+
+/* These rows carry many controls (reorder arrows, column/span dropdowns, colour
+   pickers, toggles, remove buttons). Obsidian's default single-line row crams
+   them all to the right, where they overflow and misalign on anything narrower
+   than a wide desktop. Let each row's control cluster wrap instead of overflow,
+   and give the info block room so labels don't get squeezed to a sliver. */
+.dash-settings-panel-list .setting-item,
+.dash-settings-cal-list .setting-item {
+	flex-wrap: wrap;
+	gap: 6px 10px;
+	padding: 10px 4px;
+	border-top: 1px solid var(--background-modifier-border, #444);
+}
+.dash-settings-panel-list .setting-item:first-child,
+.dash-settings-cal-list .setting-item:first-child {
+	border-top: none;
+}
+.dash-settings-panel-list .setting-item-info,
+.dash-settings-cal-list .setting-item-info {
+	margin-right: auto;
+	flex: 1 1 40%;
+	min-width: 120px;
+}
+.dash-settings-panel-list .setting-item-control,
+.dash-settings-cal-list .setting-item-control {
+	flex-wrap: wrap;
+	justify-content: flex-end;
+	gap: 6px;
+}
+/* The calendar URL is the one control that wants to grow; keep it flexible so
+   it fills the row without forcing a horizontal overflow. */
 .dash-settings-cal-url {
-	min-width: 220px;
+	flex: 1 1 200px;
+	min-width: 160px;
+}
+
+/* On a phone-width settings pane, stack the label above its controls and let the
+   controls run full width, so nothing is clipped off the right edge. */
+@media (max-width: 640px) {
+	.dash-settings-panel-list .setting-item,
+	.dash-settings-cal-list .setting-item {
+		flex-direction: column;
+		align-items: stretch;
+	}
+	.dash-settings-panel-list .setting-item-control,
+	.dash-settings-cal-list .setting-item-control {
+		justify-content: flex-start;
+	}
 }

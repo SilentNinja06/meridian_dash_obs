@@ -8,11 +8,16 @@
 		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
 		"test": "node test/run.mjs"
 	},
-	"keywords": ["obsidian", "obsidian-plugin", "dashboard", "home"],
+	"keywords": [
+		"obsidian",
+		"obsidian-plugin",
+		"dashboard",
+		"home"
+	],
 	"author": "SilentNinja06",
 	"license": "MIT",
 	"dependencies": {
-		"dash-core": "github:SilentNinja06/dash_core_obs#6a40e46fa61881a91d8dd87eaf522931f024047d"
+		"dash-core": "github:SilentNinja06/dash_core_obs#claude/meridian-dash-agenda-fixes-27zeep"
 	},
 	"devDependencies": {
 		"@types/node": "^20.11.0",

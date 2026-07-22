@@ -16,6 +16,11 @@ const RECIPES_ID = "recipe-manager";
 export interface LogEntry {
 	time: string;
 	label: string;
+	/** How to read this row. Omitted (or "meal") = something eaten/attempted;
+	 * "exposure" = an exposure step; "baseline" = a food added to the library
+	 * (nothing eaten); "status-change" = a food's category moved (nothing eaten).
+	 * Non-consumption kinds must not be shown as food that was consumed. */
+	kind?: "meal" | "exposure" | "baseline" | "status-change";
 }
 
 export interface CrmRow {
@@ -76,17 +81,28 @@ export class Bridge {
 		if (api?.getEntriesForDate) {
 			try {
 				const entries = api.getEntriesForDate(date) ?? [];
-				return entries.map((e: { time?: string; food?: string; label?: string }) => ({
-					time: e.time ?? "",
-					label: e.food ?? e.label ?? "",
-				}));
+				return entries.map(
+					(e: { time?: string; food?: string; label?: string; kind?: LogEntry["kind"] }) => ({
+						time: e.time ?? "",
+						label: e.food ?? e.label ?? "",
+						// Pre-v2 ARFID omits `kind`; treat those as ordinary meals so
+						// nothing changes on an older upstream plugin.
+						kind: e.kind ?? "meal",
+					})
+				);
 			} catch (e) {
 				console.error("MERIDIAN: arfid api read failed, falling back", e);
 			}
 		}
 		// Fallback: parse the `%% arfid-log %%` marker lines from today's note.
+		// Status changes write a "status: …" prefixed line; infer that kind so the
+		// card still tells them apart when the API isn't available. (Library adds
+		// are never linked into the daily note, so they can't appear here.)
 		const raw = await readDailyNoteRaw(this.app, date);
-		return parseLogLines(readMarkerLogLines(raw, "%% arfid-log %%", "Miscellaneous notes"));
+		return parseLogLines(readMarkerLogLines(raw, "%% arfid-log %%", "Miscellaneous notes")).map((e) => ({
+			...e,
+			kind: /^\s*status:/i.test(e.label) ? "status-change" : "meal",
+		}));
 	}
 
 	// ------------------------------------------------------------- Spiral

@@ -11,6 +11,15 @@ export const DIRECTIVES_HEADER =
 	"edit these in the dashboard, not here. %%";
 
 /**
+ * MERIDIAN's voiced header for the local-events Markdown file. Host-owned for
+ * the same reason as the directives header: core stays lore-free, and the
+ * header is write-only chrome the file store parses past.
+ */
+export const LOCAL_EVENTS_HEADER =
+	"%% MERIDIAN Dashboard — local schedule events. Managed automatically; " +
+	"edit these in the dashboard, not here. %%";
+
+/**
  * First-run starter directives (§7.4). Host-owned: this is MERIDIAN's specific
  * task list, so it lives here rather than in the shared core. Ids are minted
  * with core's `cryptoId` so they match every other directive.

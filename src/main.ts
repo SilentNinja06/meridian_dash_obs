@@ -10,9 +10,10 @@ import {
 } from "./settings";
 import { Bridge } from "./core/bridge";
 import { TodoStore } from "dash-core";
-import { seedTodos, DIRECTIVES_HEADER } from "./seed";
+import { seedTodos, DIRECTIVES_HEADER, LOCAL_EVENTS_HEADER } from "./seed";
 import { MERIDIAN_TODO_COPY } from "./copy";
 import { DirectivesStore } from "dash-core";
+import { LocalEventsFileStore } from "dash-core";
 import { LibraryStore } from "dash-core";
 import { appendToDailyField, getDailyNoteFile, headingField, readDailyNoteRaw, readField, readMarkerLogLines } from "dash-core";
 import { LOG_FIELD_LABELS, LOG_FIELD_SPECS, LOG_FIELDS, LogField, isLogField } from "./core/dailyfields";
@@ -37,6 +38,7 @@ export default class MeridianDashPlugin extends Plugin {
 	bridge!: Bridge;
 	todos!: TodoStore;
 	directives!: DirectivesStore;
+	localEventsStore!: LocalEventsFileStore;
 	secondBrain!: LibraryStore;
 	knowledgeBase!: LibraryStore;
 	runtime: MeridianRuntime = {
@@ -80,6 +82,10 @@ export default class MeridianDashPlugin extends Plugin {
 			header: DIRECTIVES_HEADER,
 			defaultPath: "MERIDIAN/Directives.md",
 		});
+		this.localEventsStore = new LocalEventsFileStore(this.app, () => this.settings.localEventsPath, {
+			header: LOCAL_EVENTS_HEADER,
+			defaultPath: "MERIDIAN/Local Events.md",
+		});
 		this.todos = new TodoStore(
 			this.app,
 			() => this.directives.getItems(),
@@ -114,7 +120,7 @@ export default class MeridianDashPlugin extends Plugin {
 		// Everything that reads or writes the vault (loading/creating the
 		// directives file) or touches the workspace waits until it is ready.
 		this.app.workspace.onLayoutReady(() => {
-			void this.loadDirectives().then(() => {
+			void Promise.all([this.loadDirectives(), this.loadLocalEvents()]).then(() => {
 				void this.updateStreak();
 				this.refreshOpenViews("vault");
 			});
@@ -384,6 +390,12 @@ export default class MeridianDashPlugin extends Plugin {
 			});
 			return;
 		}
+		if (this.localEventsStore.isLocalEventsPath(path)) {
+			void this.localEventsStore.onExternalChange(path).then((changed) => {
+				if (changed) this.refreshOpenViews("vault");
+			});
+			return;
+		}
 		this.scheduleRefresh();
 	}
 
@@ -426,27 +438,37 @@ export default class MeridianDashPlugin extends Plugin {
 	// ------------------------------------------------------- local events (§2.1)
 
 	get localEvents(): LocalEvent[] {
-		return this.data.localEvents;
+		return this.localEventsStore.getEvents();
 	}
 
 	async addLocalEvent(ev: Omit<LocalEvent, "id">): Promise<void> {
-		this.data.localEvents.push({ id: localId(), ...ev });
-		await this.saveData_();
+		await this.localEventsStore.add(ev);
 		this.refreshOpenViews("vault");
 	}
 
-	async updateLocalEvent(id: string, patch: Partial<Omit<LocalEvent, "id">>): Promise<void> {
-		const ev = this.data.localEvents.find((e) => e.id === id);
-		if (!ev) return;
-		Object.assign(ev, patch);
-		await this.saveData_();
+	async updateLocalEvent(id: string, patch: Omit<LocalEvent, "id">): Promise<void> {
+		await this.localEventsStore.update(id, patch);
 		this.refreshOpenViews("vault");
 	}
 
 	async removeLocalEvent(id: string): Promise<void> {
-		this.data.localEvents = this.data.localEvents.filter((e) => e.id !== id);
-		await this.saveData_();
+		await this.localEventsStore.remove(id);
 		this.refreshOpenViews("vault");
+	}
+
+	/** Load local events from their Markdown file, migrating the legacy
+	 * `data.json` copy (pre-sync storage) the first time. Markdown always syncs
+	 * via Obsidian Sync, so events now cross devices; we reload them live when
+	 * the other device's file lands (see onVaultChange). */
+	private async loadLocalEvents(): Promise<void> {
+		const existed = await this.localEventsStore.load();
+		if (!existed && this.data.localEvents.length > 0) {
+			await this.localEventsStore.seedFrom(this.data.localEvents);
+		}
+		if (this.data.localEvents.length > 0) {
+			this.data.localEvents = []; // migrated to the vault file; don't keep a stale copy
+			await this.saveData_();
+		}
 	}
 
 	// ------------------------------------------------------- weekly goals
