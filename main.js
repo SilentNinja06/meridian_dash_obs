@@ -4618,11 +4618,12 @@ var ArfidPanel = class extends BasePanel2 {
       const KIND_TAG = {
         exposure: "exposure",
         baseline: "added to library",
-        "status-change": "status change"
+        "status-change": "status change",
+        symptom: "symptoms"
       };
       for (const e of entries) {
         const kind = (_a = e.kind) != null ? _a : "meal";
-        const nonMeal = kind === "baseline" || kind === "status-change";
+        const nonMeal = kind === "baseline" || kind === "status-change" || kind === "symptom";
         const row = list.createDiv({ cls: "dash-logrow" });
         if (nonMeal) row.addClass("dash-logrow-aside");
         row.createSpan({ cls: "dash-logrow-time", text: e.time });
@@ -5290,23 +5291,34 @@ var Bridge = class {
     return this.enabled(ARFID_ID);
   }
   async arfidToday(date = today()) {
-    var _a;
+    var _a, _b;
     const api = this.api(ARFID_ID);
     if (api == null ? void 0 : api.getEntriesForDate) {
       try {
-        const entries = (_a = api.getEntriesForDate(date)) != null ? _a : [];
-        return entries.map(
+        const foods = ((_a = api.getEntriesForDate(date)) != null ? _a : []).map(
           (e) => {
-            var _a2, _b, _c, _d;
+            var _a2, _b2, _c, _d;
             return {
               time: (_a2 = e.time) != null ? _a2 : "",
-              label: (_c = (_b = e.food) != null ? _b : e.label) != null ? _c : "",
+              label: (_c = (_b2 = e.food) != null ? _b2 : e.label) != null ? _c : "",
               // Pre-v2 ARFID omits `kind`; treat those as ordinary meals so
               // nothing changes on an older upstream plugin.
               kind: (_d = e.kind) != null ? _d : "meal"
             };
           }
         );
+        let symptoms = [];
+        if (api.getSymptomsForDate) {
+          symptoms = ((_b = api.getSymptomsForDate(date)) != null ? _b : []).map((s) => {
+            var _a2, _b2;
+            return {
+              time: (_a2 = s.time) != null ? _a2 : "",
+              label: ((_b2 = s.symptoms) != null ? _b2 : []).join(", ") || "symptoms",
+              kind: "symptom"
+            };
+          });
+        }
+        return [...foods, ...symptoms].sort((a, b) => a.time.localeCompare(b.time));
       } catch (e) {
         console.error("MERIDIAN: arfid api read failed, falling back", e);
       }
@@ -5314,7 +5326,7 @@ var Bridge = class {
     const raw = await readDailyNoteRaw(this.app, date);
     return parseLogLines(readMarkerLogLines(raw, "%% arfid-log %%", "Miscellaneous notes")).map((e) => ({
       ...e,
-      kind: /^\s*status:/i.test(e.label) ? "status-change" : "meal"
+      kind: /^\s*status:/i.test(e.label) ? "status-change" : /^\s*symptoms?:/i.test(e.label) ? "symptom" : "meal"
     }));
   }
   // ------------------------------------------------------------- Spiral

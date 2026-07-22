@@ -18,9 +18,10 @@ export interface LogEntry {
 	label: string;
 	/** How to read this row. Omitted (or "meal") = something eaten/attempted;
 	 * "exposure" = an exposure step; "baseline" = a food added to the library
-	 * (nothing eaten); "status-change" = a food's category moved (nothing eaten).
-	 * Non-consumption kinds must not be shown as food that was consumed. */
-	kind?: "meal" | "exposure" | "baseline" | "status-change";
+	 * (nothing eaten); "status-change" = a food's category moved (nothing eaten);
+	 * "symptom" = a body-signal log (not food at all). Non-consumption kinds must
+	 * not be shown as food that was consumed. */
+	kind?: "meal" | "exposure" | "baseline" | "status-change" | "symptom";
 }
 
 export interface CrmRow {
@@ -80,8 +81,7 @@ export class Bridge {
 		const api = this.api(ARFID_ID);
 		if (api?.getEntriesForDate) {
 			try {
-				const entries = api.getEntriesForDate(date) ?? [];
-				return entries.map(
+				const foods: LogEntry[] = (api.getEntriesForDate(date) ?? []).map(
 					(e: { time?: string; food?: string; label?: string; kind?: LogEntry["kind"] }) => ({
 						time: e.time ?? "",
 						label: e.food ?? e.label ?? "",
@@ -90,18 +90,34 @@ export class Bridge {
 						kind: e.kind ?? "meal",
 					})
 				);
+				// Symptom logs (ARFID API v3+) belong on the same card but are body
+				// signals, never food — carry them with the "symptom" kind so the
+				// panel tags them and never counts them as consumption.
+				let symptoms: LogEntry[] = [];
+				if (api.getSymptomsForDate) {
+					symptoms = (api.getSymptomsForDate(date) ?? []).map((s: { time?: string; symptoms?: string[] }) => ({
+						time: s.time ?? "",
+						label: (s.symptoms ?? []).join(", ") || "symptoms",
+						kind: "symptom" as const,
+					}));
+				}
+				return [...foods, ...symptoms].sort((a, b) => a.time.localeCompare(b.time));
 			} catch (e) {
 				console.error("MERIDIAN: arfid api read failed, falling back", e);
 			}
 		}
 		// Fallback: parse the `%% arfid-log %%` marker lines from today's note.
-		// Status changes write a "status: …" prefixed line; infer that kind so the
-		// card still tells them apart when the API isn't available. (Library adds
-		// are never linked into the daily note, so they can't appear here.)
+		// Status changes write a "status: …" line and symptoms a "symptoms: …"
+		// line; infer those kinds so the card still tells them apart when the API
+		// isn't available. (Library adds are never linked into the daily note.)
 		const raw = await readDailyNoteRaw(this.app, date);
 		return parseLogLines(readMarkerLogLines(raw, "%% arfid-log %%", "Miscellaneous notes")).map((e) => ({
 			...e,
-			kind: /^\s*status:/i.test(e.label) ? "status-change" : "meal",
+			kind: /^\s*status:/i.test(e.label)
+				? "status-change"
+				: /^\s*symptoms?:/i.test(e.label)
+					? "symptom"
+					: "meal",
 		}));
 	}
 
