@@ -25,10 +25,23 @@ export class ArfidPanel extends BasePanel {
 		if (entries.length === 0) {
 			list.createDiv({ cls: "dash-muted", text: "No entries logged today. The log is open whenever you are." });
 		} else {
+			// A food merely added to the library, or a status change, is *not*
+			// something eaten — tag those so the log never reads them as consumed
+			// (§7.3: the food register observes the log, never the eating).
+			const KIND_TAG: Record<string, string> = {
+				exposure: "exposure",
+				baseline: "added to library",
+				"status-change": "status change",
+			};
 			for (const e of entries) {
+				const kind = e.kind ?? "meal";
+				const nonMeal = kind === "baseline" || kind === "status-change";
 				const row = list.createDiv({ cls: "dash-logrow" });
+				if (nonMeal) row.addClass("dash-logrow-aside");
 				row.createSpan({ cls: "dash-logrow-time", text: e.time });
 				row.createSpan({ cls: "dash-logrow-label", text: e.label });
+				const tag = KIND_TAG[kind];
+				if (tag) row.createSpan({ cls: "dash-chip dash-chip-cold dash-logrow-tag", text: tag });
 			}
 		}
 

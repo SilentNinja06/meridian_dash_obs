@@ -63,6 +63,9 @@ export interface MeridianSettings {
 	/** Vault file the persistent directives (to-dos) live in, so Obsidian Sync
 	 * propagates them across devices. */
 	directivesPath: string;
+	/** Vault file the dashboard-only local events live in, so Obsidian Sync
+	 * propagates them across devices (same rationale as directivesPath). */
+	localEventsPath: string;
 	/** Archive target for completed to-dos (§7.4). */
 	completedTasksMarker: string;
 	completedTasksHeading: string;
@@ -124,6 +127,7 @@ export const DEFAULT_SETTINGS: MeridianSettings = {
 	secondBrainArchiveSubfolder: "Archive",
 	secondBrainListHeading: "Notes",
 	directivesPath: "MERIDIAN/Directives.md",
+	localEventsPath: "MERIDIAN/Local Events.md",
 	places: [
 		{ label: "Central Hub", target: "Central Hub", type: "note" },
 		{ label: "Contact Dashboard", target: "Contact Dashboard", type: "note" },
@@ -465,6 +469,13 @@ export class MeridianSettingTab extends PluginSettingTab {
 			"Markdown vault file the persistent to-do list is stored in. Markdown always syncs via Obsidian Sync, so the list crosses devices. Any extension you enter is coerced to .md.",
 			s.directivesPath,
 			(v) => (s.directivesPath = v || "MERIDIAN/Directives.md")
+		);
+		this.addText(
+			containerEl,
+			"Local events file",
+			"Markdown vault file the dashboard-only agenda events are stored in. Markdown always syncs via Obsidian Sync, so events entered on one device cross to the others. Any extension you enter is coerced to .md.",
+			s.localEventsPath,
+			(v) => (s.localEventsPath = v || "MERIDIAN/Local Events.md")
 		);
 
 		// -------- daily-note write targets --------
