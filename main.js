@@ -2449,6 +2449,16 @@ var JournalPanel = class extends BasePanel {
     const loaded = await readDailyField(this.ctx.app, field.spec);
     ta.value = field.stripPlaceholder ? tidy(loaded) : loaded;
     autosize(ta);
+    let lastWidth = -1;
+    const ro = new ResizeObserver((entries) => {
+      var _a, _b;
+      const width = (_b = (_a = entries[0]) == null ? void 0 : _a.contentRect.width) != null ? _b : 0;
+      if (width === lastWidth) return;
+      lastWidth = width;
+      autosize(ta);
+    });
+    ro.observe(block);
+    this.onCleanup(() => ro.disconnect());
     let timer = null;
     const save = () => {
       void writeDailyField(this.ctx.app, field.spec, ta.value).catch(
