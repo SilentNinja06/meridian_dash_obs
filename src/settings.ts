@@ -72,6 +72,10 @@ export interface MeridianSettings {
 	/** Marker Simple Contact Manager writes its daily log under (for reconcile). */
 	crmLogMarker: string;
 	crmLogHeading: string;
+	/** Reskin all of Obsidian in the MERIDIAN system look (§ System skin). Opt-in;
+	 * when off, app chrome + editor return to the user's Default theme while the
+	 * dashboard leaf stays styled regardless. */
+	appSkin: boolean;
 }
 
 export interface MeridianData {
@@ -142,6 +146,7 @@ export const DEFAULT_SETTINGS: MeridianSettings = {
 	completedTasksHeading: "Completed tasks",
 	crmLogMarker: "%% crm-log %%",
 	crmLogHeading: "Contacts reached",
+	appSkin: false,
 };
 
 export function mergeSettings(loaded: Partial<MeridianSettings> | undefined): MeridianSettings {
@@ -212,6 +217,21 @@ export class MeridianSettingTab extends PluginSettingTab {
 					s.replaceNewTab = v;
 					await this.save();
 					if (v) this.plugin.replaceActiveEmptyLeaf();
+				})
+			);
+
+		// -------- system skin --------
+		new Setting(containerEl).setName("System skin").setHeading();
+		new Setting(containerEl)
+			.setName("Reskin all of Obsidian (MERIDIAN system skin)")
+			.setDesc(
+				"Extend the HALCYON look past the dashboard to the whole app — editor, reading view, sidebars, tabs, ribbon, status bar, modals and menus. This retires the separate Obsidian theme: with it on, set your theme to Default (the skin now provides everything). The dashboard stays styled either way. Full title-bar theming needs Obsidian's own window frame (Appearance → Window frame → Obsidian frame); the OS frame is drawn by the system and can't be reached. Turning it off returns the app to your Default theme with no residue."
+			)
+			.addToggle((t) =>
+				t.setValue(s.appSkin).onChange(async (v) => {
+					s.appSkin = v;
+					await this.plugin.saveData_();
+					this.plugin.setAppSkin(v);
 				})
 			);
 

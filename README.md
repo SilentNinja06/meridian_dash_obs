@@ -21,6 +21,36 @@ Mobile-first, desktop-capable. One plugin, a layout shell hosting registered pan
 
 Every panel is toggleable and reorderable in settings. On the desktop you can also place each panel in a column (1–3) with an optional span for a deliberate grid; leave everything at column 1 to keep the default packed layout, and a phone always stacks to one column in panel order. A throwing panel renders a calm error card and never takes down the dashboard.
 
+## System skin
+
+The dashboard is styled on its own always. **System skin** (Settings → MERIDIAN Dashboard → *System skin*) extends the HALCYON look to **all of Obsidian** — editor, reading view, sidebars, tabs, ribbon, status bar, title bar, modals and menus. It is **opt-in** and toggles live (no reload): turning it off returns the whole app to your Default theme with **no residue**, while the dashboard leaf stays styled either way. The skin is injected into the page only while it is on, and is always removed when the plugin is disabled or updated.
+
+It is the single source of the look — it retires the separate Halcyon Obsidian theme and sets every colour, font and variable itself.
+
+**Reading view** gets the full treatment: command-deck heading placards, a hazard-stripe rule under H1, and facility-style section numbering via CSS counters (`SECTOR 01 —` on H1, dotted decimals `01.1` / `01.1.1` on H2/H3). **Live Preview** is deliberately restrained — the editor reads as MERIDIAN (display font, uppercase, amber H1) but carries no numbering or rules, so typing stays calm.
+
+### Migrating off the standalone theme
+
+After enabling System skin:
+
+1. Set Obsidian's active theme to **Default** (Settings → Appearance → Themes → Default). The injected skin now provides everything the old theme did.
+2. Remove the old Halcyon theme folder from `.obsidian/themes/` if you had it installed. (The plugin does not touch your `.obsidian` folder — remove it yourself.)
+
+### Per-note opt-out
+
+Add `meridian-skin: false` to a note's frontmatter to suppress the section numbering and the heavier heading placards for **that note** — it reverts to plain headings. This is the switch for any note you are **exporting or sharing** where the `SECTOR NN` prefix isn't wanted: the numbering is display-only and never appears in copied Markdown, but it **does** render into a PDF export via print, so flag such notes with `meridian-skin: false` before exporting.
+
+### What the skin can and can't reach
+
+CSS from a plugin can't style everything. Where a surface can't be themed it simply keeps its default appearance — nothing breaks.
+
+- **OS window title bar** — only stylable with **Settings → Appearance → Window frame → "Obsidian frame"** selected. With the **native/OS frame**, the title bar and window controls are drawn by the compositor (GNOME on Fedora) and can't be reached by CSS. Switch to the Obsidian frame for full title-bar theming — this is a user prerequisite, not something the plugin can fix.
+- **Mobile (iPhone / iPad)** — the editor, reading view and heading rules apply fully. There's no window title bar (fine), and the OS status bar (clock/battery) is never reachable. Mobile chrome (ribbon, tab bar, drawers) uses mobile-specific selectors and should be **verified on device** — the mobile DOM differs from desktop.
+- **`<canvas>` surfaces** — Graph view's node canvas and the Canvas core plugin render pixels, not DOM. Variable-driven colours (graph node/line) carry through because Obsidian reads them; arbitrary structural restyling of a canvas does not.
+- **Third-party plugin views** — a plugin's container inherits the skin's variables, but a plugin that hardcodes inline colours won't fully conform. Partial coverage is expected.
+- **Native inputs / OS widgets** — date pickers and OS-level context menus on some platforms render natively and resist CSS. Rare in Obsidian's own UI.
+- **Print / PDF export** — reading-view `SECTOR NN` numbering renders into printed/exported PDFs; use `meridian-skin: false` per note to suppress it (see above).
+
 ## Remote control
 
 Everything the dashboard does is reachable without a dashboard leaf open — from the command palette, a mobile shortcut, or a desktop keybind. Each command operates on the store directly and then refreshes any open dashboards.

@@ -32,6 +32,14 @@ import { WeeklyGoalsModal, currentWeekKey } from "dash-core";
 import { meridianWeeklyGoals } from "./weeklygoals";
 import { MERIDIAN_WEEKLYGOALS_COPY } from "./copy";
 import { anyCanonLine } from "./panels/meridian";
+import { APPSKIN_CSS, isSkinExempt } from "./appskin.css";
+
+/** DOM id of the injected app-wide skin <style> element. */
+const APPSKIN_STYLE_ID = "mrd-appskin";
+/** Body class every app-wide rule is guarded by; also the second on/off safety layer. */
+const APPSKIN_BODY_CLASS = "mrd-skin-on";
+/** Class the plugin adds to an exempt note's content container (frontmatter opt-out). */
+const APPSKIN_EXEMPT_CLASS = "mrd-skin-exempt";
 
 export default class MeridianDashPlugin extends Plugin {
 	settings: MeridianSettings = DEFAULT_SETTINGS;
@@ -97,8 +105,21 @@ export default class MeridianDashPlugin extends Plugin {
 			})
 		);
 
+		// Register the app-wide skin teardown *before* it can ever be injected, so
+		// disabling/updating the plugin — or a crash during load — always removes the
+		// <style> and the guard class. A plugin that styles the whole app must clean
+		// up perfectly or it leaves Obsidian visually broken. This is the single most
+		// important correctness requirement of the System skin.
+		this.register(() => {
+			document.getElementById(APPSKIN_STYLE_ID)?.remove();
+			document.body.removeClass(APPSKIN_BODY_CLASS);
+		});
+
 		// Plugin data only (no vault access) — safe during onload.
 		await this.load_();
+
+		// Apply the app-wide skin now if the setting is on (opt-in; default off).
+		if (this.settings.appSkin) this.applyAppSkin();
 
 		this.addRibbonIcon("radar", "Open MERIDIAN dashboard", () => void this.openDashboard());
 		this.addCommand({
@@ -131,7 +152,59 @@ export default class MeridianDashPlugin extends Plugin {
 			);
 			if (this.settings.replaceNewTab) this.replaceActiveEmptyLeaf();
 			if (this.settings.openOnStartup) void this.openDashboard(false);
+
+			// App-wide skin: keep the per-note frontmatter opt-out (meridian-skin:
+			// false) in sync as panes switch. Registered via registerEvent so it is
+			// torn down with the plugin; metadata changes are handled on the existing
+			// debounced refresh path (see scheduleRefresh), not a new tight listener.
+			this.registerEvent(
+				this.app.workspace.on("active-leaf-change", () => this.updateSkinExemptions())
+			);
+			this.updateSkinExemptions();
 		});
+	}
+
+	// ------------------------------------------------------ app-wide skin (§ System skin)
+
+	/** Inject the app-wide skin <style> and add the guard class. Idempotent. */
+	private applyAppSkin(): void {
+		if (!document.getElementById(APPSKIN_STYLE_ID)) {
+			const style = document.createElement("style");
+			style.id = APPSKIN_STYLE_ID;
+			style.textContent = APPSKIN_CSS;
+			document.head.appendChild(style);
+		}
+		document.body.addClass(APPSKIN_BODY_CLASS);
+		this.updateSkinExemptions();
+	}
+
+	/** Remove the app-wide skin: the <style>, the guard class, and every exempt
+	 * marker — leaving Obsidian visually back to its Default theme with no residue. */
+	private removeAppSkin(): void {
+		document.getElementById(APPSKIN_STYLE_ID)?.remove();
+		document.body.removeClass(APPSKIN_BODY_CLASS);
+		for (const leaf of this.app.workspace.getLeavesOfType("markdown")) {
+			skinContentEl(leaf)?.removeClass(APPSKIN_EXEMPT_CLASS);
+		}
+	}
+
+	/** Apply or remove the skin to match `enabled` — called from the settings toggle. */
+	setAppSkin(enabled: boolean): void {
+		if (enabled) this.applyAppSkin();
+		else this.removeAppSkin();
+	}
+
+	/** Toggle the exempt class on each open markdown note's content container from
+	 * its frontmatter (meridian-skin: false). No-op when the skin is off. */
+	private updateSkinExemptions(): void {
+		if (!this.settings.appSkin) return;
+		for (const leaf of this.app.workspace.getLeavesOfType("markdown")) {
+			const el = skinContentEl(leaf);
+			if (!el) continue;
+			const file = (leaf.view as { file?: import("obsidian").TFile }).file;
+			const fm = file ? this.app.metadataCache.getFileCache(file)?.frontmatter : undefined;
+			el.toggleClass(APPSKIN_EXEMPT_CLASS, isSkinExempt(fm));
+		}
 	}
 
 	/** If enabled, swap an empty New Tab leaf for the dashboard. */
@@ -625,6 +698,9 @@ export default class MeridianDashPlugin extends Plugin {
 				return;
 			}
 			this.refreshOpenViews("vault");
+			// Re-evaluate the app-wide skin's per-note frontmatter opt-out on the same
+			// debounced beat — a note toggling `meridian-skin` fires a metadata change.
+			this.updateSkinExemptions();
 			// Recompute the streak when the vault changes — this is the moment
 			// today's note earns its mark (a completed task archived, a journal
 			// save, a marker-log line). Without this the streak only recomputed on
@@ -634,6 +710,14 @@ export default class MeridianDashPlugin extends Plugin {
 			void this.updateStreak();
 		}, 300);
 	}
+}
+
+/** The content container of a markdown leaf — the ancestor of both the reading
+ * and source views — where the frontmatter-exempt class is toggled. Returns null
+ * for non-markdown leaves (which have no `contentEl` of this shape). */
+function skinContentEl(leaf: WorkspaceLeaf): HTMLElement | null {
+	const el = (leaf.view as { contentEl?: HTMLElement }).contentEl;
+	return el ?? null;
 }
 
 function localId(): string {
