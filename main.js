@@ -6209,31 +6209,70 @@ body.mrd-skin-on .search-input-container input {
 
 /* ============================================================ reading view \u2014 full placards (\xA73.1/\xA73.2)
  * The marquee tier: command-deck banners, stencil section numbering, hazard-
- * stripe rules. Numbering uses CSS counters scoped to the reading-view container
- * and is display-only (never leaks into copied Markdown; see the README for the
- * PDF-export caveat + the meridian-skin:false opt-out). */
-body.mrd-skin-on .markdown-reading-view {
-	counter-reset: mrd-sector 0;
-}
-body.mrd-skin-on .markdown-reading-view :is(h1, h2, h3, h4, h5, h6) {
+ * stripe rules. Per the user's request the same full treatment now applies in
+ * BOTH reading and Live Preview (the two tiers were previously split); shared
+ * heading visuals live in one place below and each mode wires the counters to
+ * its own DOM.
+ *
+ * Counter scoping note (this was the 1.1 / 1.1 / 1.1 bug): Obsidian's reading
+ * view wraps every heading in its OWN block div (.el-h1 / .el-h2 / \u2026), so a
+ * counter-reset placed on an <h1> is NOT in scope for the sibling <h2> blocks \u2014
+ * and a counter-increment with no reset in scope implicitly resets to 0 on that
+ * element, so every H2 came out as .1. The fix is to drive the counters from the
+ * .el-hN WRAPPERS, which are true siblings, so H1's reset of the sub-counter
+ * reaches the following H2/H3 blocks. Live Preview lines (.HyperMD-header-N) are
+ * already flat siblings, so they can carry the counters directly.
+ *
+ * Numbering is display-only (never leaks into copied Markdown; see the README for
+ * the PDF-export caveat + the meridian-skin:false opt-out). In Live Preview the
+ * editor only renders on-screen lines, so on a very long note the numbers can
+ * drift while scrolled \u2014 reading view is always exact (also noted in the README). */
+
+/* ---- shared heading visuals: apply identically in reading + Live Preview so
+ * the two modes match and switching between them doesn't jump. ---- */
+body.mrd-skin-on .markdown-reading-view :is(h1, h2, h3, h4, h5, h6),
+body.mrd-skin-on .markdown-source-view.mod-cm6 .HyperMD-header {
 	font-family: var(--mrd-font-display);
 	text-transform: uppercase;
 	font-weight: 600;
 }
-
-/* H1 \u2014 command-deck banner: hazard H1 colour (via var), wide tracking, a hazard-
- * stripe underline reusing the dashboard's exact .dash-placard::after treatment,
- * and a stencil bracket tick. */
-body.mrd-skin-on .markdown-reading-view h1 {
-	position: relative;
-	counter-increment: mrd-sector;
-	counter-reset: mrd-sub 0;
+/* Text colours. In Live Preview these must land on the inline .cm-header-N
+ * spans, not the .HyperMD-header-N line: Obsidian sets heading colour on the
+ * span, and a colour inherited from the line element would not override a direct
+ * declaration on the span. Letter-spacing rides along on the span too. */
+body.mrd-skin-on .markdown-reading-view h1,
+body.mrd-skin-on .markdown-source-view.mod-cm6 .cm-header-1 {
+	color: var(--mrd-hazard);
 	letter-spacing: 0.12em;
-	margin-top: 1.6em;
-	margin-bottom: 0.7em;
-	padding-bottom: 0.28em;
 }
-body.mrd-skin-on .markdown-reading-view h1::before {
+body.mrd-skin-on .markdown-reading-view h2,
+body.mrd-skin-on .markdown-source-view.mod-cm6 .cm-header-2 {
+	color: var(--mrd-bone);
+	letter-spacing: 0.1em;
+}
+body.mrd-skin-on .markdown-reading-view h3,
+body.mrd-skin-on .markdown-source-view.mod-cm6 .cm-header-3 {
+	color: var(--mrd-bone);
+	letter-spacing: 0.09em;
+}
+body.mrd-skin-on .markdown-reading-view h4,
+body.mrd-skin-on .markdown-source-view.mod-cm6 .cm-header-4 {
+	color: var(--mrd-bone-dim);
+	letter-spacing: 0.08em;
+}
+/* H5/H6 in mono \u2014 sub-labels / telemetry. */
+body.mrd-skin-on .markdown-reading-view :is(h5, h6),
+body.mrd-skin-on .markdown-source-view.mod-cm6 :is(.cm-header-5, .cm-header-6) {
+	font-family: var(--mrd-font-mono);
+	color: var(--mrd-bone-dim);
+	letter-spacing: 0.1em;
+}
+
+/* Number prefix \u2014 one mono, amber, fixed-width-ish string, shared by both modes.
+ * Kept inline (not absolutely positioned) so it never clips against the editor
+ * gutter; a stable leading prefix reads calmly and doesn't reflow while typing. */
+body.mrd-skin-on .markdown-reading-view h1::before,
+body.mrd-skin-on .markdown-source-view.mod-cm6 .HyperMD-header-1::before {
 	content: "SECTOR " counter(mrd-sector, decimal-leading-zero) " \\2014 \\00a0";
 	color: var(--mrd-amber);
 	font-family: var(--mrd-font-mono);
@@ -6241,7 +6280,51 @@ body.mrd-skin-on .markdown-reading-view h1::before {
 	letter-spacing: 0.08em;
 	vertical-align: 0.18em;
 }
-body.mrd-skin-on .markdown-reading-view h1::after {
+body.mrd-skin-on .markdown-reading-view h2::before,
+body.mrd-skin-on .markdown-source-view.mod-cm6 .HyperMD-header-2::before {
+	content: counter(mrd-sector, decimal-leading-zero) "." counter(mrd-sub) "\\00a0\\00a0";
+	color: var(--mrd-amber-soft);
+	font-family: var(--mrd-font-mono);
+	font-size: 0.66em;
+	letter-spacing: 0.06em;
+}
+body.mrd-skin-on .markdown-reading-view h3::before,
+body.mrd-skin-on .markdown-source-view.mod-cm6 .HyperMD-header-3::before {
+	content: counter(mrd-sector, decimal-leading-zero) "." counter(mrd-sub) "." counter(mrd-subsub) "\\00a0\\00a0";
+	color: var(--mrd-amber-soft);
+	font-family: var(--mrd-font-mono);
+	font-size: 0.68em;
+	letter-spacing: 0.06em;
+}
+
+/* Vertical rhythm \u2014 placards need breathing room. Reading view can carry the
+ * full margins; the editor uses lighter margins so adding/removing a heading
+ * line doesn't shove the whole document. */
+body.mrd-skin-on .markdown-reading-view h1 {
+	margin-top: 1.6em;
+	margin-bottom: 0.7em;
+}
+body.mrd-skin-on .markdown-reading-view h2 {
+	margin-top: 1.4em;
+	margin-bottom: 0.55em;
+}
+body.mrd-skin-on .markdown-reading-view h3 {
+	margin-top: 1.2em;
+	margin-bottom: 0.45em;
+}
+
+/* Hazard-stripe underline under H1 + the thin amber rule under H2. Both are
+ * ABSOLUTELY positioned so they paint over the heading's own padding and never
+ * take part in layout \u2014 that's what keeps the editor from jumping as lines
+ * reflow (the original jerkiness concern). The heading reserves the space with
+ * padding-bottom, constant whether or not the rule is drawn. */
+body.mrd-skin-on .markdown-reading-view h1,
+body.mrd-skin-on .markdown-source-view.mod-cm6 .HyperMD-header-1 {
+	position: relative;
+	padding-bottom: 0.28em;
+}
+body.mrd-skin-on .markdown-reading-view h1::after,
+body.mrd-skin-on .markdown-source-view.mod-cm6 .HyperMD-header-1::after {
 	/* hazard-stripe underline rule \u2014 matches .dash-placard::after */
 	content: "";
 	position: absolute;
@@ -6255,96 +6338,72 @@ body.mrd-skin-on .markdown-reading-view h1::after {
 		var(--mrd-warm-black) 5px 10px
 	);
 }
+body.mrd-skin-on .markdown-reading-view h2,
+body.mrd-skin-on .markdown-source-view.mod-cm6 .HyperMD-header-2 {
+	position: relative;
+	padding-bottom: 0.22em;
+}
+body.mrd-skin-on .markdown-reading-view h2::after,
+body.mrd-skin-on .markdown-source-view.mod-cm6 .HyperMD-header-2::after {
+	content: "";
+	position: absolute;
+	left: 0;
+	bottom: 0;
+	width: 100%;
+	height: 1px;
+	background: var(--mrd-amber);
+	opacity: 0.7;
+}
 
-/* H2 \u2014 bone, a thin single amber rule, dotted-decimal number. */
-body.mrd-skin-on .markdown-reading-view h2 {
+/* ---- counters: reading view via the .el-hN wrappers (see scoping note) ---- */
+body.mrd-skin-on .markdown-reading-view {
+	counter-reset: mrd-sector 0 mrd-sub 0 mrd-subsub 0;
+}
+body.mrd-skin-on .markdown-reading-view .el-h1 {
+	counter-increment: mrd-sector;
+	counter-reset: mrd-sub 0 mrd-subsub 0;
+}
+body.mrd-skin-on .markdown-reading-view .el-h2 {
 	counter-increment: mrd-sub;
 	counter-reset: mrd-subsub 0;
-	letter-spacing: 0.1em;
-	margin-top: 1.4em;
-	margin-bottom: 0.55em;
-	padding-bottom: 0.22em;
-	border-bottom: 1px solid var(--mrd-amber);
 }
-body.mrd-skin-on .markdown-reading-view h2::before {
-	content: counter(mrd-sector, decimal-leading-zero) "." counter(mrd-sub) "\\00a0\\00a0";
-	color: var(--mrd-amber-soft);
-	font-family: var(--mrd-font-mono);
-	font-size: 0.66em;
-	letter-spacing: 0.06em;
-}
-
-/* H3 \u2014 bone, no rule, dotted-decimal number, a small amber tick. */
-body.mrd-skin-on .markdown-reading-view h3 {
+body.mrd-skin-on .markdown-reading-view .el-h3 {
 	counter-increment: mrd-subsub;
-	letter-spacing: 0.09em;
-	margin-top: 1.2em;
-	margin-bottom: 0.45em;
-}
-body.mrd-skin-on .markdown-reading-view h3::before {
-	content: counter(mrd-sector, decimal-leading-zero) "." counter(mrd-sub) "." counter(mrd-subsub) "\\00a0\\00a0";
-	color: var(--mrd-amber-soft);
-	font-family: var(--mrd-font-mono);
-	font-size: 0.68em;
-	letter-spacing: 0.06em;
 }
 
-/* H4\u2013H6 \u2014 progressively dimmer, smaller, no rules/numbers. H5/H6 in mono to
- * read as sub-labels / telemetry. */
-body.mrd-skin-on .markdown-reading-view h4 {
-	letter-spacing: 0.08em;
-	margin-top: 1.1em;
-	margin-bottom: 0.4em;
+/* ---- counters: Live Preview lines are flat siblings, so drive them directly ---- */
+body.mrd-skin-on .markdown-source-view.mod-cm6 .cm-content {
+	counter-reset: mrd-sector 0 mrd-sub 0 mrd-subsub 0;
 }
-body.mrd-skin-on .markdown-reading-view h5,
-body.mrd-skin-on .markdown-reading-view h6 {
-	font-family: var(--mrd-font-mono);
-	letter-spacing: 0.1em;
-	margin-top: 1em;
-	margin-bottom: 0.35em;
+body.mrd-skin-on .markdown-source-view.mod-cm6 .HyperMD-header-1 {
+	counter-increment: mrd-sector;
+	counter-reset: mrd-sub 0 mrd-subsub 0;
+}
+body.mrd-skin-on .markdown-source-view.mod-cm6 .HyperMD-header-2 {
+	counter-increment: mrd-sub;
+	counter-reset: mrd-subsub 0;
+}
+body.mrd-skin-on .markdown-source-view.mod-cm6 .HyperMD-header-3 {
+	counter-increment: mrd-subsub;
 }
 
 /* ---- per-note opt-out (meridian-skin: false) ----
- * The plugin adds .mrd-skin-exempt to the exempt note's content container. Drop
- * the numbering + the heavier placard treatment and revert to plain headings, so
- * a note flagged for export/sharing carries no SECTOR NN prefix or rules. */
-body.mrd-skin-on .mrd-skin-exempt .markdown-reading-view :is(h1, h2, h3, h4, h5, h6) {
+ * The plugin adds .mrd-skin-exempt to the exempt note's content container, which
+ * wraps both the reading and source views. Drop the numbering + the heavier
+ * placard treatment in both, reverting to plain headings, so a note flagged for
+ * export/sharing carries no SECTOR NN prefix or rules. */
+body.mrd-skin-on .mrd-skin-exempt .markdown-reading-view :is(h1, h2, h3, h4, h5, h6),
+body.mrd-skin-on .mrd-skin-exempt .markdown-source-view.mod-cm6 .HyperMD-header {
 	font-family: var(--font-text);
 	text-transform: none;
 	letter-spacing: normal;
 	font-weight: 700;
 }
-body.mrd-skin-on .mrd-skin-exempt .markdown-reading-view :is(h1, h2, h3, h4, h5, h6)::before,
-body.mrd-skin-on .mrd-skin-exempt .markdown-reading-view h1::after {
+body.mrd-skin-on .mrd-skin-exempt .markdown-reading-view :is(h1, h2, h3)::before,
+body.mrd-skin-on .mrd-skin-exempt .markdown-reading-view :is(h1, h2)::after,
+body.mrd-skin-on .mrd-skin-exempt .markdown-source-view.mod-cm6 :is(.HyperMD-header-1, .HyperMD-header-2, .HyperMD-header-3)::before,
+body.mrd-skin-on .mrd-skin-exempt .markdown-source-view.mod-cm6 :is(.HyperMD-header-1, .HyperMD-header-2)::after {
 	content: none;
-}
-body.mrd-skin-on .mrd-skin-exempt .markdown-reading-view h2 {
-	border-bottom: none;
-}
-
-/* ============================================================ live preview \u2014 restrained (\xA73.3)
- * The editor reads as MERIDIAN \u2014 display font, uppercase, amber H1 / bone H2\u2013H3,
- * tracking \u2014 but with NO stripe rules, NO stencil numbering and NO brackets, so
- * typing stays calm as lines reflow. This whole block is the one dial to turn up
- * later if the Live Preview aggressiveness should match Reading view; keep the
- * changes localised here. */
-body.mrd-skin-on .markdown-source-view.mod-cm6 .HyperMD-header,
-body.mrd-skin-on .markdown-source-view.mod-cm6 .cm-line.HyperMD-header {
-	font-family: var(--mrd-font-display);
-	text-transform: uppercase;
-	letter-spacing: 0.08em;
-	font-weight: 600;
-}
-body.mrd-skin-on .markdown-source-view.mod-cm6 .cm-header-1 {
-	color: var(--mrd-hazard);
-	letter-spacing: 0.1em;
-}
-body.mrd-skin-on .markdown-source-view.mod-cm6 .cm-header-2,
-body.mrd-skin-on .markdown-source-view.mod-cm6 .cm-header-3 {
-	color: var(--mrd-bone);
-}
-body.mrd-skin-on .markdown-source-view.mod-cm6 :is(.cm-header-4, .cm-header-5, .cm-header-6) {
-	color: var(--mrd-bone-dim);
 }
 
 /* ============================================================ body + editor content (\xA74)
