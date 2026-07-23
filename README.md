@@ -27,7 +27,7 @@ The dashboard is styled on its own always. **System skin** (Settings → MERIDIA
 
 It is the single source of the look — it retires the separate Halcyon Obsidian theme and sets every colour, font and variable itself.
 
-**Reading view** gets the full treatment: command-deck heading placards, a hazard-stripe rule under H1, and facility-style section numbering via CSS counters (`SECTOR 01 —` on H1, dotted decimals `01.1` / `01.1.1` on H2/H3). **Live Preview** is deliberately restrained — the editor reads as MERIDIAN (display font, uppercase, amber H1) but carries no numbering or rules, so typing stays calm.
+**Both reading view and Live Preview** get the full heading treatment: command-deck placards, a hazard-stripe rule under H1, a thin amber rule under H2, and facility-style section numbering via CSS counters (`SECTOR 01 —` on H1, dotted decimals `01.1` / `01.1.1` on H2/H3). The rules are painted as absolutely-positioned decorations over reserved padding, so they don't shift the text as you type — editing stays calm. In Live Preview the editor only renders the lines on screen, so on a very long note the numbers can drift while you're scrolled down; reading view is always exact.
 
 ### Migrating off the standalone theme
 
